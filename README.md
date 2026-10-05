@@ -48,7 +48,7 @@ Requirements: Python 3.10+, `git`, `curl`. Optional: [tectonic](https://tectonic
 ### Clone
 
 ```bash
-git clone git@github.com:ZoyaV/ResearcherOS.git ReseachOS
+git clone git@github.com:CognitiveAISystems/ResearcherOS.git ReseachOS
 cd ReseachOS
 ```
 
@@ -219,6 +219,6 @@ Where research lives: tree + kanban in UI or `koi-structure/project.md`; reports
 
 | | |
 |---|---|
-| Public site (GitHub Pages) | [docs-site/](docs-site/) → after deploy: `https://zoyav.github.io/ResearcherOS/` |
+| Public site (GitHub Pages) | [docs-site/](docs-site/) → after deploy: `https://cognitiveaisystems.github.io/ResearcherOS/` |
 | Documentation | [docs/](docs/) |
-| Issues | [github.com/ZoyaV/ResearcherOS/issues](https://github.com/ZoyaV/ResearcherOS/issues) |
+| Issues | [github.com/CognitiveAISystems/ResearcherOS/issues](https://github.com/CognitiveAISystems/ResearcherOS/issues) |

@@ -40,7 +40,7 @@ HEADER = f"""  <header class="site-header site-header--detail">
         <a href="../index.html#start">How to start</a>
         <a href="../index.html#skills" aria-current="page">Skills</a>
         <a href="../index.html#lessons">Lessons</a>
-        <a href="https://github.com/ZoyaV/ResearcherOS">GitHub</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
 {THEME_BTN}
       </nav>
     </div>
@@ -49,7 +49,7 @@ HEADER = f"""  <header class="site-header site-header--detail">
 FOOTER = f"""  <footer class="site-footer">
     <div class="site-footer__inner">
       <span>ResearcherOS · code / hub</span>
-      <a href="https://github.com/ZoyaV/ResearcherOS">ZoyaV/ResearcherOS</a>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
     </div>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -126,7 +126,7 @@ def skill_page(s: dict) -> str:
     </div>
 
     <div class="article__actions">
-      <a class="btn btn-ghost" href="https://github.com/ZoyaV/ResearcherOS/tree/main/agents/skills/{sid}">Исходник на GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/{sid}">Исходник на GitHub</a>
       <a class="btn btn-primary" href="../index.html#skills">К списку Skills</a>
     </div>
   </main>
