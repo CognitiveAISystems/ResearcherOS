@@ -1,0 +1,68 @@
+/* Feature docs opened from airi.html. Loaded after features.css. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  color-scheme: light;
+  --bg: #fcf6ef;
+  --bg-elevated: #fff;
+  --glass: #fff;
+  --border: rgba(22, 28, 39, 0.12);
+  --text: #161c27;
+  --muted: #5c564e;
+  --surface-topbar: rgba(252, 246, 239, 0.92);
+  --surface-card: #fff;
+  --surface-card-hover: #fff;
+  --bg-mesh-center: #fcf6ef;
+  --grid-line: transparent;
+  --link: #1a8f82;
+  --code-bg: rgba(22, 28, 39, 0.06);
+  --chip-bg: #fff;
+  --callout-bg: #fff;
+  --mesh-a: transparent;
+  --mesh-b: transparent;
+  --mesh-c: transparent;
+  --purple: #161c27;
+  --cyan: #2fbead;
+  --pink: #2fbead;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: #fcf6ef;
+  color: #161c27;
+}
+
+body::before,
+body::after { display: none; }
+
+.btn-theme { display: none; }
+
+.brand,
+h1, h2, h3 { font-weight: 500; }
+
+/* Complete typography override for the documentation's legacy components. */
+.docs-sidebar, .features-md, .features-md .layer-card__title,
+.features-md .feature-card__title, .features-md .section-label {
+  font-family: Inter, system-ui, sans-serif;
+}
+.features-md .layer-card, .features-md .feature-card { background: #fff; box-shadow: none; border-color: #e8d5c4; }
+.features-md .layer-card::before { background: #2fbead; }
+.features-md .media-slot[data-filled="true"] { border: 0; background: #fff; padding: 0; }
+.features-md .media-slot img { display: block; max-width: 100%; height: auto; }

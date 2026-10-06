@@ -5,40 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Статья → PDF · ResearcherOS</title>
   <meta name="description" content="Из очереди статей собрать черновик по проекту и положить PDF в репозиторий." />
-  <script>
-    (function () {
-      var t = localStorage.getItem("koi-theme");
-      if (t !== "light" && t !== "dark") t = "light";
-      document.documentElement.setAttribute("data-theme", t);
-    })();
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../css/site.css?v=13" />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-type" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
 </head>
 <body class="page-detail">
   <header class="site-header site-header--detail">
     <div class="site-header__inner">
-      <a class="brand" href="../index.html" aria-label="ResearcherOS — на главную">
-        <img class="brand__logo" src="../assets/logo.png?v=6" alt="ResearcherOS" height="27" />
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
       </a>
       <nav class="nav" aria-label="Main navigation">
-        <a href="../index.html#about">About</a>
-        <a href="../index.html#versions">Versions</a>
-        <a href="../index.html#start">How to start</a>
-        <a href="../index.html#skills" aria-current="page">Skills</a>
-        <a href="../index.html#lessons">Lessons</a>
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
         <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
-        <button type="button" id="btn-theme" class="btn-theme" title="Тёмная тема" aria-label="Тёмная тема">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2"/></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-        </button>
       </nav>
     </div>
   </header>
   <main class="article">
-    <a class="back-link" href="../index.html#skills">← Skills</a>
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
     <h1 class="article__title">Статья → PDF</h1>
     <p class="skill-id">koi-paper</p>
     <div class="article__meta">
@@ -82,7 +72,7 @@ flowchart LR
 
     <div class="article__actions">
       <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-paper">Исходник на GitHub</a>
-      <a class="btn btn-primary" href="../index.html#skills">К списку Skills</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
     </div>
   </main>
   <footer class="site-footer">
@@ -92,6 +82,7 @@ flowchart LR
     </div>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-  <script src="../js/site.js?v=12"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
 </body>
 </html>

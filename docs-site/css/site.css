@@ -105,7 +105,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Outfit", system-ui, sans-serif;
+  font-family: Inter, system-ui, sans-serif;
   font-size: 1.05rem;
   line-height: 1.5;
   background: var(--bg);
@@ -223,9 +223,9 @@ button:focus-visible {
 }
 
 .brand__name {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   background: var(--grad-hero);
   -webkit-background-clip: text;
@@ -268,9 +268,9 @@ button:focus-visible {
 }
 
 .page-detail .article__title {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: clamp(1.75rem, 3.5vw, 2.35rem);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   margin: 0 0 0.65rem;
   line-height: 1.15;
@@ -298,9 +298,9 @@ button:focus-visible {
 }
 
 .page-detail .article h2 {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.2rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.02em;
   margin: 2rem 0 0.75rem;
 }
@@ -475,9 +475,9 @@ body.page-home::after {
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: clamp(1.35rem, 3.2vw, 1.85rem);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: lowercase;
 }
@@ -594,8 +594,8 @@ body.page-home::after {
 }
 
 .hero__strip-link {
-  font-family: "Syne", sans-serif;
-  font-weight: 700;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
   font-size: 1rem;
   letter-spacing: -0.02em;
   text-decoration: none;
@@ -608,7 +608,7 @@ body.page-home::after {
 }
 
 .hero__strip-link--quiet {
-  font-family: "Outfit", sans-serif;
+  font-family: Inter, sans-serif;
   font-weight: 600;
   font-size: 0.92rem;
   letter-spacing: 0;
@@ -658,9 +658,9 @@ body.page-home::after {
 }
 
 .chapter__title {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: clamp(1.85rem, 3.5vw, 2.6rem);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   margin: 0 0 1rem;
 }
@@ -687,7 +687,7 @@ body.page-home::after {
 
 .about-copy strong {
   color: var(--text);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .reveal {
@@ -716,7 +716,7 @@ body.page-home::after {
   align-items: center;
   gap: 0.4rem;
   margin: 0 0 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.95rem;
   text-decoration: none;
   color: var(--muted);
@@ -756,7 +756,7 @@ body.page-home::after {
   border-radius: 999px;
   border: 1px solid transparent;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.98rem;
   text-decoration: none;
   cursor: pointer;
@@ -796,9 +796,9 @@ body.page-home::after {
 }
 
 .section__title {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: clamp(1.7rem, 3.2vw, 2.25rem);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.03em;
   margin: 0 0 0.55rem;
 }
@@ -837,9 +837,9 @@ body.page-home::after {
 }
 
 .path-link__num {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.25rem;
-  font-weight: 800;
+  font-weight: 600;
   background: var(--grad-hero);
   -webkit-background-clip: text;
   background-clip: text;
@@ -849,7 +849,7 @@ body.page-home::after {
 .path-link__title {
   margin: 0;
   font-size: 1.1rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .path-link__desc {
@@ -868,17 +868,17 @@ body.page-home::after {
 }
 
 .prose h1 {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: clamp(2rem, 4vw, 2.75rem);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   margin: 0 0 0.75rem;
 }
 
 .prose h2 {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.4rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 2.2rem 0 0.7rem;
   letter-spacing: -0.02em;
 }
@@ -954,9 +954,9 @@ pre code {
 
 .skill-link__name {
   margin: 0;
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.15rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
@@ -1071,9 +1071,9 @@ pre code {
 
 .version-card__title {
   margin: 0;
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
 }
 
@@ -1112,9 +1112,9 @@ pre code {
 }
 
 .version-docs__label {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.05rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
@@ -1173,7 +1173,7 @@ pre code {
   background: var(--grad-hero);
   color: var(--btn-primary-text);
   font-size: 0.85rem;
-  font-weight: 800;
+  font-weight: 600;
   display: grid;
   place-items: center;
   box-shadow: var(--glow-purple);

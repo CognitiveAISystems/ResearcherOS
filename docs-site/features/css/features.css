@@ -80,7 +80,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Outfit", system-ui, sans-serif;
+  font-family: Inter, system-ui, sans-serif;
   font-size: 1.05rem;
   line-height: 1.5;
   background: var(--bg);
@@ -170,9 +170,9 @@ button:focus-visible {
 }
 
 .brand__name {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   background: var(--grad-hero);
   -webkit-background-clip: text;
@@ -253,7 +253,7 @@ button:focus-visible {
 .docs-sidebar__label {
   margin: 0 0 0.85rem;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
@@ -268,7 +268,7 @@ button:focus-visible {
 .docs-sidebar__group {
   margin: 1rem 0 0.35rem;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--muted) 85%, var(--text));
@@ -297,7 +297,7 @@ button:focus-visible {
 
 .docs-sidebar__nav > a[aria-current="page"] {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
   background: color-mix(in srgb, var(--purple) 12%, transparent);
 }
 
@@ -313,7 +313,7 @@ button:focus-visible {
 .docs-sidebar__toc-label {
   margin: 0.15rem 0 0.2rem;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
@@ -358,9 +358,9 @@ button:focus-visible {
 }
 
 .features-md > h1:first-child {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: clamp(1.85rem, 3.5vw, 2.55rem);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   margin: 0 0 0.55rem;
   line-height: 1.12;
@@ -376,17 +376,17 @@ button:focus-visible {
 }
 
 .features-md h2 {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.28rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.02em;
   margin: 2.35rem 0 0.75rem;
 }
 
 .features-md h3 {
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.05rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 1.5rem 0 0.55rem;
 }
 
@@ -427,7 +427,7 @@ button:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .features-md pre {
@@ -464,7 +464,7 @@ button:focus-visible {
 .layer-card__kicker {
   display: block;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -473,7 +473,7 @@ button:focus-visible {
 
 .layer-card h3 {
   margin: 0 0 0.45rem;
-  font-family: "Syne", sans-serif;
+  font-family: Inter, sans-serif;
   font-size: 1.08rem;
 }
 
@@ -543,7 +543,7 @@ button:focus-visible {
 .media-slot strong {
   display: block;
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
   margin-bottom: 0.25rem;
 }
 
@@ -588,8 +588,8 @@ button:focus-visible {
 }
 
 .feature-row__num {
-  font-family: "Syne", sans-serif;
-  font-weight: 700;
+  font-family: Inter, sans-serif;
+  font-weight: 600;
   font-size: 0.85rem;
   color: var(--cyan);
   padding-top: 0.12rem;
@@ -597,7 +597,7 @@ button:focus-visible {
 
 .feature-row__title {
   margin: 0;
-  font-weight: 650;
+  font-weight: 600;
   font-size: 0.98rem;
   color: var(--text);
 }
@@ -611,7 +611,7 @@ button:focus-visible {
 
 .feature-row__meta {
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);

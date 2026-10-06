@@ -5,35 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Виджеты · ResearcherOS Features</title>
   <meta name="description" content="Проектные виджеты ResearcherOS: manifest, mount, API, koi-structure/widgets." />
-  <script>
-    (function () {
-      var t = localStorage.getItem("koi-theme");
-      if (t !== "light" && t !== "dark") t = "light";
-      document.documentElement.setAttribute("data-theme", t);
-    })();
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/features.css?v=8" />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-type" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
 </head>
 <body class="page-docs">
   <header class="site-header site-header--detail">
     <div class="site-header__inner">
-      <a class="brand" href="../index.html" aria-label="ResearcherOS — главная">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
         <span class="brand__name">ResearcherOS</span>
       </a>
       <nav class="nav" aria-label="Main navigation">
-        <a href="../index.html#about">About</a>
-        <a href="../index.html#versions">Versions</a>
-        <a href="../index.html#start">How to start</a>
-        <a href="../index.html#skills">Skills</a>
-        <a href="../index.html#lessons">Lessons</a>
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
         <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
-        <button type="button" id="btn-theme" class="btn-theme" title="Тёмная тема" aria-label="Тёмная тема">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2"/></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-        </button>
       </nav>
     </div>
   </header>
@@ -65,13 +56,121 @@
       </nav>
     </aside>
     <main class="docs-main">
-      <article id="features-content" class="features-md" data-md="content/widgets.md">
-        <p class="loading">Загрузка…</p>
+      <article id="features-content" class="features-md" data-md="content/widgets.md" data-rendered="true">
+<h1>Виджеты</h1>
+<p class="lead">Проектные панели поверх локального ResearcherOS: пакет лежит в <code>koi-structure/widgets/</code>, ядро только обнаруживает манифест и монтирует <code>mount()</code> в <code>#koi-widgets-root</code>. Ядро приложения ради виджета не меняют.</p>
+
+<div class="media-slot" data-filled="true"><img src="media/widgets-hero.png" alt="Слот для картинки или видео" loading="lazy"></div>
+
+<h2>Как работает</h2>
+<p>Виджет — папка в исследовании:</p>
+<pre><code class="language-text">tree/&lt;repo&gt;/koi-structure/widgets/&lt;widget-id&gt;/
+  manifest.yaml
+  README.md
+  web/
+    widget.js    # export async function mount(host, ctx)
+    widget.css
+  backend/       # опционально: fetch.py → dict
+</code></pre>
+<p>Манифест задаёт id (как имя папки), title, summary, visibility, surfaces (<code>web</code> / <code>desktop</code>), <code>default_enabled</code>, точку входа.</p>
+<p>При загрузке главной страницы клиент запрашивает каталог <code>GET /api/widgets</code>, для каждого включённого с <code>web_url</code> динамически импортирует JS и вызывает <code>mount(host, ctx)</code>. Контекст: <code>api</code>, id/key виджета, <code>assetBase</code>, манифест.</p>
+<p>Включение/выключение хранится в <code>.run/widgets.json</code> (ключ <code>project_id/widget_id</code>), не в Git проекта — локальный выбор на машине.</p>
+<p>Общие хелперы UI (например плавающее окно): <code>/widgets/_base/floating.js</code> из <code>widgets/base/web/</code> в репозитории ResearcherOS. Ассеты пакета: <code>/widgets/&lt;project_id&gt;/&lt;id&gt;/…</code>.</p>
+<p>Опционально бэкенд: если есть <code>backend/fetch.py</code> с <code>fetch() -&gt; dict</code>, UI зовёт <code>GET /api/widgets/&lt;project&gt;/&lt;id&gt;/data</code> (квоты, метрики кластера и т.п.).</p>
+<p>Пример из манифеста: «Cursor usage» — кольцо остатка квоты Cursor; другие проекты кладут свои панели (ресурсы, кастомный мониторинг).</p>
+<h2>Как человек работает в интерфейсе</h2>
+<ol>
+<li>Виджеты появляются сами на главном workspace, если пакет есть и включён (часто плавающий элемент поверх карты).</li>
+<li>Включение через CLI (или API), не через отдельную большую «витрину» в UI:</li>
+</ol>
+<pre><code class="language-bash">python -m widgets.base.cli list
+python -m widgets.base.cli enable  &lt;project_id&gt;/&lt;widget-id&gt;
+python -m widgets.base.cli disable &lt;project_id&gt;/&lt;widget-id&gt;
+</code></pre>
+<ol start="3">
+<li>Чтобы добавить виджет в проект: положить папку по контракту выше в <code>koi-structure/widgets/</code>, закоммитить в ветку исследования, перезагрузить страницу.</li>
+<li>Hub задуман как место публикации переиспользуемых виджетов (как скиллы); живая правка пакета — локально в своём проекте.</li>
+</ol>
+<p>Отдельного скилла «виджет» нет: это расширение UI, не сценарий агента. Агент может помочь написать <code>widget.js</code>, но монтирование — ответственность runtime.</p>
+<h2>Какие сценарии для агента подключаются</h2>
+<table>
+<thead>
+<tr>
+<th>Что</th>
+<th>Роль</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Нет обязательного skill</td>
+<td>Виджет не в очереди Inbox</td>
+</tr>
+<tr>
+<td>Ручная разработка</td>
+<td>Агент в IDE правит файлы в <code>widgets/&lt;id&gt;/</code> по контракту README</td>
+</tr>
+<tr>
+<td>Hub (каталог)</td>
+<td>Позже — browse/download чужих пакетов; сейчас акцент на project-local</td>
+</tr>
+</tbody>
+</table>
+<h2>Как устроено технически</h2>
+<h3>Engine vs project</h3>
+<table>
+<thead>
+<tr>
+<th>Где</th>
+<th>Что</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ReseachOS/widgets/base/</code></td>
+<td>манифест, registry, CLI, <code>floating.js</code></td>
+</tr>
+<tr>
+<td><code>tree/…/koi-structure/widgets/</code></td>
+<td>пакеты исследователя</td>
+</tr>
+<tr>
+<td><code>web/widgets-loader.js</code></td>
+<td>загрузка и <code>mount</code></td>
+</tr>
+<tr>
+<td><code>#koi-widgets-root</code> в <code>index.html</code></td>
+<td>контейнер</td>
+</tr>
+<tr>
+<td><code>api/routers/widgets.py</code> + <code>api/web_proxy.py</code></td>
+<td>каталог, data, раздача статики</td>
+</tr>
+</tbody>
+</table>
+<p>Legacy: <code>cursor-usage-widget.js</code> — shim на тот же <code>initWidgets</code>.</p>
+<h3>Контракт mount</h3>
+<pre><code class="language-js">export async function mount(host, ctx) {
+  // ctx.api, ctx.widgetId, ctx.widgetKey, ctx.assetBase, ctx.manifest
+  return () =&gt; { /* unmount */ };
+}
+</code></pre>
+<h3>Ограничения</h3>
+<ul>
+<li>Без валидного манифеста и <code>entry.web</code> пакет не попадёт в каталог с URL.</li>
+<li>Состояние enable локальное (<code>.run/widgets.json</code>) — у коллеги виджет нужно включить отдельно (или сменить <code>default_enabled</code> в манифесте).</li>
+<li>Desktop surface в манифесте зарезервирован; текущий loader — web.</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="paper.html">PaperDraft</a></li>
+<li><a href="monitor.html">Монитор прогона</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+</ul>
+<p class="callout">Текст: <code>content/widgets.md</code>. Медиа: <code>media/widgets-hero.*</code>. Контракт пакета: <code>widgets/README.md</code>.</p>
       </article>
     </main>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="js/features.js?v=8"></script>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
 </body>
 </html>

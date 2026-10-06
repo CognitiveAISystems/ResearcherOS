@@ -158,6 +158,12 @@
   function loadPage() {
     var mount = document.getElementById("features-content");
     if (!mount) return;
+    if (mount.getAttribute("data-rendered") === "true") {
+      addHeadingIds(mount);
+      syncSchemaTheme(mount);
+      requestAnimationFrame(function () { sizeSchemaFrames(mount); });
+      return;
+    }
     var src = mount.getAttribute("data-md");
     if (!src) return;
 

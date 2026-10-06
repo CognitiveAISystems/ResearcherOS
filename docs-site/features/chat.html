@@ -5,35 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Research Chat · ResearcherOS Features</title>
   <meta name="description" content="Research Chat / Спросить агента: очередь, research.json, Inbox Cursor." />
-  <script>
-    (function () {
-      var t = localStorage.getItem("koi-theme");
-      if (t !== "light" && t !== "dark") t = "light";
-      document.documentElement.setAttribute("data-theme", t);
-    })();
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/features.css?v=8" />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-type" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
 </head>
 <body class="page-docs">
   <header class="site-header site-header--detail">
     <div class="site-header__inner">
-      <a class="brand" href="../index.html" aria-label="ResearcherOS — главная">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
         <span class="brand__name">ResearcherOS</span>
       </a>
       <nav class="nav" aria-label="Main navigation">
-        <a href="../index.html#about">About</a>
-        <a href="../index.html#versions">Versions</a>
-        <a href="../index.html#start">How to start</a>
-        <a href="../index.html#skills">Skills</a>
-        <a href="../index.html#lessons">Lessons</a>
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
         <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
-        <button type="button" id="btn-theme" class="btn-theme" title="Тёмная тема" aria-label="Тёмная тема">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2"/></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-        </button>
       </nav>
     </div>
   </header>
@@ -65,13 +56,118 @@
       </nav>
     </aside>
     <main class="docs-main">
-      <article id="features-content" class="features-md" data-md="content/chat.md">
-        <p class="loading">Загрузка…</p>
+      <article id="features-content" class="features-md" data-md="content/chat.md" data-rendered="true">
+<h1>Research Chat</h1>
+<p class="lead">Панель «Спросить агента» в локальном ResearcherOS: вопрос уходит в очередь, ответ строится сначала из <code>research.json</code>, отчёты читаются только если не хватает деталей. Доставка ответа — через Inbox Cursor, hooks IDE или фоновый API.</p>
+
+<div class="media-slot">
+  <strong>Слот для картинки или видео</strong>
+  Положите файл в <code>media/chat-hero.png</code> (или <code>.jpg</code> / <code>.webp</code> / <code>.mp4</code> / <code>.webm</code>).
+</div>
+
+<h2>Как работает</h2>
+<p>Вопрос не отправляется в «весь репозиторий». Политика ответа:</p>
+<ol>
+<li>Сопоставить вопрос с записями в <code>research.json</code> (вопрос / рассказ для человека / краткий технический ответ, уверенность, важность, карточка-источник).</li>
+<li>Собрать связный ответ из подходящих записей.</li>
+<li>Открыть отчёт эксперимента <strong>только</strong> если нужны цифры или метод, которых нет в записи.</li>
+<li>Если в базе пусто — сказать об этом и предложить закрыть эксперимент (колонка «готово» → сценарий вывода) или уточнить вопрос.</li>
+</ol>
+<p>Если вопрос хорошо совпадает с базой, API может ответить сразу (автоответ), без агента.</p>
+<p>Три режима доставки (Настройки → «Агент в чате»):</p>
+<table>
+<thead>
+<tr>
+<th>Режим</th>
+<th>Поведение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inbox-чат (<code>cursor_inbox</code>, рекомендуется)</td>
+<td>Watcher пишет wake-строку в лог; чат Cursor слушает <code>AGENT_CHAT_WAKE</code> (~1–3 с)</td>
+</tr>
+<tr>
+<td>Hooks (<code>cursor_ide</code>)</td>
+<td>Очередь подхватывается при старте/остановке чата агента в IDE</td>
+</tr>
+<tr>
+<td>Фоновый API (<code>api</code>)</td>
+<td>Воркер + ключ Cursor API</td>
+</tr>
+</tbody>
+</table>
+<p>Очередь: <code>.run/agent-chat-queue.json</code>. Скилл агента: <code>koi-agent-chat</code> (claim → context → ответ → complete).</p>
+<p>Рядом по тому же Inbox-паттерну живут чаты литературы и статьи — отдельные страницы каталога; эта страница только про панель вопросов по проекту.</p>
+<h2>Как человек работает в интерфейсе</h2>
+<ol>
+<li>Откройте проект. Кнопка открытия панели чата (на главной рабочей области).</li>
+<li>При первом запуске Inbox: в панели — шаги «Скопировать сообщение» → вставить в чат <strong>ResearchOS Chat Inbox</strong> в Cursor → «Inbox готов». Статус watcher видно в подсказке.</li>
+<li>Введите вопрос в поле (плейсхолдер вроде «помогает ли …»). Отправьте форму.</li>
+<li>В ленте: ваш вопрос, статусы «в очереди» / «прочитано» / «Агент пишет…», затем ответ. Область видимости может учитывать текущий метод или узел (scope).</li>
+<li>В Настройках переключите режим агента в чате, если нужен hooks или API вместо Inbox.</li>
+</ol>
+<p>Без настроенного Inbox (в режиме inbox) панель покажет инструкцию bootstrap; без ключа API — соответствующее уведомление в режиме api.</p>
+<h2>Какие сценарии для агента подключаются</h2>
+<table>
+<thead>
+<tr>
+<th>Сценарий (skill)</th>
+<th>Роль</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>koi-agent-chat</code></td>
+<td>Основной: claim / context / ответ по политике «сначала research.json».</td>
+</tr>
+<tr>
+<td><code>koi-done-research</code></td>
+<td>Наполняет базу, из которой чат отвечает; без done-выводов чат часто пустой.</td>
+</tr>
+<tr>
+<td><code>koi-knowledge-curator</code></td>
+<td>Курируемые заметки — дополнительный контекст, не замена <code>research.json</code> как первого источника.</td>
+</tr>
+<tr>
+<td>Hooks скилла</td>
+<td><code>agents/skills/koi-agent-chat/hooks/</code> — session/stop для режима IDE.</td>
+</tr>
+</tbody>
+</table>
+<p>Команды локально:</p>
+<pre><code class="language-bash">python -m koi.agent_chat.cli pending
+python -m koi.agent_chat.cli claim &lt;queue_id&gt;
+python -m koi.agent_chat.cli context &lt;queue_id&gt;
+python -m koi.agent_chat.inbox_cli bootstrap
+python -m koi.agent_chat.inbox_cli watch
+</code></pre>
+<p>Подробности Inbox: <code>docs/agent-chat-inbox.md</code>.</p>
+<h2>Как устроено технически</h2>
+<h3>Поток данных</h3>
+<p>UI → HTTP постановка вопроса в очередь → (опционально автоответ по совпадению с <code>research.json</code>) → watcher/hook/worker будит агента → агент claim + context (в JSON: вопрос, project, scope, весь <code>research_database</code>, политика) → ответ пишется обратно в очередь/API → панель показывает сообщение.</p>
+<p>Пакет: <code>koi/agent_chat/</code> (cli, inbox_cli, очередь под <code>.run/</code>). Клиент: <code>#agent-chat-panel</code> в <code>web/index.html</code>, логика в <code>web/app.js</code> (режимы <code>agent_chat_mode</code>, bootstrap, watcher status).</p>
+<h3>Контекст scope</h3>
+<p>Если пользователь смотрел метод или узел, в context попадают <code>scope_method</code> / <code>scope_node</code> — ответ можно сузить, не теряя доступ ко всей базе проекта.</p>
+<h3>Ограничения</h3>
+<ul>
+<li>Чат не заменяет онбординг и не пишет дерево сам по себе.</li>
+<li>Качество ответа упирается в заполненность <code>research.json</code> и отчётов.</li>
+<li>Inbox на macOS без inotify поллит очередь (~2 с); нужен запущенный <code>koi-serve</code> / watcher.</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="knowledge.html">База знаний</a></li>
+<li><a href="kanban.html">Канбан экспериментов</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+<li><a href="related-work.html">Related Work</a></li>
+<li><a href="paper.html">PaperDraft</a></li>
+</ul>
+<p class="callout">Текст: <code>content/chat.md</code>. Медиа: <code>media/chat-hero.*</code>.</p>
       </article>
     </main>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="js/features.js?v=8"></script>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
 </body>
 </html>

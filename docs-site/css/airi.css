@@ -1,0 +1,351 @@
+/* Preview of docs-site in the AIRI lab look: cream page, ink type, white cards, teal mark. */
+
+:root {
+  --cream: #fcf6ef;
+  --ink: #161c27;
+  --teal: #2fbead;
+  --card: #fff;
+  --sans: "Inter", system-ui, sans-serif;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  text-wrap: pretty;
+  min-height: 100vh;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+a { color: inherit; }
+
+.lang {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 2;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: var(--card);
+  border-radius: 0.6rem;
+  box-shadow: 0 10px 24px rgba(22, 28, 39, 0.08);
+}
+
+.lang button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.4rem;
+  font-size: 0.95rem;
+}
+
+.lang__on {
+  background: var(--ink);
+  color: #fff;
+}
+
+main {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 5.5rem 0 4rem;
+}
+
+h1, h2, h3 { font-weight: 500; margin: 0; }
+
+h1 {
+  text-align: center;
+  font-size: clamp(2.4rem, 6vw, 4.2rem);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  text-align: center;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  margin-bottom: 1.25rem;
+}
+
+.hero { padding-bottom: 1rem; }
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0.75rem 0 0;
+  font-size: 1.15rem;
+}
+
+.links a { text-underline-offset: 0.2em; }
+.links span { opacity: 0.4; }
+
+section { padding: 3.2rem 0; }
+
+.lead {
+  max-width: 46rem;
+  margin: 0 auto 2.5rem;
+  text-align: center;
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+}
+
+.points, .cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.75rem;
+}
+
+.points h3, .card h3 {
+  font-size: 1.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.points p, .card p { margin: 0; }
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border-radius: 10px;
+  padding: 1.35rem 1.4rem 1.5rem;
+  text-decoration: none;
+}
+
+.card:hover h3 { color: #1a8f82; }
+
+.card code {
+  font-size: 0.95em;
+}
+
+.list {
+  max-width: 40rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.list a {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--card);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  text-decoration: none;
+}
+
+.list span { opacity: 0.72; }
+
+.contact { text-align: center; padding-bottom: 1rem; }
+.contact a { font-size: 1.35rem; }
+
+@media (max-width: 800px) {
+  .points, .cards { grid-template-columns: 1fr; }
+  .list a { flex-direction: column; gap: 0.2rem; }
+}
+
+/* Release comparison in the AIRI palette. */
+.versions__cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  max-width: 66rem;
+  margin: 0 auto;
+}
+.version-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  align-content: start;
+  padding: 1.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
+}
+.version-card__badge {
+  justify-self: start;
+  padding: 0;
+  margin-bottom: 1rem;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.version-card h3 {
+  text-align: left;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.8rem;
+}
+.version-card p {
+  max-width: 44ch;
+  text-align: left;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--ink);
+}
+.version-card:hover { box-shadow: 0 0 0 2px var(--teal); }
+.version-card:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+.version-card__features {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 1.1rem 0 0;
+  border-top: 1px solid #e8d5c4;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.version-card__features li { position: relative; padding-left: 1rem; }
+.version-card__features li + li { margin-top: 0.6rem; }
+.version-card__features li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #167c70;
+}
+.versions__docs { text-align: center; margin: 1.5rem 0 0; font-size: 1rem; }
+.versions__docs a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.8rem 1.6rem;
+  border-radius: 8px;
+  background: var(--teal);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.versions__docs a:hover { background: #57cbbd; }
+.versions__docs a:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+@media (max-width: 800px) {
+  .versions__cards { grid-template-columns: 1fr; }
+  .version-card { padding: 1.4rem; }
+}
+
+/* Three different tasks: choose an entry, find an action, follow a lesson. */
+#start, #skills, #lessons { scroll-margin-top: 2rem; }
+#start h2, #skills h2, #lessons h2 { text-align: left; }
+#start > .lead, #skills > .lead, #lessons > .lead {
+  margin: 0 0 2rem; text-align: left; max-width: 42rem;
+}
+.start-options { gap: 0; background: #fff; border-radius: 12px; overflow: hidden; }
+.start-options .card { position: relative; padding: 2rem 1.75rem 4.5rem; border-radius: 0; background: transparent; }
+.start-options .card + .card { border-left: 1px solid #e8d5c4; }
+.start-options .card h3 { font-size: 1.35rem; line-height: 1.35; margin-bottom: 1rem; max-width: 18ch; }
+.start-options .card p { font-size: 1rem; line-height: 1.6; }
+.start-options .card::after { content: '↗'; position: absolute; bottom: 1.5rem; left: 1.75rem; width: 2rem; height: 2rem; display: grid; place-items: center; background: var(--teal); color: #fff; border-radius: 50%; }
+.start-options .card:hover { background: #f8f6f3; }
+.skill-catalog { grid-template-columns: repeat(2, minmax(0,1fr)); column-gap: 3rem; row-gap: 0; }
+.skill-catalog .card { padding: 1.4rem 2rem 1.4rem 0; border-radius: 0; border-top: 1px solid #d5c5b7; background: transparent; position: relative; }
+.skill-catalog .card::after { content: '↗'; position: absolute; right: 0; top: 1.4rem; color: #167c70; }
+.skill-catalog .card h3 { font-size: 1.1rem; margin-bottom: .45rem; }
+.skill-catalog .card p { font-size: .95rem; line-height: 1.55; color: #565b63; }
+.lesson-path { counter-reset: lesson; max-width: none; gap: 0; }
+.lesson-path a { counter-increment: lesson; display: grid; grid-template-columns: 3.5rem minmax(0,1fr) minmax(0,1fr); align-items: center; gap: 1.5rem; position: relative; background: transparent; border-radius: 0; padding: 1.25rem 0; }
+.lesson-path a::before { content: counter(lesson, decimal-leading-zero); display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: 50%; background: var(--teal); color: #fff; font-size: 1.15rem; z-index: 1; }
+.lesson-path a:not(:last-child)::after { content: ''; position: absolute; top: 4.75rem; bottom: -1.25rem; left: 1.75rem; width: 1px; background: var(--teal); }
+.lesson-path strong { font-size: 1.2rem; font-weight: 500; }
+.lesson-path span { font-size: 1rem; opacity: 1; color: #565b63; }
+.lesson-path a:hover strong { color: #167c70; }
+.start-options a:focus-visible, .skill-catalog a:focus-visible, .lesson-path a:focus-visible { outline: 2px solid #167c70; outline-offset: -2px; }
+@media (max-width: 800px) {
+  .start-options .card { padding: 1.5rem 4.5rem 1.5rem 1.5rem; }
+  .start-options .card + .card { border-left: 0; border-top: 1px solid #e8d5c4; }
+  .start-options .card h3 { max-width: none; font-size: 1.2rem; }
+  .start-options .card::after { left: auto; right: 1.25rem; bottom: auto; top: 1.5rem; }
+  .skill-catalog { grid-template-columns: 1fr; }
+  .lesson-path a { grid-template-columns: 2.75rem minmax(0,1fr); gap: .4rem 1rem; }
+  .lesson-path a::before { width: 2.75rem; height: 2.75rem; grid-row: span 2; }
+  .lesson-path span { grid-column: 2; }
+  .lesson-path a:not(:last-child)::after { left: 1.375rem; top: 4rem; }
+}
+
+/* Compact entry choices: the action sits alongside the heading. */
+#start h2 { margin-bottom: .75rem; }
+#start > .lead { margin-bottom: 1.4rem; }
+.start-options .card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.8rem;
+  grid-template-rows: auto auto;
+  gap: .65rem 1rem;
+  padding: 1.35rem 1.5rem;
+  align-content: start;
+}
+.start-options .card h3 {
+  grid-column: 1; grid-row: 1;
+  font-size: 1.2rem; line-height: 1.35;
+  max-width: none; margin: 0;
+}
+.start-options .card p { grid-column: 1 / -1; grid-row: 2; font-size: .95rem; line-height: 1.5; }
+.start-options .card::after {
+  position: static; grid-column: 2; grid-row: 1;
+  width: 1.8rem; height: 1.8rem; margin: 0;
+  align-self: start;
+}
+@media (min-width: 801px) {
+  @supports (grid-template-rows: subgrid) {
+    .start-options { grid-template-rows: auto auto; }
+    .start-options .card { grid-row: span 2; grid-template-rows: subgrid; }
+  }
+}
+@media (max-width: 800px) {
+  .start-options .card { padding: 1.25rem; }
+}
+
+.partners {
+  border-top: 1px solid #e8d5c4;
+  padding: 2rem 0;
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 4fr);
+  gap: 2rem;
+  align-items: center;
+}
+.partners h2 { text-align: left; font-size: 1.35rem; margin: 0; }
+.partners__logos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  justify-items: center;
+  gap: 2rem;
+}
+.partners__logos > img { display: block; width: auto; max-width: 100%; height: auto; object-fit: contain; }
+.partners__logo--ccm { max-height: 70px; }
+.partners__logo--airi { max-height: 46px; }
+.partners__logo--mipt { max-height: 46px; }
+@media (max-width: 800px) {
+  .partners { grid-template-columns: 1fr; gap: 1.5rem; }
+  .partners__logos { gap: 1.5rem; }
+}
+@media (max-width: 480px) {
+  .partners__logos { grid-template-columns: 1fr; gap: 2rem; justify-items: start; }
+}
+
+.contact__emails { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem 1.75rem; margin-top: 1rem; }
+.contact__emails a { font-size: 1.05rem; text-underline-offset: .2em; }

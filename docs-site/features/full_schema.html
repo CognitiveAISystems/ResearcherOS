@@ -62,7 +62,7 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; }
     body {
-      font-family: "Outfit", system-ui, sans-serif;
+      font-family: Inter, system-ui, sans-serif;
       color: var(--text);
       background: var(--bg);
       min-height: 100vh;
@@ -110,10 +110,10 @@
     }
     .brand { display: flex; align-items: baseline; gap: 14px; min-width: 0; }
     .logo {
-      font-family: "Syne", sans-serif;
+      font-family: Inter, sans-serif;
       font-size: 2rem;
       line-height: 1;
-      font-weight: 800;
+      font-weight: 600;
       letter-spacing: -.04em;
       background: var(--grad-hero);
       -webkit-background-clip: text;
@@ -234,15 +234,15 @@
       text-transform: uppercase;
       letter-spacing: .12em;
       color: var(--muted);
-      font-weight: 700;
+      font-weight: 600;
       margin-bottom: 2px;
     }
     .node-title {
-      font-family: "Syne", sans-serif;
+      font-family: Inter, sans-serif;
       font-size: 1.18rem;
       line-height: 1.05;
       letter-spacing: -.025em;
-      font-weight: 700;
+      font-weight: 600;
     }
     .node-title.gradient {
       background: var(--grad-hero);
@@ -325,7 +325,7 @@
     }
     .actor-text h3 {
       margin: 0;
-      font-family: "Syne", sans-serif;
+      font-family: Inter, sans-serif;
       font-size: 1.12rem;
       letter-spacing: -.02em;
       line-height: 1.05;
@@ -380,7 +380,7 @@
     }
     .agent-window .agent-name {
       font-size: .72rem;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--text);
       line-height: 1;
     }
@@ -438,7 +438,7 @@
       font-size: .71rem;
       line-height: 1.05;
       white-space: nowrap;
-      font-weight: 700;
+      font-weight: 600;
       display: block;
     }
     .community-head span {
@@ -475,7 +475,7 @@
       background: linear-gradient(180deg, rgba(155,92,255,.07), rgba(255,107,203,.035));
       color: color-mix(in srgb,var(--text) 92%,var(--purple));
       font-size: .69rem;
-      font-weight: 700;
+      font-weight: 600;
       line-height: 1;
       white-space: nowrap;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,.055);
@@ -499,7 +499,7 @@
       gap: 6px;
       box-shadow: 0 8px 18px color-mix(in srgb,var(--shadow-heavy) 18%,transparent);
       font-size: .67rem;
-      font-weight: 700;
+      font-weight: 600;
       color: var(--text);
       white-space: nowrap;
     }
@@ -531,7 +531,7 @@
       border-radius: 10px;
       background: rgba(255,255,255,.035);
     }
-    .project-section h4 { margin: 0 0 5px; font-size: .84rem; color: var(--text); font-weight: 700; }
+    .project-section h4 { margin: 0 0 5px; font-size: .84rem; color: var(--text); font-weight: 600; }
     .project-section ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
     .project-section li { font-size: .75rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
     .project-section li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--purple); flex: 0 0 auto; }
@@ -557,7 +557,7 @@
       color: var(--text);
       font-size: .86rem;
       line-height: 1.05;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: -.01em;
       white-space: nowrap;
     }
@@ -594,13 +594,13 @@
       color: color-mix(in srgb,var(--text) 92%, var(--purple));
       font-size: .74rem;
       line-height: 1.08;
-      font-weight: 800;
+      font-weight: 600;
     }
     .own-copy small {
       color: color-mix(in srgb,var(--pink) 60%, var(--muted));
       font-size: .60rem;
       line-height: 1;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: .02em;
     }
 
@@ -654,8 +654,8 @@
       pointer-events: none;
     }
     .live-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .live-title h3 { margin: 0; font-family: "Syne", sans-serif; font-size: 1.22rem; }
-    .live-title span { font-size: .72rem; color: var(--purple); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .live-title h3 { margin: 0; font-family: Inter, sans-serif; font-size: 1.22rem; }
+    .live-title span { font-size: .72rem; color: var(--purple); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
     .live-copy { margin: 4px 0 10px; font-size: .82rem; color: var(--muted); }
     .live-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
     .live-chip {
@@ -766,7 +766,7 @@
       padding: 7px 10px;
       font: inherit;
       font-size: .76rem;
-      font-weight: 700;
+      font-weight: 600;
       cursor: pointer;
       transition: 160ms ease;
     }
@@ -917,6 +917,8 @@
       } catch (_) {}
     })();
   </script>
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-type" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
 </head>
 <body>
   <script>
@@ -1577,5 +1579,6 @@
     fitEmbedDiagram();
     draw();
   </script>
+<script src="../js/image-viewer.js?v=1"></script>
 </body>
 </html>

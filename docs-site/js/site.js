@@ -40,6 +40,16 @@
   }
 
   function mermaidVars(theme) {
+    if (document.querySelector('link[href*="airi-theme.css"]')) {
+      return {
+        primaryColor: "#2fbead", primaryTextColor: "#ffffff",
+        nodeTextColor: "#ffffff", textColor: "#161c27",
+        primaryBorderColor: "#2fbead", lineColor: "#161c27",
+        edgeLabelBackground: "#ffffff",
+        secondaryColor: "#e8d5c4", tertiaryColor: "#ffffff",
+        fontFamily: "Inter, sans-serif",
+      };
+    }
     if (theme === "dark") {
       return {
         primaryColor: "#2a1848",
@@ -48,7 +58,7 @@
         lineColor: "#8b8ca8",
         secondaryColor: "#0e0e14",
         tertiaryColor: "#1a1228",
-        fontFamily: "Outfit, sans-serif",
+        fontFamily: "Inter, sans-serif",
       };
     }
     return {
@@ -58,7 +68,7 @@
       lineColor: "#5c6370",
       secondaryColor: "#f6f8fc",
       tertiaryColor: "#ffffff",
-      fontFamily: "Outfit, sans-serif",
+      fontFamily: "Inter, sans-serif",
     };
   }
 

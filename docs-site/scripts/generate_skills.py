@@ -21,8 +21,7 @@ THEME_BOOT = """  <script>
   </script>"""
 
 FONT = """  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />"""
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />"""
 
 THEME_BTN = """        <button type="button" id="btn-theme" class="btn-theme" title="Тёмная тема" aria-label="Тёмная тема">
           <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2"/></svg>
@@ -31,17 +30,14 @@ THEME_BTN = """        <button type="button" id="btn-theme" class="btn-theme" ti
 
 HEADER = f"""  <header class="site-header site-header--detail">
     <div class="site-header__inner">
-      <a class="brand" href="../index.html" aria-label="ResearcherOS — на главную">
-        <img class="brand__logo" src="../assets/logo.png?v=6" alt="ResearcherOS" height="27" />
-      </a>
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">ResearcherOS</a>
       <nav class="nav" aria-label="Main navigation">
-        <a href="../index.html#about">About</a>
-        <a href="../index.html#versions">Versions</a>
-        <a href="../index.html#start">How to start</a>
-        <a href="../index.html#skills" aria-current="page">Skills</a>
-        <a href="../index.html#lessons">Lessons</a>
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
         <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
-{THEME_BTN}
       </nav>
     </div>
   </header>"""
@@ -86,14 +82,12 @@ def skill_page(s: dict) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title} · ResearcherOS</title>
   <meta name="description" content="{summary}" />
-{THEME_BOOT}
-{FONT}
-  <link rel="stylesheet" href="../css/site.css?v={CSS_V}" />
+  <link rel="stylesheet" href="../css/airi-page.css" />
 </head>
 <body class="page-detail">
 {HEADER}
   <main class="article">
-    <a class="back-link" href="../index.html#skills">← Skills</a>
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
     <h1 class="article__title">{title}</h1>
     <p class="skill-id">{sid}</p>
     <div class="article__meta">
@@ -127,7 +121,7 @@ def skill_page(s: dict) -> str:
 
     <div class="article__actions">
       <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/{sid}">Исходник на GitHub</a>
-      <a class="btn btn-primary" href="../index.html#skills">К списку Skills</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
     </div>
   </main>
 {FOOTER}
@@ -141,13 +135,13 @@ def index_page(skills: list[dict]) -> str:
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0;url=../index.html#skills" />
+  <meta http-equiv="refresh" content="0;url=../airi.html#skills" />
   <title>Skills · ResearcherOS</title>
-  <link rel="canonical" href="../index.html#skills" />
-  <script>location.replace("../index.html#skills");</script>
+  <link rel="canonical" href="../airi.html#skills" />
+  <script>location.replace("../airi.html#skills");</script>
 </head>
 <body>
-  <p><a href="../index.html#skills">→ Skills</a></p>
+  <p><a href="../airi.html#skills">→ Skills</a></p>
 </body>
 </html>
 """
