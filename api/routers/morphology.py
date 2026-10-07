@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from api.deps import parse_project
-from api.schemas import MorphologyExplainBody, MorphologyStageBody, MortalCombatStageBody
+from api.schemas import MorphologyExplainBody, MorphologyStageBody
 from koi.adapters.paths import paper_morphology_dir
 from koi.adapters.project_mount import get_mount_or_raise, sync_worktree_path
 from koi.literature.cursor_agent_terminal import (
@@ -25,31 +25,8 @@ from koi.literature.morphology_presentation import (
     load_presentation_run,
     stage_morphology_presentation,
 )
-from koi.literature.mortal_combat import load_mortal_combat, stage_mortal_combat
 
 router = APIRouter(tags=["morphology"])
-
-
-@router.post("/projects/{project_id}/mortal-combat/stage")
-def post_mortal_combat_stage(project_id: str, body: MortalCombatStageBody) -> dict[str, object]:
-    parse_project(project_id)
-    try:
-        return stage_mortal_combat(project_id, body.primary, body.reviewer, body.question)
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
-    except FileNotFoundError as e:
-        raise HTTPException(400, "Команда agent не найдена.") from e
-    except OSError as e:
-        raise HTTPException(400, str(e)) from e
-
-
-@router.get("/projects/{project_id}/mortal-combat/{run_id}")
-def get_mortal_combat(project_id: str, run_id: str) -> dict[str, object]:
-    parse_project(project_id)
-    payload = load_mortal_combat(project_id, run_id)
-    if payload is None:
-        raise HTTPException(404, "MortalCombat arena was not found.")
-    return payload
 
 
 @router.post("/projects/{project_id}/morphology/stage")

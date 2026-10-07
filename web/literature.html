@@ -7,11 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261007a" />
+  <link rel="stylesheet" href="styles.css?v=20261008f" />
   <script>
     (function () {
-      var t = localStorage.getItem("koi-theme");
-      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      var t = localStorage.getItem("koi-literature-theme");
+      document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
     })();
   </script>
 </head>
@@ -24,7 +24,7 @@
       </div>
       <div class="toolbar">
         <a href="index.html" class="btn">Main Workspace</a>
-        <button type="button" id="btn-rw-settings" class="btn btn-settings" title="Настройки поиска" aria-label="Настройки поиска">
+        <button type="button" id="btn-rw-settings" class="btn btn-settings" title="Настройки" aria-label="Настройки">
           <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.63.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.04.71 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6z"/></svg>
         </button>
         <button type="button" id="btn-theme" class="btn btn-theme" title="Светлая тема" aria-label="Переключить тему">
@@ -43,24 +43,32 @@
           <div class="rw-library-header-row">
             <h2 class="rw-library-title" id="rw-library-title">Коллекция</h2>
             <span class="rw-library-count" id="rw-library-count" aria-live="polite" hidden></span>
+            <div class="rw-library-header-tools">
+              <div id="rw-library-toolbar" class="rw-library-toolbar hidden">
+                <div class="literature-selection-actions">
+                  <button type="button" id="literature-select-all" class="btn btn-small">Все</button>
+                  <button type="button" id="literature-clear-selection" class="btn btn-small">Сброс</button>
+                  <button type="button" id="rw-library-add" class="btn btn-small rw-library-add-btn" title="Добавить статьи" aria-label="Добавить статьи" aria-expanded="false" aria-controls="rw-library-add-menu">
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div id="rw-library-add-menu" class="rw-library-add-menu hidden" hidden>
+                <button type="button" data-library-source="zotero">Zotero</button>
+              </div>
+            </div>
           </div>
           <button type="button" id="rw-library-switch-source" class="rw-library-switch-source hidden">
-            Загрузить другую базу
+            Сменить папку
           </button>
         </header>
 
+        <div class="rw-library-body" id="rw-library-body">
+          <nav id="rw-zotero-folders" class="rw-zotero-folders hidden" aria-label="Папки Zotero"></nav>
+          <div class="rw-library-papers">
         <div id="rw-library-empty" class="rw-library-empty">
-          <p class="rw-library-empty-lead">Добавьте статьи, чтобы сгруппировать ответы на вопрос.</p>
-          <div class="rw-library-sources" role="group" aria-label="Источники литературы">
-            <button type="button" id="rw-library-find" class="rw-library-source-btn">
-              <span class="rw-library-source-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-              </span>
-              <span class="rw-library-source-copy">
-                <span class="rw-library-source-label">Найти</span>
-                <span class="rw-library-source-hint">по ключевым словам</span>
-              </span>
-            </button>
+          <p class="rw-library-empty-lead">Подключите Zotero, чтобы собрать статьи для вопроса.</p>
+          <div class="rw-library-sources" role="group" aria-label="Источник литературы">
             <button type="button" id="rw-library-zotero" class="rw-library-source-btn">
               <span class="rw-library-source-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 4h12a2 2 0 0 1 2 2v2.2l-6.4 4.8L20 17.8V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.2l6.4-4.8L4 8.2V6a2 2 0 0 1 2-2zm0 3.5 6 4.5 6-4.5V6H6v1.5zm12 8.1-6-4.5-6 4.5V20h12v-4.4z"/></svg>
@@ -70,40 +78,14 @@
                 <span class="rw-library-source-hint">подключить</span>
               </span>
             </button>
-            <button type="button" id="rw-library-csv" class="rw-library-source-btn">
-              <span class="rw-library-source-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm1 7V3.5L18.5 9H15zM8 13h8v1.5H8V13zm0 3h8V17.5H8V16zm0 3h5V20.5H8V19z"/></svg>
-              </span>
-              <span class="rw-library-source-copy">
-                <span class="rw-library-source-label">CSV</span>
-                <span class="rw-library-source-hint">загрузить файл</span>
-              </span>
-            </button>
           </div>
-          <input type="file" id="rw-library-csv-input" class="sr-only" accept=".csv,text/csv" />
-        </div>
-
-        <div id="rw-library-toolbar" class="rw-library-toolbar hidden">
-          <div class="literature-selection-meta">
-            <span id="literature-selection-summary">Нет статей.</span>
-          </div>
-          <div class="literature-selection-actions">
-            <button type="button" id="literature-select-all" class="btn btn-small">Все</button>
-            <button type="button" id="literature-clear-selection" class="btn btn-small">Сброс</button>
-            <button type="button" id="rw-library-add" class="btn btn-small rw-library-add-btn" title="Добавить статьи" aria-label="Добавить статьи" aria-expanded="false" aria-controls="rw-library-add-menu">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="rw-library-add-menu" class="rw-library-add-menu hidden" hidden>
-          <button type="button" data-library-source="find">Найти</button>
-          <button type="button" data-library-source="zotero">Zotero</button>
-          <button type="button" data-library-source="csv">CSV</button>
         </div>
 
         <div id="literature-results" class="rw-library-list" aria-live="polite"></div>
         <nav class="rw-cluster-nav hidden" id="rw-cluster-nav" aria-label="Список кластеров"></nav>
         <p id="literature-search-status" class="rw-library-status" role="status" aria-live="polite"></p>
+          </div>
+        </div>
       </aside>
 
       <section class="rw-search-column" id="rw-search-column" aria-label="Исследовательский вопрос">
@@ -111,18 +93,17 @@
           <div class="rw-search-stage" id="rw-search-stage">
             <div class="rw-search-context">
               <a href="index.html" id="rw-project-back" class="rw-project-back" title="К проекту" aria-label="К проекту">←</a>
+              <span class="rw-search-context-label">Обзор литературы</span>
               <label class="rw-project-picker" for="literature-project-select">
                 <span class="sr-only">Проект для Related Work</span>
-                <select id="literature-project-select" aria-label="Проект для Related Work"></select>
+                <select id="literature-project-select" class="sr-only" aria-label="Проект для Related Work"></select>
               </label>
-              <a class="btn btn-small mortal-combat-launch" id="mortal-combat-launch" href="mortal.html" title="Сравнить две статьи на арене">⚔ MortalCombat</a>
             </div>
             <h1 class="rw-search-stage-title" id="rw-project-title">Обзор литературы</h1>
-            <p class="rw-search-stage-lead" id="rw-search-stage-lead">Задайте вопрос — по нему сгруппируем статьи слева.</p>
           </div>
           <form id="literature-search-form" class="rw-search-form">
+            <label class="rw-search-form-label" for="literature-query">Исследовательский вопрос</label>
             <div class="rw-search-bar">
-              <label class="sr-only" for="literature-query">Исследовательский вопрос</label>
               <input
                 id="literature-query"
                 class="rw-search-input"
@@ -136,7 +117,12 @@
               </button>
             </div>
           </form>
-          <a href="#history" id="rw-open-history" class="rw-history-link">Прошлые вопросы →</a>
+          <section class="rw-history-inline" aria-label="Прошлые вопросы">
+            <h2 class="rw-history-inline-title">Прошлые вопросы</h2>
+            <div id="rw-history-list" class="rw-history-list" aria-live="polite">
+              <p class="literature-empty">Пока нет сохранённых вопросов.</p>
+            </div>
+          </section>
           <div id="rw-search-loader" class="koi-loader rw-loader rw-loader--compact hidden" aria-live="polite" aria-busy="false">
             <div class="koi-loader__viz" aria-hidden="true">
               <div class="koi-loader__ring"></div>
@@ -155,6 +141,13 @@
           </div>
         </div>
       </section>
+
+      <aside class="rw-project-column" id="rw-project-column" aria-label="Проекты">
+        <header class="rw-project-column-header">
+          <h2>Проекты <span id="rw-project-count" class="rw-project-count"></span></h2>
+        </header>
+        <nav id="rw-project-rail" class="rw-project-rail" aria-label="Проекты"></nav>
+      </aside>
 
       <aside class="rw-insights-column hidden" id="rw-insights-column" aria-label="Отчёт">
         <div class="rw-clusters-block hidden" id="rw-clusters-block">
@@ -307,17 +300,6 @@
         </div>
       </aside>
 
-      <aside class="rw-history-column hidden" id="rw-history-column" aria-label="История запросов">
-        <header class="rw-history-header">
-          <a href="#question" id="rw-history-back" class="rw-project-back rw-history-back hidden">← К вопросу</a>
-          <p class="literature-panel-kicker">История</p>
-          <h2 class="rw-pane-title" id="rw-history-title">Запросы</h2>
-          <p class="rw-history-lead" id="rw-history-lead">Выберите прошлый вопрос, чтобы открыть отчёт и кластеры.</p>
-        </header>
-        <div id="rw-history-list" class="rw-history-list" aria-live="polite">
-          <p class="literature-empty">Пока нет сохранённых анализов.</p>
-        </div>
-      </aside>
     </div>
   </main>
 
@@ -336,116 +318,28 @@
     <section class="modal-panel modal-panel--settings" role="dialog" aria-modal="true" aria-labelledby="rw-settings-title">
       <button type="button" class="modal-close" data-close="rw-settings-modal" aria-label="Закрыть настройки">✕</button>
       <header class="rw-settings-head">
-        <h2 id="rw-settings-title">Настройки</h2>
-        <p class="rw-settings-lead">Откуда подтягивать статьи при поиске</p>
+        <h2 id="rw-settings-title">Zotero</h2>
       </header>
 
-      <div class="rw-settings-primary">
-        <div class="rw-settings-segment" role="radiogroup" aria-label="Источник поиска">
-          <label class="rw-settings-segment-option">
-            <input type="radio" name="rw-search-mode" value="local" />
-            <span>База</span>
-          </label>
-          <label class="rw-settings-segment-option">
-            <input type="radio" name="rw-search-mode" value="internet" />
-            <span>arXiv</span>
-          </label>
-          <label class="rw-settings-segment-option">
-            <input type="radio" name="rw-search-mode" value="both" />
-            <span>Оба</span>
-              </label>
-            </div>
-        <p id="rw-settings-mode-hint" class="rw-settings-mode-hint">Прямой поиск на arXiv</p>
-        <p id="rw-library-status" class="rw-settings-hint"></p>
-      </div>
-
-      <details class="rw-settings-disclosure" id="rw-settings-library">
-        <summary>
-          <span class="rw-settings-disclosure-title">CSV-библиотека</span>
-          <span class="rw-settings-disclosure-meta" id="rw-settings-library-meta">опционально</span>
-        </summary>
-        <div class="rw-settings-disclosure-body">
-          <label class="library-upload-picker" for="library-upload-input">
-            <input type="file" id="library-upload-input" accept=".csv,text/csv" />
-            <span id="library-upload-filename">Выберите CSV</span>
-          </label>
-          <div class="rw-settings-actions">
-            <button type="button" id="library-upload-submit" class="btn btn-small btn-primary">Загрузить</button>
-            <button type="button" id="library-agent-bootstrap-submit" class="btn btn-small btn-quiet">Через агента</button>
-          </div>
-          <p id="library-upload-status" class="library-upload-status"></p>
-          <p id="library-agent-bootstrap-status" class="library-upload-status"></p>
-          <p class="rw-settings-hint rw-settings-hint--quiet">Колонки: <code>arxiv_url</code>, <code>title</code>, <code>authors</code>, <code>abstract</code></p>
+      <div class="rw-settings-disclosure-body">
+        <label class="rw-settings-field" for="rw-zotero-api-key">
+          <span>API Key</span>
+          <input type="password" id="rw-zotero-api-key" autocomplete="off" />
+        </label>
+        <label class="rw-settings-field" for="rw-zotero-user-id">
+          <span>User ID</span>
+          <input type="text" id="rw-zotero-user-id" autocomplete="off" />
+        </label>
+        <label class="rw-settings-field" for="rw-zotero-collection" id="rw-zotero-collection-field" hidden>
+          <span>Папка</span>
+          <select id="rw-zotero-collection" disabled>
+            <option value="">Вся библиотека</option>
+          </select>
+        </label>
+        <div class="rw-settings-actions">
+          <button type="button" id="rw-zotero-connect" class="btn btn-primary">Подключить</button>
         </div>
-      </details>
-
-      <details class="rw-settings-disclosure" id="rw-settings-zotero">
-        <summary>
-          <span class="rw-settings-disclosure-title">Zotero</span>
-          <span class="rw-settings-disclosure-meta">папка и импорт</span>
-        </summary>
-        <div class="rw-settings-disclosure-body">
-          <label class="rw-settings-field" for="rw-zotero-api-key">
-            <span>API Key</span>
-            <input type="password" id="rw-zotero-api-key" placeholder="Ключ из zotero.org" autocomplete="off" />
-          </label>
-          <label class="rw-settings-field" for="rw-zotero-user-id">
-            <span>User ID <em>необязательно</em></span>
-            <input type="text" id="rw-zotero-user-id" placeholder="Подтянется из ключа" autocomplete="off" />
-          </label>
-          <label class="rw-settings-field" for="rw-zotero-collection" id="rw-zotero-collection-field" hidden>
-            <span>Папка Zotero</span>
-            <select id="rw-zotero-collection" disabled>
-              <option value="">Вся библиотека</option>
-            </select>
-          </label>
-          <div class="rw-settings-actions">
-            <button type="button" id="rw-zotero-connect" class="btn btn-small btn-primary">Подключить</button>
-            <button type="button" id="rw-zotero-import" class="btn btn-small" disabled>Импортировать</button>
-            <button type="button" id="rw-zotero-disconnect" class="btn btn-small" hidden>Выйти</button>
-          </div>
-          <p id="rw-zotero-status" class="rw-settings-hint">
-            Ключ: <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noreferrer">zotero.org/settings/keys</a>
-          </p>
-        </div>
-      </details>
-
-      <details class="rw-settings-disclosure" id="rw-settings-advanced">
-        <summary>
-          <span class="rw-settings-disclosure-title">Параметры</span>
-          <span class="rw-settings-disclosure-meta">лимит, перевод, контекст</span>
-        </summary>
-        <div class="rw-settings-disclosure-body">
-          <div class="rw-settings-row">
-            <p class="rw-settings-hint">
-              Проект для Related Work выбирается на главном экране поиска или в Laboratory (ветки composite).
-            </p>
-            <label class="rw-settings-field rw-settings-field--narrow" for="literature-limit">
-              <span>Макс. статей</span>
-              <input type="number" id="literature-limit" min="1" max="50" value="10" />
-            </label>
-          </div>
-          <p id="rw-project-keywords-hint" class="rw-settings-hint rw-settings-hint--quiet"></p>
-          <label class="literature-inline-toggle" for="literature-auto-translate">
-            <input type="checkbox" id="literature-auto-translate" checked />
-            <span>Автоперевод вопроса</span>
-          </label>
-          <label class="literature-inline-toggle" for="literature-overwrite-answers">
-            <input type="checkbox" id="literature-overwrite-answers" />
-            <span>Перезаписывать ответы по статьям</span>
-          </label>
-          <div class="rw-settings-context-row">
-            <button type="button" id="literature-open-context-modal" class="btn btn-small">Контекст проекта</button>
-            <button type="button" id="literature-clear-context" class="btn btn-small btn-quiet">Очистить</button>
-          </div>
-          <p id="literature-context-status" class="literature-context-status"></p>
-          <div id="literature-context-summary-list" class="literature-context-summary-list"></div>
-        </div>
-      </details>
-
-      <div class="form-actions rw-settings-footer">
-        <button type="button" class="btn" data-close="rw-settings-modal">Закрыть</button>
-        <button type="button" id="rw-settings-save" class="btn btn-primary">Сохранить</button>
+        <p id="rw-zotero-status" class="rw-settings-hint" hidden></p>
       </div>
     </section>
   </div>
@@ -511,6 +405,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@upsetjs/venn.js@2.0.0/build/venn.min.js"></script>
-  <script type="module" src="literature.js?v=20260811a"></script>
+  <script type="module" src="literature.js?v=20261008f"></script>
 </body>
 </html>

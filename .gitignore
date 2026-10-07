@@ -1,6 +1,7 @@
 .venv/
 .tools/
 .env
+zotero.local.json
 .run/
 __pycache__/
 *.pyc

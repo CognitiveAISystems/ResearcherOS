@@ -14,6 +14,8 @@ from api.schemas import (
     ZoteroCollectionsBody,
     ZoteroConnectBody,
     ZoteroImportBody,
+    LiteratureSelectionBody,
+    ZoteroLinkBody,
 )
 from koi.literature import review_sets
 from koi.projects.views import project_to_client
@@ -37,6 +39,8 @@ from koi.literature.zotero import (
     list_zotero_collections,
     verify_zotero_credentials,
 )
+from koi.literature.selection import read_selection, write_selection
+from koi.literature.zotero_link import clear_zotero_link, read_zotero_link, write_zotero_link
 
 router = APIRouter(tags=["library"])
 
@@ -242,6 +246,64 @@ def post_library_zotero_import(body: ZoteroImportBody) -> dict[str, object]:
         raise HTTPException(401, str(error)) from error
     except ZoteroApiError as error:
         raise HTTPException(502, str(error)) from error
+
+
+def _zotero_link_payload(link: dict[str, str] | None) -> dict[str, object]:
+    if link is None:
+        return {"linked": False}
+    return {"linked": True, **link}
+
+
+@router.get("/projects/{project_id}/zotero")
+def get_project_zotero(project_id: str) -> dict[str, object]:
+    try:
+        return _zotero_link_payload(read_zotero_link(project_id))
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@router.put("/projects/{project_id}/zotero")
+def put_project_zotero(project_id: str, body: ZoteroLinkBody) -> dict[str, object]:
+    try:
+        link = write_zotero_link(
+            project_id,
+            api_key=body.api_key,
+            user_id=body.user_id,
+            username=body.username,
+            collection_key=body.collection_key,
+            collection_name=body.collection_name,
+        )
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    return _zotero_link_payload(link)
+
+
+@router.delete("/projects/{project_id}/zotero")
+def delete_project_zotero(project_id: str) -> dict[str, object]:
+    try:
+        clear_zotero_link(project_id)
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    return {"linked": False}
+
+
+@router.get("/projects/{project_id}/literature/selection")
+def get_literature_selection(project_id: str) -> dict[str, object]:
+    try:
+        return {"papers": read_selection(project_id)}
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+
+
+@router.put("/projects/{project_id}/literature/selection")
+def put_literature_selection(project_id: str, body: LiteratureSelectionBody) -> dict[str, object]:
+    try:
+        papers = write_selection(project_id, [paper.model_dump() for paper in body.papers])
+    except KeyError as error:
+        raise HTTPException(404, str(error)) from error
+    return {"papers": papers}
 
 
 @router.post("/library/review-set")

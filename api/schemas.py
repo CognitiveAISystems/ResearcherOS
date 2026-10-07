@@ -137,12 +137,6 @@ class MorphologyExplainBody(BaseModel):
     node_id: str = Field(min_length=1)
 
 
-class MortalCombatStageBody(BaseModel):
-    primary: dict = Field(default_factory=dict)
-    reviewer: dict = Field(default_factory=dict)
-    question: str = ""
-
-
 class RelatedWorksAnswerBody(BaseModel):
     markdown: str = Field(min_length=1)
 
@@ -171,6 +165,25 @@ class ZoteroImportBody(BaseModel):
     user_id: Optional[str] = None
     limit: int = Field(default=50, ge=1, le=100)
     collection_key: Optional[str] = None
+
+
+class ZoteroLinkBody(BaseModel):
+    api_key: str = Field(min_length=1)
+    user_id: str = ""
+    username: str = ""
+    collection_key: str = ""
+    collection_name: str = ""
+
+
+class LiteratureSelectionPaper(BaseModel):
+    url: str = Field(min_length=1, max_length=500)
+    title: str = ""
+    authors: str = ""
+    year: str = ""
+
+
+class LiteratureSelectionBody(BaseModel):
+    papers: list[LiteratureSelectionPaper] = Field(default_factory=list, max_length=400)
 
 
 class AgentChatBody(BaseModel):

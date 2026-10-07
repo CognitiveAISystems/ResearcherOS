@@ -7,7 +7,7 @@ import {
 } from "./koi-loader.js";
 import { renderMarkdown } from "./markdown.js";
 
-const THEME_STORAGE_KEY = "koi-theme";
+const THEME_STORAGE_KEY = "koi-literature-theme";
 const RW_SETTINGS_KEY = "koi-rw-settings";
 
 const BRAND_TAGLINES = [
@@ -303,13 +303,16 @@ function saveSettingsToStorage(settings) {
 }
 
 function readSettingsFromDom() {
+  const stored = loadSettings();
   const mode =
-    document.querySelector('input[name="rw-search-mode"]:checked')?.value || "internet";
+    document.querySelector('input[name="rw-search-mode"]:checked')?.value || stored.searchMode || "internet";
+  const autoTranslate = document.getElementById("literature-auto-translate");
+  const overwrite = document.getElementById("literature-overwrite-answers");
   return {
     searchMode: mode,
-    autoTranslate: Boolean(document.getElementById("literature-auto-translate")?.checked),
+    autoTranslate: autoTranslate ? Boolean(autoTranslate.checked) : stored.autoTranslate,
     limit: selectedLiteratureLimit(),
-    overwriteAnswers: Boolean(document.getElementById("literature-overwrite-answers")?.checked),
+    overwriteAnswers: overwrite ? Boolean(overwrite.checked) : stored.overwriteAnswers,
     zoteroUserId: document.getElementById("rw-zotero-user-id")?.value?.trim() || "",
     zoteroApiKey: document.getElementById("rw-zotero-api-key")?.value?.trim() || "",
     zoteroUsername: loadSettings().zoteroUsername || "",
@@ -413,8 +416,8 @@ function setTheme(theme) {
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  const theme = stored === "light" ? "light" : "dark";
-  if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+  const theme = stored === "dark" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", theme);
   updateThemeButton(theme);
   document.getElementById("btn-theme")?.addEventListener("click", () => {
     setTheme(getTheme() === "light" ? "dark" : "light");
@@ -557,6 +560,7 @@ function updateLibrarySplitChrome(enabled) {
     if (addMenu) addMenu.hidden = true;
     results?.classList.add("hidden");
     nav?.classList.remove("hidden");
+    renderZoteroFolderTree();
     const n = latestPaperAnswerRun?.clusters?.length || 0;
     if (countEl) {
       countEl.hidden = !n;
@@ -567,6 +571,7 @@ function updateLibrarySplitChrome(enabled) {
     results?.classList.remove("hidden");
     nav?.classList.add("hidden");
     updateLibraryPanelChrome();
+    renderZoteroFolderTree();
   }
 }
 
@@ -670,15 +675,12 @@ function setWorkspaceSplit(enabled) {
   const page = document.getElementById("rw-page");
   const insights = document.getElementById("rw-insights-column");
   const clustersBlock = document.getElementById("rw-clusters-block");
-  const history = document.getElementById("rw-history-column");
   const search = document.getElementById("rw-search-column");
-  const historyBack = document.getElementById("rw-history-back");
   const wasSplit = isWorkspaceSplit();
 
   if (enabled) {
     workspace?.classList.remove("is-history");
     page?.classList.remove("is-history");
-    historyBack?.classList.add("hidden");
   }
 
   if (enabled && !wasSplit) {
@@ -689,7 +691,6 @@ function setWorkspaceSplit(enabled) {
   page?.classList.toggle("is-split", enabled);
   insights?.classList.toggle("hidden", !enabled);
   clustersBlock?.classList.toggle("hidden", !enabled);
-  history?.classList.toggle("hidden", !enabled && !workspace?.classList.contains("is-history"));
   search?.classList.toggle("rw-column-dormant", enabled);
 
   if (enabled) {
@@ -707,30 +708,9 @@ function isHistoryView() {
 }
 
 function setHistoryView(enabled) {
-  const workspace = document.getElementById("rw-workspace");
-  const page = document.getElementById("rw-page");
-  const history = document.getElementById("rw-history-column");
-  const historyBack = document.getElementById("rw-history-back");
-  const insights = document.getElementById("rw-insights-column");
-
-  if (enabled) {
-    if (isWorkspaceSplit()) {
-      setWorkspaceSplit(false);
-    }
-    workspace?.classList.add("is-history");
-    page?.classList.add("is-history");
-    history?.classList.remove("hidden");
-    historyBack?.classList.remove("hidden");
-    insights?.classList.add("hidden");
-    void refreshLiteratureHistory();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } else {
-    workspace?.classList.remove("is-history");
-    page?.classList.remove("is-history");
-    historyBack?.classList.add("hidden");
-    if (!isWorkspaceSplit()) {
-      history?.classList.add("hidden");
-    }
+  if (!enabled) {
+    document.getElementById("rw-workspace")?.classList.remove("is-history");
+    document.getElementById("rw-page")?.classList.remove("is-history");
   }
 }
 
@@ -834,8 +814,12 @@ function updateLibraryPanelChrome() {
 function updateZoteroEmptyHint() {
   const hint = document.querySelector("#rw-library-zotero .rw-library-source-hint");
   if (!hint) return;
-  const connected = Boolean(loadSettings().zoteroApiKey?.trim());
-  hint.textContent = connected ? "загрузить библиотеку" : "подключить";
+  const settings = loadSettings();
+  if (!settings.zoteroApiKey?.trim()) {
+    hint.textContent = "подключить";
+    return;
+  }
+  hint.textContent = settings.zoteroCollectionKey ? "загрузить папку" : "выбрать папку";
 }
 
 function hideLibraryAddMenu() {
@@ -858,17 +842,16 @@ function toggleLibraryAddMenu() {
   addBtn?.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
-function setLibraryPapers(papers, { selectAll = true } = {}) {
+function setLibraryPapers(papers, { selectAll = false } = {}) {
   literatureResults = (papers || []).map(normalizePaperRecord).filter((p) => p.title && p.arxiv_url);
-  try { sessionStorage.setItem("koi-mortal-library", JSON.stringify(literatureResults)); } catch { /* private mode */ }
   if (selectAll) {
     selectedPaperUrls = new Set(literatureResults.map((p) => p.arxiv_url));
-  } else {
-    selectedPaperUrls = new Set(
-      [...selectedPaperUrls].filter((url) => literatureResults.some((p) => p.arxiv_url === url))
+    projectPaperRecords = new Map(
+      literatureResults.map((paper) => [paper.arxiv_url, paperSelectionRecord(paper)])
     );
   }
   renderLiteratureResults(literatureResults);
+  renderProjectPaperList();
 }
 
 function shortText(text, max = 180) {
@@ -1014,25 +997,14 @@ function selectedProjectId() {
   return document.getElementById("literature-project-select")?.value || "";
 }
 
-function updateMortalCombatLink() {
-  const link = document.getElementById("mortal-combat-launch");
-  if (!link) return;
-  const papers = selectedPapers();
-  const currentProject = selectedProjectId() || new URLSearchParams(location.search).get("project") || "";
-  const params = new URLSearchParams({ project: currentProject });
-  if (currentProject) { try { sessionStorage.setItem("koi-mortal-project", currentProject); } catch { /* private mode */ } }
-  if (papers[0]) params.set("primary", encodeURIComponent(JSON.stringify(papers[0])));
-  if (papers[1]) params.set("reviewer", encodeURIComponent(JSON.stringify(papers[1])));
-  link.href = `mortal.html?${params.toString()}`;
-  link.classList.toggle("is-ready", papers.length >= 2);
-}
-
 function shouldOverwritePaperAnswers() {
   return Boolean(document.getElementById("literature-overwrite-answers")?.checked);
 }
 
 function shouldAutoTranslateQuestion() {
-  return Boolean(document.getElementById("literature-auto-translate")?.checked);
+  const el = document.getElementById("literature-auto-translate");
+  if (el) return Boolean(el.checked);
+  return loadSettings().autoTranslate !== false;
 }
 
 function getSelectedResults() {
@@ -1118,13 +1090,23 @@ function toggleClusterSelection(key) {
 }
 
 function selectAllResults() {
-  selectedPaperUrls = new Set(literatureResults.map((paper) => paper.arxiv_url));
+  for (const paper of literatureResults) {
+    selectedPaperUrls.add(paper.arxiv_url);
+    projectPaperRecords.set(paper.arxiv_url, paperSelectionRecord(paper));
+  }
   renderLiteratureResults(literatureResults, displayQueryLabel());
+  renderProjectPaperList();
+  scheduleSaveSelection();
 }
 
 function clearSelectedResults() {
-  selectedPaperUrls = new Set();
+  for (const paper of literatureResults) {
+    selectedPaperUrls.delete(paper.arxiv_url);
+    projectPaperRecords.delete(paper.arxiv_url);
+  }
   renderLiteratureResults(literatureResults, displayQueryLabel());
+  renderProjectPaperList();
+  scheduleSaveSelection();
 }
 
 function mapDiscoverPaperToResult(paper, index) {
@@ -1196,12 +1178,11 @@ function shortProjectLabel(title, id = "") {
 function updateProjectBanner(title, projectId = selectedProjectId()) {
   const titleEl = document.getElementById("rw-project-title");
   const backEl = document.getElementById("rw-project-back");
-  const leadEl = document.getElementById("rw-search-stage-lead");
   const picker = document.querySelector(".rw-project-picker");
   const select = document.getElementById("literature-project-select");
   const hasProject = Boolean(projectId);
   if (titleEl) {
-    titleEl.textContent = "Обзор литературы";
+    titleEl.textContent = hasProject ? String(title || projectId).trim() : "Обзор литературы";
   }
   if (backEl) {
     backEl.href = hasProject
@@ -1216,16 +1197,39 @@ function updateProjectBanner(title, projectId = selectedProjectId()) {
     picker.classList.toggle("is-solo", !multi);
     picker.hidden = !hasProject;
   }
-  if (leadEl) {
-    leadEl.textContent = hasProject
-      ? "Задайте вопрос — по нему сгруппируем статьи слева."
-      : "Выберите проект, затем задайте вопрос.";
-  }
+  renderProjectRail();
   if (projectId && window.history?.replaceState) {
     const url = new URL(window.location.href);
     url.searchParams.set("project", projectId);
     window.history.replaceState({}, "", url);
   }
+}
+
+let literatureProjects = [];
+
+function renderProjectRail() {
+  const nav = document.getElementById("rw-project-rail");
+  if (!nav) return;
+  const count = document.getElementById("rw-project-count");
+  if (count) count.textContent = literatureProjects.length;
+  const active = selectedProjectId();
+  nav.innerHTML = literatureProjects
+    .map((project) => {
+      const on = project.id === active;
+      const label = String(project.title || project.id).trim();
+      return `<button type="button" class="rw-project-rail-item${on ? " is-active" : ""}" data-project-id="${escapeHtml(project.id)}" aria-current="${on ? "page" : "false"}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"><span class="rw-project-rail-label">${escapeHtml(label)}</span></button>`;
+    })
+    .join("");
+  nav.querySelectorAll("[data-project-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("data-project-id") || "";
+      const select = document.getElementById("literature-project-select");
+      if (!select || !id || select.value === id) return;
+      select.value = id;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+  nav.querySelector(".rw-project-rail-item.is-active")?.scrollIntoView({ block: "nearest" });
 }
 
 async function loadProjectOptions() {
@@ -1251,6 +1255,7 @@ async function loadProjectOptions() {
     seen.add(p.id);
     return true;
   });
+  literatureProjects = list;
   select.innerHTML = list
     .map((p) => {
       const label = shortProjectLabel(p.title, p.id);
@@ -1260,8 +1265,6 @@ async function loadProjectOptions() {
   const preferred =
     (requested && list.find((p) => p.id === requested)?.id) || list[0]?.id || "";
   if (preferred) select.value = preferred;
-  if (preferred) { try { sessionStorage.setItem("koi-mortal-project", preferred); } catch { /* private mode */ } }
-  updateMortalCombatLink();
   const active = list.find((p) => p.id === preferred);
   updateProjectBanner(active?.title, preferred);
 }
@@ -2604,16 +2607,22 @@ function renderLiteratureResults(results = [], _query = "") {
     input.addEventListener("change", (event) => {
       const url = event.currentTarget?.dataset?.paperUrl;
       if (!url) return;
-      if (event.currentTarget.checked) selectedPaperUrls.add(url);
-      else selectedPaperUrls.delete(url);
+      if (event.currentTarget.checked) {
+        selectedPaperUrls.add(url);
+        const paper = literatureResults.find((item) => item.arxiv_url === url);
+        if (paper) projectPaperRecords.set(url, paperSelectionRecord(paper));
+      } else {
+        selectedPaperUrls.delete(url);
+        projectPaperRecords.delete(url);
+      }
       const item = event.currentTarget.closest(".rw-library-item");
       item?.classList.toggle("is-selected", event.currentTarget.checked);
       updateActionButtons();
-      updateMortalCombatLink();
+      renderProjectPaperList();
+      scheduleSaveSelection();
     });
   });
   updateActionButtons();
-  updateMortalCombatLink();
 }
 
 async function loadLibraryIntoSidebar({ silent = false } = {}) {
@@ -2693,38 +2702,26 @@ function openLibrarySourceSettings() {
 
 function openZoteroImport() {
   hideLibraryAddMenu();
-  const settings = loadSettings();
-  if (settings.zoteroApiKey?.trim()) {
-    openLibrarySourceSettings();
-    setZoteroStatus(
-      `Подключено: ${zoteroWhoLabel(settings)}. Выберите папку и нажмите «Импортировать».`
-    );
-    void refreshZoteroCollections({ quiet: true });
-    requestAnimationFrame(() => {
-      document.getElementById("rw-zotero-collection")?.focus();
-    });
-    return;
-  }
   openLibrarySourceSettings();
-  setZoteroStatus("Вставьте API Key и нажмите «Подключить».");
+  setZoteroStatus("");
+  const settings = loadSettings();
   requestAnimationFrame(() => {
-    document.getElementById("rw-zotero-api-key")?.focus();
+    const focusId = settings.zoteroApiKey?.trim() ? "rw-zotero-collection" : "rw-zotero-api-key";
+    document.getElementById(focusId)?.focus();
   });
+  if (settings.zoteroApiKey?.trim()) void refreshZoteroCollections({ quiet: true });
 }
 
 function setZoteroStatus(msg, isError = false) {
   const el = document.getElementById("rw-zotero-status");
   if (!el) return;
+  el.hidden = !msg;
   el.textContent = msg || "";
   el.className = "rw-settings-hint" + (isError ? " error" : msg ? " ok" : "");
 }
 
 function resetZoteroStatusDefault() {
-  const el = document.getElementById("rw-zotero-status");
-  if (!el) return;
-  el.className = "rw-settings-hint";
-  el.innerHTML =
-    'Ключ: <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noreferrer">zotero.org/settings/keys</a>';
+  setZoteroStatus("");
 }
 
 function readZoteroCredentials() {
@@ -2798,6 +2795,182 @@ function persistZoteroCollectionKey() {
   saveSettingsToStorage(settings);
 }
 
+let zoteroLoadToken = 0;
+let zoteroAccountLoaded = false;
+let projectPaperRecords = new Map();
+let selectionSaveTimer = 0;
+let pendingSelection = null;
+let selectionLoadToken = 0;
+
+function paperSelectionRecord(paper) {
+  return {
+    url: paper.arxiv_url,
+    title: paper.title || "",
+    authors: paper.authors || "",
+    year: paper.year ? String(paper.year) : "",
+  };
+}
+
+function selectionPayload() {
+  return [...projectPaperRecords.values()].filter((paper) => selectedPaperUrls.has(paper.url));
+}
+
+function showSavedProjectPapers() {
+  const papers = selectionPayload()
+    .map((paper) =>
+      normalizePaperRecord({
+        title: paper.title,
+        arxiv_url: paper.url,
+        authors: paper.authors,
+        year: paper.year,
+      })
+    )
+    .filter((paper) => paper.title && paper.arxiv_url);
+  if (!papers.length || literatureResults.length) return;
+  setLibraryPapers(papers);
+}
+
+function renderProjectPaperList() {
+  const root = document.getElementById("rw-project-paper-list");
+  if (!root) return;
+  const papers = selectionPayload();
+  if (!papers.length) {
+    root.innerHTML = `<p class="rw-project-papers-empty">Отметьте статьи слева — они останутся в этом проекте.</p>`;
+    return;
+  }
+  root.innerHTML = papers
+    .map((paper) => {
+      const meta = [paper.year, paper.authors].filter(Boolean).join(" · ");
+      return `
+        <article class="rw-project-paper">
+          <a class="rw-project-paper-title" href="${escapeHtml(paper.url)}" target="_blank" rel="noreferrer">${escapeHtml(paper.title || paper.url)}</a>
+          ${meta ? `<p class="rw-project-paper-meta">${escapeHtml(meta)}</p>` : ""}
+        </article>`;
+    })
+    .join("");
+}
+
+function scheduleSaveSelection() {
+  const projectId = selectedProjectId();
+  if (!projectId) return;
+  pendingSelection = { projectId, papers: selectionPayload() };
+  window.clearTimeout(selectionSaveTimer);
+  selectionSaveTimer = window.setTimeout(() => {
+    void flushSelection();
+  }, 200);
+}
+
+async function flushSelection() {
+  const pending = pendingSelection;
+  pendingSelection = null;
+  if (!pending?.projectId) return;
+  try {
+    await KoiApi.saveLiteratureSelection(pending.projectId, pending.papers);
+  } catch (err) {
+    setLiteratureStatus(err.message, true);
+  }
+}
+
+async function loadProjectSelection(projectId) {
+  const token = ++selectionLoadToken;
+  if (!projectId) {
+    selectedPaperUrls = new Set();
+    projectPaperRecords = new Map();
+    renderLiteratureResults(literatureResults);
+    renderProjectPaperList();
+    return;
+  }
+  let papers = [];
+  try {
+    const data = await KoiApi.getLiteratureSelection(projectId);
+    papers = data.papers || [];
+  } catch (err) {
+    if (token === selectionLoadToken) setLiteratureStatus(err.message, true);
+    return;
+  }
+  if (token !== selectionLoadToken || selectedProjectId() !== projectId) return;
+  projectPaperRecords = new Map();
+  selectedPaperUrls = new Set();
+  for (const paper of papers) {
+    const url = String(paper.url || "").trim();
+    if (!url) continue;
+    selectedPaperUrls.add(url);
+    projectPaperRecords.set(url, {
+      url,
+      title: String(paper.title || ""),
+      authors: String(paper.authors || ""),
+      year: paper.year ? String(paper.year) : "",
+    });
+  }
+  renderLiteratureResults(literatureResults);
+  renderProjectPaperList();
+}
+
+async function saveProjectZoteroLink(projectId = selectedProjectId()) {
+  if (!projectId || projectId !== selectedProjectId()) return;
+  const settings = loadSettings();
+  const apiKey = settings.zoteroApiKey?.trim();
+  if (!apiKey) return;
+  const collectionKey = settings.zoteroCollectionKey || "";
+  let collectionName = "";
+  if (collectionKey) {
+    const label = zoteroCollectionLabel();
+    collectionName = label && label !== "вся библиотека" ? label : "";
+  }
+  try {
+    await KoiApi.saveProjectZotero(projectId, {
+      api_key: apiKey,
+      user_id: settings.zoteroUserId || "",
+      username: settings.zoteroUsername || "",
+      collection_key: collectionKey,
+      collection_name: collectionName,
+    });
+  } catch (err) {
+    setLiteratureStatus(err.message, true);
+  }
+}
+
+async function loadProjectZotero(projectId = selectedProjectId()) {
+  await flushSelection();
+  if (selectedProjectId() !== projectId) return;
+  await loadProjectSelection(projectId);
+  if (selectedProjectId() !== projectId) return;
+  if (zoteroAccountLoaded && loadSettings().zoteroApiKey?.trim()) {
+    renderLiteratureResults(literatureResults);
+    renderZoteroFolderTree();
+    return;
+  }
+  const token = ++zoteroLoadToken;
+  if (!projectId) return;
+  let link;
+  try {
+    link = await KoiApi.getProjectZotero(projectId);
+  } catch (err) {
+    if (token === zoteroLoadToken) setLiteratureStatus(err.message, true);
+    return;
+  }
+  if (token !== zoteroLoadToken || selectedProjectId() !== projectId) return;
+  if (!link?.linked || !link.api_key) {
+    zoteroFolderItems = [];
+    zoteroOpenFolderKeys = new Set();
+    showSavedProjectPapers();
+    renderZoteroFolderTree();
+    return;
+  }
+  const next = loadSettings();
+  next.zoteroUserId = link.user_id || "";
+  next.zoteroApiKey = link.api_key || "";
+  next.zoteroUsername = link.username || "";
+  next.zoteroCollectionKey = link.collection_key || "";
+  saveSettingsToStorage(next);
+  applySettingsToDom(next);
+  zoteroAccountLoaded = true;
+  if (token !== zoteroLoadToken) return;
+  const foldersReady = refreshZoteroCollections({ quiet: true });
+  await importZoteroLibrary({ quiet: true, token, projectId });
+  await foldersReady;
+}
+
 function zoteroWhoLabel(settings = loadSettings()) {
   if (settings.zoteroUsername) return `@${settings.zoteroUsername}`;
   if (settings.zoteroUserId) return `user ${settings.zoteroUserId}`;
@@ -2820,9 +2993,6 @@ function restoreZoteroConnectionUi(settings = loadSettings(), { loadCollections 
   updateZoteroEmptyHint();
   if (hasKey) {
     setZoteroCollectionVisible(true);
-    setZoteroStatus(
-      `Подключено: ${zoteroWhoLabel(settings)}. Выберите папку и нажмите «Импортировать».`
-    );
     if (loadCollections) void refreshZoteroCollections({ quiet: true });
   } else {
     setZoteroDisconnectVisible(false);
@@ -2831,6 +3001,9 @@ function restoreZoteroConnectionUi(settings = loadSettings(), { loadCollections 
 }
 
 function disconnectZoteroAccount() {
+  zoteroLoadToken += 1;
+  zoteroAccountLoaded = false;
+  const projectId = selectedProjectId();
   const userInput = document.getElementById("rw-zotero-user-id");
   const keyInput = document.getElementById("rw-zotero-api-key");
   if (userInput) userInput.value = "";
@@ -2841,12 +3014,123 @@ function disconnectZoteroAccount() {
   settings.zoteroUsername = "";
   settings.zoteroCollectionKey = "";
   saveSettingsToStorage(settings);
+  if (projectId) {
+    void KoiApi.deleteProjectZotero(projectId).catch((err) => {
+      setLiteratureStatus(err.message, true);
+    });
+  }
   setZoteroImportEnabled(false);
   setZoteroDisconnectVisible(false);
   resetZoteroCollectionSelect();
   updateZoteroEmptyHint();
   resetZoteroStatusDefault();
+  zoteroFolderItems = [];
+  zoteroOpenFolderKeys = new Set();
+  renderZoteroFolderTree();
   setLiteratureStatus("Zotero отключён.");
+}
+
+let zoteroFolderItems = [];
+let zoteroOpenFolderKeys = new Set();
+
+function zoteroFolderName(key) {
+  if (!key) return "вся библиотека";
+  const item = zoteroFolderItems.find((folder) => String(folder.key) === String(key));
+  return item?.name || key;
+}
+
+function revealZoteroFolder(key) {
+  if (!key) return;
+  const byKey = new Map(zoteroFolderItems.map((folder) => [String(folder.key), folder]));
+  const seen = new Set();
+  let current = String(key);
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    zoteroOpenFolderKeys.add(current);
+    current = String(byKey.get(current)?.parent_key || "");
+  }
+}
+
+const ZOTERO_CHEVRON_SVG = `<svg class="rw-zotero-chevron" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.2 3.2 11 8l-4.8 4.8-1.1-1.1L8.8 8 5.1 4.3z"/></svg>`;
+
+function renderZoteroFolderNodes(children, parentKey, active) {
+  const nodes = children.get(parentKey) || [];
+  return nodes
+    .map((node) => {
+      const key = String(node.key || "");
+      const kids = children.get(key) || [];
+      const open = zoteroOpenFolderKeys.has(key);
+      const toggle = kids.length
+        ? `<button type="button" class="rw-zotero-folder-toggle" data-zotero-toggle="${escapeHtml(key)}" aria-label="${open ? "Свернуть" : "Развернуть"}" aria-expanded="${open ? "true" : "false"}">${ZOTERO_CHEVRON_SVG}</button>`
+        : `<span class="rw-zotero-folder-toggle rw-zotero-folder-toggle--empty" aria-hidden="true"></span>`;
+      const nested = open ? renderZoteroFolderNodes(children, key, active) : "";
+      return `
+        <div class="rw-zotero-folder-branch">
+          <div class="rw-zotero-folder-row${key === active ? " is-active" : ""}">
+            ${toggle}
+            <button type="button" class="rw-zotero-folder" data-zotero-folder="${escapeHtml(key)}">${escapeHtml(node.name || key)}</button>
+          </div>
+          ${nested ? `<div class="rw-zotero-folder-children">${nested}</div>` : ""}
+        </div>`;
+    })
+    .join("");
+}
+
+function renderZoteroFolderTree() {
+  const nav = document.getElementById("rw-zotero-folders");
+  const column = document.getElementById("rw-library-column");
+  if (!nav) return;
+  const connected = Boolean(loadSettings().zoteroApiKey?.trim());
+  const show = connected && zoteroFolderItems.length > 0 && !isWorkspaceSplit();
+  nav.classList.toggle("hidden", !show);
+  column?.classList.toggle("has-folders", show);
+  if (!show) {
+    nav.innerHTML = "";
+    return;
+  }
+  const active = String(loadSettings().zoteroCollectionKey || "");
+  const children = new Map();
+  for (const item of zoteroFolderItems) {
+    const parent = String(item.parent_key || "");
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(item);
+  }
+  nav.innerHTML = `
+    <div class="rw-zotero-folder-row${active ? "" : " is-active"}">
+      <span class="rw-zotero-folder-toggle rw-zotero-folder-toggle--empty" aria-hidden="true"></span>
+      <button type="button" class="rw-zotero-folder" data-zotero-folder="">Вся библиотека</button>
+    </div>
+    ${renderZoteroFolderNodes(children, "", active)}`;
+  nav.querySelectorAll("[data-zotero-toggle]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = button.getAttribute("data-zotero-toggle") || "";
+      if (!key) return;
+      if (zoteroOpenFolderKeys.has(key)) zoteroOpenFolderKeys.delete(key);
+      else zoteroOpenFolderKeys.add(key);
+      renderZoteroFolderTree();
+    });
+  });
+  nav.querySelectorAll("[data-zotero-folder]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void activateZoteroFolder(button.getAttribute("data-zotero-folder") || "");
+    });
+  });
+  nav.querySelector(".rw-zotero-folder-row.is-active")?.scrollIntoView({ block: "nearest" });
+  if (show) document.getElementById("rw-library-switch-source")?.classList.add("hidden");
+}
+
+async function activateZoteroFolder(key) {
+  const projectId = selectedProjectId();
+  const settings = loadSettings();
+  if (!settings.zoteroApiKey?.trim()) return;
+  settings.zoteroCollectionKey = key || "";
+  saveSettingsToStorage(settings);
+  revealZoteroFolder(key);
+  renderZoteroFolderTree();
+  await saveProjectZoteroLink(projectId);
+  await importZoteroLibrary({ quiet: true, projectId, collectionKey: key || "" });
 }
 
 async function refreshZoteroCollections({ quiet = false } = {}) {
@@ -2861,16 +3145,12 @@ async function refreshZoteroCollections({ quiet = false } = {}) {
   try {
     const data = await KoiApi.listZoteroCollections({ api_key, user_id });
     const collections = data.collections || [];
-    populateZoteroCollectionSelect(collections, loadSettings().zoteroCollectionKey || "");
+    zoteroFolderItems = collections;
+    const activeKey = loadSettings().zoteroCollectionKey || "";
+    populateZoteroCollectionSelect(collections, activeKey);
     persistZoteroCollectionKey();
-    if (!quiet) {
-      const count = collections.length;
-      setZoteroStatus(
-        count
-          ? `Найдено папок: ${count}. Выберите папку и нажмите «Импортировать».`
-          : "Папок нет — можно импортировать всю библиотеку."
-      );
-    }
+    revealZoteroFolder(activeKey);
+    renderZoteroFolderTree();
   } catch (err) {
     resetZoteroCollectionSelect();
     setZoteroCollectionVisible(Boolean(api_key));
@@ -2879,15 +3159,21 @@ async function refreshZoteroCollections({ quiet = false } = {}) {
 }
 
 async function connectZoteroAccount() {
+  if (!selectedProjectId()) {
+    setZoteroStatus("Сначала выберите проект.", true);
+    return;
+  }
   const { user_id, api_key } = readZoteroCredentials();
   if (!api_key) {
-    setZoteroStatus("Сначала вставьте API Key.", true);
+    setZoteroStatus("Вставьте API Key.", true);
     document.getElementById("rw-zotero-api-key")?.focus();
     return;
   }
   const connectBtn = document.getElementById("rw-zotero-connect");
+  const folderField = document.getElementById("rw-zotero-collection-field");
+  const folderReady = Boolean(folderField && !folderField.hidden);
   connectBtn?.setAttribute("disabled", "disabled");
-  setZoteroStatus("Проверяем ключ в Zotero…");
+  setZoteroStatus("");
   setZoteroImportEnabled(false);
   setZoteroDisconnectVisible(false);
   try {
@@ -2901,14 +3187,12 @@ async function connectZoteroAccount() {
     settings.zoteroApiKey = api_key;
     settings.zoteroUsername = username;
     saveSettingsToStorage(settings);
+    await saveProjectZoteroLink();
     setZoteroImportEnabled(true);
     setZoteroDisconnectVisible(true);
     updateZoteroEmptyHint();
-    const who = username ? `@${username}` : `user ${resolvedId}`;
-    setZoteroStatus(`Подключено: ${who}. Загружаем список папок…`);
-    setLiteratureStatus(`Zotero подключён (${who}).`);
-    await refreshZoteroCollections({ quiet: false });
-    document.getElementById("rw-zotero-collection")?.focus();
+    await refreshZoteroCollections({ quiet: true });
+    if (folderReady) await importZoteroLibrary();
   } catch (err) {
     setZoteroImportEnabled(false);
     setZoteroDisconnectVisible(false);
@@ -2920,23 +3204,39 @@ async function connectZoteroAccount() {
   }
 }
 
-async function importZoteroLibrary({ quiet = false } = {}) {
+async function importZoteroLibrary({
+  quiet = false,
+  token = null,
+  projectId = selectedProjectId(),
+  collectionKey = null,
+} = {}) {
   const { user_id, api_key } = readZoteroCredentials();
   if (!api_key) {
-    setZoteroStatus("Сначала подключите Zotero API Key.", true);
+    setZoteroStatus("Вставьте API Key.", true);
     if (!quiet) openLibrarySourceSettings();
     return;
   }
-  const collection_key = readZoteroCollectionKey();
-  persistZoteroCollectionKey();
-  const folderLabel = zoteroCollectionLabel() || (collection_key ? collection_key : "вся библиотека");
+  if (collectionKey != null) {
+    const settings = loadSettings();
+    settings.zoteroCollectionKey = collectionKey;
+    saveSettingsToStorage(settings);
+    const select = document.getElementById("rw-zotero-collection");
+    if (select && [...select.options].some((opt) => opt.value === collectionKey)) {
+      select.value = collectionKey;
+    }
+  }
+  const collection_key = collectionKey != null ? collectionKey : readZoteroCollectionKey();
+  if (collectionKey == null) persistZoteroCollectionKey();
+  const folderLabel =
+    collectionKey != null
+      ? zoteroFolderName(collectionKey)
+      : zoteroCollectionLabel() || (collection_key ? collection_key : "вся библиотека");
   const importBtn = document.getElementById("rw-zotero-import");
   importBtn?.setAttribute("disabled", "disabled");
   if (!quiet) {
-    setZoteroStatus(`Импорт из Zotero (${folderLabel})…`);
-    showLoader(`Импорт из Zotero: ${folderLabel}`);
+    showLoader(`Zotero: ${folderLabel}`);
   } else {
-    setLiteratureStatus(`Загружаем Zotero (${folderLabel})…`);
+    setLiteratureStatus(`Zotero: ${folderLabel}`);
   }
   try {
     const data = await KoiApi.importZotero({
@@ -2945,17 +3245,27 @@ async function importZoteroLibrary({ quiet = false } = {}) {
       limit: Math.max(selectedLiteratureLimit(), 50),
       collection_key,
     });
+    if (token != null && token !== zoteroLoadToken) {
+      return;
+    }
     const papers = data.papers || [];
+    revealZoteroFolder(collection_key);
+    renderZoteroFolderTree();
     if (!papers.length) {
-      setZoteroStatus(`В «${folderLabel}» не найдено подходящих записей.`, true);
+      setLibraryPapers([]);
+      await saveProjectZoteroLink(projectId);
+      setZoteroStatus(`В «${folderLabel}» нет статей.`, true);
       setLiteratureStatus("Zotero: статей не найдено.", true);
       return;
     }
     setLibraryPapers(papers);
+    revealZoteroFolder(collection_key);
+    renderZoteroFolderTree();
     hideSettingsModal();
     const total = data.total_available != null ? ` (из ${data.total_available})` : "";
-    setZoteroStatus(`Импортировано ${papers.length}${total} из «${folderLabel}».`);
-    setLiteratureStatus(`Импортировано из Zotero (${folderLabel}): ${papers.length} статей.`);
+    setZoteroStatus("");
+    setLiteratureStatus(`${papers.length} статей из «${folderLabel}»${total}.`);
+    await saveProjectZoteroLink(projectId);
   } catch (err) {
     setZoteroStatus(err.message, true);
     setLiteratureStatus(err.message, true);
@@ -2967,10 +3277,7 @@ async function importZoteroLibrary({ quiet = false } = {}) {
 }
 
 async function maybeAutoLoadZoteroLibrary() {
-  if (literatureResults.length) return;
-  const settings = loadSettings();
-  if (!settings.zoteroApiKey?.trim()) return;
-  await importZoteroLibrary({ quiet: true });
+  await loadProjectZotero(selectedProjectId());
 }
 
 function triggerCsvUpload() {
@@ -3559,7 +3866,7 @@ function renderLiteratureHistory(runs = []) {
   const root = document.getElementById("rw-history-list");
   if (!root) return;
   if (!runs.length) {
-    root.innerHTML = `<p class="literature-empty">Пока нет сохранённых анализов.</p>`;
+    root.innerHTML = `<p class="literature-empty">Пока нет сохранённых вопросов.</p>`;
     return;
   }
   const activeId = literatureRunId(latestPaperAnswerRun);
@@ -3898,14 +4205,6 @@ function bindLiteratureUiEvents() {
     input.addEventListener("change", () => updateSettingsSourceUi());
   });
   document.getElementById("literature-search-form")?.addEventListener("submit", onLiteratureSearchSubmit);
-  document.getElementById("rw-open-history")?.addEventListener("click", (event) => {
-    event.preventDefault();
-    setHistoryView(true);
-  });
-  document.getElementById("rw-history-back")?.addEventListener("click", (event) => {
-    event.preventDefault();
-    setHistoryView(false);
-  });
   document.getElementById("rw-back-to-collection")?.addEventListener("click", () => {
     stopLiteratureClusterPoll();
     setWorkspaceSplit(false);
@@ -3930,6 +4229,7 @@ function bindLiteratureUiEvents() {
   document.getElementById("rw-zotero-disconnect")?.addEventListener("click", disconnectZoteroAccount);
   document.getElementById("rw-zotero-collection")?.addEventListener("change", () => {
     persistZoteroCollectionKey();
+    void saveProjectZoteroLink();
   });
   document.getElementById("rw-zotero-api-key")?.addEventListener("input", () => {
     const hasKey = Boolean(document.getElementById("rw-zotero-api-key")?.value?.trim());
@@ -3954,7 +4254,7 @@ function bindLiteratureUiEvents() {
     const title = select.selectedOptions?.[0]?.textContent?.trim() || "";
     updateProjectBanner(title, select.value);
     void loadProjectContext(select.value);
-    void loadLibraryIntoSidebar({ silent: true }).then(() => maybeAutoLoadZoteroLibrary());
+    void loadProjectZotero(select.value);
     void refreshLiteratureHistory();
     void restoreRelatedWorkOnLoad();
   });
@@ -4078,11 +4378,9 @@ async function init() {
 
   try {
     await loadProjectOptions();
-    await refreshLibraryStatus();
     await refreshAppSettings();
     await loadProjectContext(selectedProjectId());
-    await loadLibraryIntoSidebar({ silent: true });
-    void maybeAutoLoadZoteroLibrary();
+    await loadProjectZotero(selectedProjectId());
     await refreshLiteratureHistory();
     await restoreRelatedWorkOnLoad();
   } catch (err) {

@@ -110,6 +110,22 @@ export const KoiApi = {
         collection_key: collection_key || null,
       }),
     }),
+  getProjectZotero: (projectId) =>
+    api(`/projects/${encodeURIComponent(projectId)}/zotero`),
+  saveProjectZotero: (projectId, link) =>
+    api(`/projects/${encodeURIComponent(projectId)}/zotero`, {
+      method: "PUT",
+      body: JSON.stringify(link),
+    }),
+  deleteProjectZotero: (projectId) =>
+    api(`/projects/${encodeURIComponent(projectId)}/zotero`, { method: "DELETE" }),
+  getLiteratureSelection: (projectId) =>
+    api(`/projects/${encodeURIComponent(projectId)}/literature/selection`),
+  saveLiteratureSelection: (projectId, papers) =>
+    api(`/projects/${encodeURIComponent(projectId)}/literature/selection`, {
+      method: "PUT",
+      body: JSON.stringify({ papers }),
+    }),
   searchLibrary: (query, limit = 10) =>
     api("/library/search", {
       method: "POST",
@@ -204,13 +220,6 @@ export const KoiApi = {
         runId
       )}/explain-note?node_id=${encodeURIComponent(nodeId)}`
   ),
-  stageMortalCombat: (projectId, primary, reviewer, question = "") =>
-    api(`/projects/${encodeURIComponent(projectId)}/mortal-combat/stage`, {
-      method: "POST",
-      body: JSON.stringify({ primary, reviewer, question }),
-    }),
-  getMortalCombat: (projectId, runId) =>
-    api(`/projects/${encodeURIComponent(projectId)}/mortal-combat/${encodeURIComponent(runId)}`),
   listMorphologyRuns: (projectId, paperKey = "") =>
     api(
       `/projects/${encodeURIComponent(projectId)}/morphology${
@@ -502,6 +511,13 @@ export const KoiApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  askPaperCommentAgent: (projectId, slug, commentId, payload) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}/agent`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  paperCommentAgentStatus: (projectId, slug, commentId) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}/agent`),
   resolvePaperComment: (projectId, slug, commentId, resolved = true) =>
     api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`, {
       method: "PATCH",
@@ -511,13 +527,6 @@ export const KoiApi = {
     api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`, {
       method: "DELETE",
     }),
-  askPaperCommentAgent: (projectId, slug, commentId, payload) =>
-    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}/agent`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  paperCommentAgentStatus: (projectId, slug, commentId) =>
-    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}/agent`),
   getKnowledge: (projectId) => apiText(`/projects/${projectId}/knowledge`),
   getKnowledgeSummary: (projectId) => api(`/projects/${projectId}/knowledge/summary`),
   getKnowledgeLog: (projectId) => apiText(`/projects/${projectId}/knowledge/log`),

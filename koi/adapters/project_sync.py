@@ -413,6 +413,13 @@ def tree_preferred_worktree(mount: ProjectMount) -> Path:
     return tree_worktree_for(mount.repo_root.parent, mount.repo_root.name)
 
 
+_KOI_SYNC_SKIP = frozenset({"zotero.local.json"})
+
+
+def _ignore_local_koi(_directory: str, names: list[str]) -> set[str]:
+    return {name for name in names if name in _KOI_SYNC_SKIP}
+
+
 def _copy_koi_tree(mount: ProjectMount, target_root: Path) -> None:
     koi_rel = _koi_rel(mount)
     dst = target_root / koi_rel
@@ -421,7 +428,7 @@ def _copy_koi_tree(mount: ProjectMount, target_root: Path) -> None:
         return
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(mount.koi_root, dst)
+    shutil.copytree(mount.koi_root, dst, ignore=_ignore_local_koi)
 
 
 def pull_mount(
