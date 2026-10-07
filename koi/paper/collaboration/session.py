@@ -257,8 +257,9 @@ class CollabSession:
         self.repository_id = repository_id or project_id
         self.document_id = document_id(self.repository_id, slug, "main.tex")
         self.room_id = room_id(self.repository_id, slug, "main.tex")
-        engine_root = Path(__file__).resolve().parents[3]
-        self.proposal_root = Path(proposal_root) if proposal_root else engine_root / ".run" / "collab-proposals"
+        from koi.adapters.workspace import RUN_DIR
+
+        self.proposal_root = Path(proposal_root) if proposal_root else RUN_DIR / "collab-proposals"
         self.proposal_path = self.proposal_root / f"{self.room_id}.json"
         self.proposal = self._load_proposal()
         initial = ""

@@ -130,6 +130,7 @@ def _write_env_var(key: str, value: str | None) -> None:
     ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
     if lines:
         ENV_PATH.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        ENV_PATH.chmod(0o600)
     elif ENV_PATH.exists():
         ENV_PATH.unlink()
     if value:

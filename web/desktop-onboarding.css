@@ -1,0 +1,36 @@
+.desktop-onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 15, 23, .86);
+  padding: 24px;
+}
+
+.desktop-onboarding__card {
+  width: min(100%, 480px);
+  padding: 40px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 20px;
+  background: #172033;
+  color: #fff;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, .38);
+}
+
+.desktop-onboarding__eyebrow { color: #9bd4cf; font-size: 13px; }
+.desktop-onboarding__card h1 { margin: 12px 0; font-size: 28px; }
+.desktop-onboarding__card p { line-height: 1.5; }
+.desktop-onboarding__button {
+  margin-top: 16px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 10px;
+  background: #69c9bb;
+  color: #09201f;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.desktop-onboarding__button:disabled { opacity: .6; cursor: wait; }
+.desktop-onboarding__error { color: #ffb9b9; min-height: 1.5em; }

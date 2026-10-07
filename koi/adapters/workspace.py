@@ -15,6 +15,12 @@ from pathlib import Path
 ENGINE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
+def _runtime_data_dir() -> Path:
+    """Writable app state; source checkouts keep their historical layout."""
+    configured = os.environ.get("KOI_DATA_DIR", "").strip()
+    return Path(configured).expanduser().resolve() if configured else ENGINE_ROOT
+
+
 @dataclass(frozen=True)
 class Workspace:
     engine_root: Path
@@ -34,7 +40,7 @@ class Workspace:
 
     @property
     def env_file(self) -> Path:
-        return self.engine_root / ".env"
+        return _runtime_data_dir() / ".env"
 
     @property
     def scripts_dir(self) -> Path:
@@ -46,14 +52,14 @@ class Workspace:
 
     @property
     def tools_dir(self) -> Path:
-        return self.engine_root / ".tools"
+        return _runtime_data_dir() / ".tools"
 
     @property
     def library_upload(self) -> Path:
         """Primary CSV path for library uploads (legacy workspace fallback)."""
         if self.legacy_data_root:
             return self.legacy_data_root / "library" / "library.csv"
-        return self.engine_root / "library" / "library.csv"
+        return _runtime_data_dir() / "library" / "library.csv"
 
     def library_csv_candidates(self) -> tuple[Path, ...]:
         from koi.adapters.project_mount import list_mounts
@@ -115,7 +121,7 @@ def _scan_roots() -> tuple[Path, ...]:
 def get_workspace() -> Workspace:
     return Workspace(
         engine_root=ENGINE_ROOT.resolve(),
-        run_dir=ENGINE_ROOT.resolve() / ".run",
+        run_dir=_runtime_data_dir() / ".run",
         scan_roots=_scan_roots(),
         legacy_data_root=_legacy_data_root(),
     )

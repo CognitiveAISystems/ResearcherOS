@@ -17,6 +17,10 @@ class CreateProjectBody(BaseModel):
     program_title: Optional[str] = None
 
 
+class DesktopWorkspaceBody(BaseModel):
+    workspace_root: str = Field(min_length=1)
+
+
 class CreateProgramBody(BaseModel):
     title: str = Field(min_length=1)
     description: str = ""

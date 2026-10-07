@@ -143,6 +143,13 @@ def _resolve_code_root(repo_root: Path, koi_root: Path, meta: dict[str, Any]) ->
 
 def scan_roots() -> tuple[Path, ...]:
     roots: list[Path] = []
+    # The desktop shell chooses this folder during first run.  It takes
+    # precedence so create-project and agent operations share the same home.
+    from koi.adapters.desktop_workspace import selected_workspace_root
+
+    selected = selected_workspace_root()
+    if selected is not None:
+        roots.append(selected)
     default = ENGINE_ROOT.parent.resolve()
     roots.append(default)
     extra = os.environ.get("KOI_SCAN_ROOTS", "").strip()

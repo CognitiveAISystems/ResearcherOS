@@ -1,0 +1,23 @@
+{
+  "name": "researchos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ResearcherOS desktop application for macOS",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "build:server": "bash ./build-server.sh",
+    "pack:mac": "npm run build:server && electron-builder --mac dir"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "org.researchos.desktop",
+    "productName": "ResearcherOS",
+    "files": ["main.cjs", "preload.cjs", "package.json"],
+    "extraResources": [{"from": "../dist/researchos-server", "to": "server"}],
+    "mac": {"target": "dir", "category": "public.app-category.productivity"}
+  }
+}

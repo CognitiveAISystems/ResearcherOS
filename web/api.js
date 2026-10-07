@@ -444,6 +444,17 @@ export const KoiApi = {
     if (typeof window === "undefined" || !window.location?.hostname) {
       return "";
     }
+    if (window.researchOSDesktop) {
+      const query = new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(params).filter(([, value]) => value != null && value !== "")
+        )
+      ).toString();
+      const wsBase = apiBase().replace(/^http/i, "ws");
+      return `${wsBase}/projects/${encodeURIComponent(projectId)}/papers/${encodeURIComponent(slug)}/collab${
+        query ? `?${query}` : ""
+      }`;
+    }
     const { protocol, hostname } = window.location;
     const wsProto = protocol === "https:" ? "wss:" : "ws:";
     const query = new URLSearchParams(

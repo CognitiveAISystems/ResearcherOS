@@ -5,6 +5,10 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+build/
+dist/
+desktop/node_modules/
+desktop/dist/
 .figma-storyboard/
 .DS_Store
 hub/.data/

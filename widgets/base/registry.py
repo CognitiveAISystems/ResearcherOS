@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from koi.adapters.project_mount import list_mounts
-from koi.adapters.workspace import ENGINE_ROOT
+from koi.adapters.workspace import RUN_DIR
 from widgets.base.manifest import WidgetManifest, parse_widget_dir
 
-STATE_PATH = ENGINE_ROOT / ".run" / "widgets.json"
+STATE_PATH = RUN_DIR / "widgets.json"
 WIDGETS_DIRNAME = "widgets"
 
 
