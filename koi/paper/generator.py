@@ -621,9 +621,43 @@ def _finalize_pdf(tex_dir: Path, engine: str, log_parts: list[str]) -> tuple[boo
     return False, engine, "Компиляция завершилась без PDF.\n" + "\n".join(log_parts)[-2000:]
 
 
+def _system_path_files() -> list[Path]:
+    """macOS path_helper sources. A Finder-launched app never loads them."""
+    files = [Path("/etc/paths")]
+    folder = Path("/etc/paths.d")
+    if folder.is_dir():
+        files.extend(sorted(p for p in folder.iterdir() if p.is_file()))
+    return files
+
+
+def _system_path_dirs() -> list[str]:
+    dirs: list[str] = []
+    for path in _system_path_files():
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith("#") and line not in dirs:
+                dirs.append(line)
+    return dirs
+
+
+def _which_tool(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in _system_path_dirs():
+        candidate = Path(directory) / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
 def _compile_pdflatex_bibtex(tex_dir: Path) -> tuple[bool, str, str]:
-    pdflatex = shutil.which("pdflatex")
-    bibtex = shutil.which("bibtex")
+    pdflatex = _which_tool("pdflatex")
+    bibtex = _which_tool("bibtex")
     if not pdflatex:
         return False, "", "Не найден pdflatex в PATH."
 
@@ -682,10 +716,10 @@ def _find_engine() -> Optional[tuple[str, str]]:
     local = _ws.tools_dir / "tectonic"
     if local.is_file():
         return "tectonic", str(local)
-    which = shutil.which("tectonic")
+    which = _which_tool("tectonic")
     if which:
         return "tectonic", which
-    pdflatex = shutil.which("pdflatex")
+    pdflatex = _which_tool("pdflatex")
     if pdflatex:
         return "pdflatex", pdflatex
     return None
@@ -729,7 +763,7 @@ def compile_paper_slot(slot_dir: Path) -> tuple[bool, str, str]:
     if _slot_prefers_pdflatex(slot_dir):
         return _compile_pdflatex_bibtex(slot_dir)
     ok, engine, log = _compile_tex(slot_dir)
-    if ok or not shutil.which("pdflatex"):
+    if ok or not _which_tool("pdflatex"):
         return ok, engine, log
     return _compile_pdflatex_bibtex(slot_dir)
 

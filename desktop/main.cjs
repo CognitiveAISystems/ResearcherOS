@@ -22,6 +22,30 @@ function serverCommand() {
   return { executable, args: ['-m', 'api.desktop_server', '--port', '0'], cwd: root };
 }
 
+function guiPath() {
+  // Finder does not run path_helper, so MacTeX in /etc/paths.d is invisible.
+  const parts = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const files = ['/etc/paths'];
+  if (fs.existsSync('/etc/paths.d')) {
+    for (const name of fs.readdirSync('/etc/paths.d').sort()) {
+      files.push(path.join('/etc/paths.d', name));
+    }
+  }
+  for (const file of files) {
+    let text = '';
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const line of text.split('\n')) {
+      const dirPath = line.trim();
+      if (dirPath && !dirPath.startsWith('#') && !parts.includes(dirPath)) parts.push(dirPath);
+    }
+  }
+  return parts.join(path.delimiter);
+}
+
 function startServer() {
   return new Promise((resolve, reject) => {
     const { executable, args, cwd } = serverCommand();
@@ -30,7 +54,7 @@ function startServer() {
     server = spawn(executable, args, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KOI_DATA_DIR: app.getPath('userData') },
+      env: { ...process.env, PATH: guiPath(), KOI_DATA_DIR: app.getPath('userData') },
     });
     const timeout = setTimeout(() => reject(new Error('Server startup timed out')), 30000);
     server.stdout.setEncoding('utf8');

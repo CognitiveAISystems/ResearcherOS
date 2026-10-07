@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from koi.paper.generator import TEX_NAME, _slot_prefers_pdflatex
+from koi.paper.generator import TEX_NAME, _slot_prefers_pdflatex, _which_tool
 
 
 class PaperCompileRecipeTests(unittest.TestCase):
@@ -44,6 +45,20 @@ class PaperCompileRecipeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertTrue(_slot_prefers_pdflatex(slot))
+
+    def test_which_tool_finds_binary_outside_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bindir = root / "bin"
+            bindir.mkdir()
+            tool = bindir / "pdflatex"
+            tool.write_text("#!/bin/sh\n", encoding="utf-8")
+            tool.chmod(0o755)
+            listed = root / "paths"
+            listed.write_text(f"{bindir}\n", encoding="utf-8")
+            with patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}):
+                with patch("koi.paper.generator._system_path_files", return_value=[listed]):
+                    self.assertEqual(_which_tool("pdflatex"), str(tool))
 
 
 if __name__ == "__main__":
