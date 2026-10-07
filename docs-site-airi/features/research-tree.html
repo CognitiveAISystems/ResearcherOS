@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Исследовательское дерево · ResearcherOS Features</title>
+  <meta name="description" content="Дерево гипотез ResearcherOS: узлы, UI, скиллы, project.md и код." />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-docs">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
+        <span class="brand__name">ResearcherOS</span>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Документация">
+      <p class="docs-sidebar__label">Документация</p>
+      <nav class="docs-sidebar__nav">
+        <p class="docs-sidebar__group">Платформа</p>
+        <a href="index.html">Обзор</a>
+        <p class="docs-sidebar__group">Локальные фичи</p>
+        <a href="research-tree.html" aria-current="page">Дерево</a>
+        <div class="docs-sidebar__toc">
+          <p class="docs-sidebar__toc-label">На этой странице</p>
+          <a href="#how-it-works">Как работает</a>
+          <a href="#ui">Интерфейс</a>
+          <a href="#skills">Скиллы</a>
+          <a href="#tech">Техника</a>
+        </div>
+        <a href="kanban.html">Канбан</a>
+        <a href="monitor.html">Монитор</a>
+        <a href="knowledge.html">Знания</a>
+        <a href="chat.html">Чат</a>
+        <a href="related-work.html">Литература</a>
+        <a href="paper.html">Статья</a>
+        <a href="widgets.html">Виджеты</a>
+        <p class="docs-sidebar__group">Справка</p>
+        <a href="full_schema.html?embed=1" target="_blank" rel="noopener">Схема архитектуры</a>
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <article id="features-content" class="features-md" data-md="content/research-tree.md" data-rendered="true">
+<h1>Исследовательское дерево</h1>
+<p class="lead">Постановка исследования на карте мыслей: от наблюдаемой проблемы к причинам, способам проверки и методам. Узлы хранятся в <code>project.md</code>; локальный ResearcherOS рисует дерево на холсте и записывает правки обратно в тот же файл.</p>
+
+<div class="media-slot" data-filled="true"><img src="media/research-tree-hero.png" alt="research tree hero" loading="lazy"></div>
+
+<h2>Как работает</h2>
+<p>Дерево отвечает на цепочку: что ломается → почему так думаем → чем это проверить или чем чинить → каким протоколом это сделать. Каждый узел — один шаг этой цепочки; рёбра задают, какие типы детей допустимы у родителя.</p>
+<p>Допустимые рёбра (родитель → дети):</p>
+<table>
+<thead>
+<tr>
+<th>Родитель</th>
+<th>Дети</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(корень)</td>
+<td>проблема</td>
+</tr>
+<tr>
+<td>проблема</td>
+<td>причина</td>
+</tr>
+<tr>
+<td>причина</td>
+<td>доказательство причины, гипотеза устранения</td>
+</tr>
+<tr>
+<td>доказательство / гипотеза устранения</td>
+<td>метод</td>
+</tr>
+<tr>
+<td>метод</td>
+<td>— (прогоны только в канбане метода)</td>
+</tr>
+</tbody>
+</table>
+<p>В файле типы называются <code>problem</code>, <code>cause</code>, <code>cause_evidence</code>, <code>remediation</code>, <code>method</code>. На карте мыслей чипы типа узла всегда короткие: «Проблема», «Причина», «Доказательство», «Гипотеза», «Метод», «Эксперимент». В выпадающем списке типа при добавлении ребёнка, когда метаданные типов узлов загружены, для доказательства и гипотезы устранения показываются более длинные подписи API: «Доказательство причины», «Гипотеза устранения». Подпись «Гипотеза» на карте относится к типу <code>remediation</code> (гипотеза устранения), а не к вердикту причины.</p>
+<p>Тип <code>experiment</code> устарел: парсер его ещё читает, на карте лист не показывают, через UI добавить нельзя. Прогоны живут на доске метода.</p>
+<p>У причины есть вердикт: открыта, подтверждена или опровергнута (<code>open</code> / <code>supported</code> / <code>refuted</code>). Значки на карте только у причины: ✔ «Гипотеза подтверждена» / ✗ «Гипотеза опровергнута»; при <code>open</code> значка нет.</p>
+<p>Метод владеет канбаном. Клик по методу открывает доску, а не карточку узла как у проблемы. Под узлом метода на карте — полоска статуса доски.</p>
+<p>Рамка постановки — проверка гипотез: формулировка должна допускать опровержение. Успешный прогон не «доказывает навсегда»; неожиданный результат разбирают (гипотеза, допущения, измерение, сам эксперимент).</p>
+<h2>Как человек работает в интерфейсе</h2>
+<p>Пользователь выбирает проект в списке слева (лаборатория / проекты). ResearcherOS загружает дерево на холст карты мыслей. Дальше типичный ход: открыть узел, изменить текст, сохранить — статус «Сохранение…», затем «Сохранено в project.md». После сохранения следующий шаг — открыть канбан метода (карточки и прогоны на доске). Разбор отчёта (<code>report_ingest</code>) обновляет вердикт причины, если отчёт явно его заявляет.</p>
+<p>Жесты по узлам разведены специально:</p>
+<table>
+<thead>
+<tr>
+<th>Действие</th>
+<th>Не-метод</th>
+<th>Метод</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Клик</td>
+<td>модалка узла</td>
+<td>канбан</td>
+</tr>
+<tr>
+<td>Двойной клик</td>
+<td>модалка узла (как клик)</td>
+<td>камера к узлу, <strong>не</strong> канбан</td>
+</tr>
+<tr>
+<td>Контекстное меню</td>
+<td>модалка узла (как клик)</td>
+<td>канбан</td>
+</tr>
+</tbody>
+</table>
+<p>В модалке не-метода правят заголовок и описание (и связанные поля узла). У доказательства или гипотезы устранения есть «+ Добавить метод». Круглая «+» на карте появляется у типов узлов, у которых могут быть дети (в том числе у родителя, у которого детей ещё нет); модалки добавления: «Добавить причину», «Добавить доказательство или гипотезу», «Добавить метод». Корневую проблему удалить нельзя: кнопка скрыта, сервер отвечает «Cannot delete problem node». У остальных узлов — подтверждение с вводом первых одного-двух слов заголовка узла; при несовпадении — «Введите фразу точно, как показано выше».</p>
+<p>Масштаб холста: «+» («Приблизить»), «−» («Отдалить»), «◇» («Вся лаборатория»), «▣» («Текущий проект»). Перетаскивание холста — панорамирование. Справка по типам — оверлей «?».</p>
+<p>В Hub дерево только для чтения: «В Hub нельзя добавлять узлы — только просмотр»; в шапке — «Hub · @{owner} · только просмотр».</p>
+<p>Вердикт в модалке узла не выставляют (см. ограничения и API ниже).</p>
+<h2>Какие сценарии агента подключаются</h2>
+<p>Сценарии агента необязательны: дерево можно править в интерфейсе или в Markdown. Они нужны, чтобы скелет и формулировки не разъезжались между людьми и агентами.</p>
+<table>
+<thead>
+<tr>
+<th>Сценарий агента</th>
+<th>Роль относительно дерева</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>koi-project-onboard</code></td>
+<td>Собирает скелет: проблема → причина → доказательство / гипотеза устранения → метод. Пишет <code>tree/&lt;repo&gt;/koi-structure/project.md</code> и <code>onboard-brief.md</code>, затем <code>install_cli</code>.</td>
+</tr>
+<tr>
+<td><code>koi-prose-style</code></td>
+<td>Заголовки и описания узлов — естественный язык, короткий title, без AI-штампов. Онбординг гоняет проверку стиля до <code>PASS</code> перед записью.</td>
+</tr>
+<tr>
+<td><code>koi-grill-experiment</code></td>
+<td>Не строит дерево целиком; дожимает постановку эксперимента у выбранного метода (карточка канбана). Читает <code>project.md</code>, чтобы не спрашивать то, что уже в узлах.</td>
+</tr>
+<tr>
+<td><code>koi-done-research</code></td>
+<td>После колонки «готово»: вопрос / ответ и рассказ в <code>research.json</code> через <code>research_questions</code>. Вердикт причины <strong>не</strong> выставляет.</td>
+</tr>
+<tr>
+<td><code>koi-knowledge-curator</code></td>
+<td>Курирует <code>knowledge/</code> с опорой на дерево; по контракту само дерево не переписывает.</td>
+</tr>
+</tbody>
+</table>
+<p>Разбор отчёта (<code>report_ingest</code>, <code>koi/projects/report_ingest/workflow.py</code>) обновляет вердикт причины, если отчёт явно его заявляет — это отдельный поток, не сценарий done-research.</p>
+<h2>Как устроено технически</h2>
+<h3>Хранение</h3>
+<p>Канон: <code>tree/&lt;repo&gt;/koi-structure/project.md</code> на ветке <code>koi/research</code> в отдельном рабочем дереве Git (worktree). Парсер и сериализатор: <code>koi/core/md_io.py</code> (<code>parse_project_md</code> / <code>serialize_project_md</code>). Загрузка: <code>koi/adapters/repository.py</code>.</p>
+<p>Заголовки Markdown задают узлы: уровень <code>#</code> = глубина, в строке заголовка — <code>тип: id</code>.</p>
+<pre><code class="language-markdown"># problem: n-problem
+
+Заголовок проблемы
+
+Текст описания…
+
+## cause: n-cause-memory
+
+verdict: open
+
+Причина: …
+
+### remediation: n-rem-episodic
+
+Устранение: …
+
+#### method: m-ab-memory
+
+Протокол A/B…
+
+&lt;!-- koi:kanban board-… --&gt;
+| backlog | running | done |
+…
+</code></pre>
+<p>Модель домена: <code>koi/core/models.py</code> — <code>NodeType</code>, <code>ALLOWED_CHILDREN</code>, <code>Verdict</code>, <code>KANBAN_OWNER_TYPES = {method}</code>. Список допустимых детей для интерфейса: <code>koi/projects/views.py</code> → <code>allowed_children</code>. Короткие подписи типов на карте: <code>TYPE_LABELS</code> в <code>web/app.js</code>.</p>
+<h3>API</h3>
+<p>Создание, правка и удаление: <code>POST</code> / <code>PATCH</code> / <code>DELETE</code> <code>/projects/{id}/nodes</code>. Тело <code>UpdateNodeBody</code> принимает <code>title</code>, <code>description</code>, <code>research_questions</code> — поля <code>verdict</code> в PATCH нет. Вердикт меняют правкой <code>project.md</code> (<code>verdict: …</code> у причины) или условно через разбор отчёта (<code>report_ingest</code>).</p>
+<p>Тесты бэкенда: <code>test_md_io.py</code>, <code>test_project_views.py</code>, <code>test_project_ops.py</code>, <code>test_report_ingest.py</code>. Отдельных фронтенд-тестов mindmap нет.</p>
+<h3>Клиент</h3>
+<p>Холст: <code>web/index.html</code> (<code>#mindmap</code>) + <code>web/app.js</code> (<code>renderMindmap</code>, <code>mountMapNode</code>, <code>openNodeModal</code>, <code>openKanbanModal</code>, <code>flyToMethodNode</code>, <code>nodeDeleteConfirmPhrase</code>) + камера <code>web/lab-canvas.js</code>. Справка: <code>web/node-tree-help.js</code>. HTTP-клиент: <code>web/api.js</code>. Когда в лаборатории загружено несколько проектов, холст лаборатории показывает их сразу.</p>
+<p>Раскладка узлов считается на клиенте (порядок и размеры по типу: проблема шире, метод с полоской канбана). Рёбра — SVG между узлами. Значки вердикта: <code>VERDICT_BADGES</code> в <code>web/app.js</code>. Подписи типов в UI: <code>state.meta.labels || TYPE_LABELS</code> (чипы на карте всегда из <code>TYPE_LABELS</code>).</p>
+<h3>Связь с остальным</h3>
+<ul>
+<li>Канбан и отчёты — у метода; устаревшие листья <code>experiment</code> в дереве не дублируют.</li>
+<li><code>research.json</code> — вопросы и выводы по <code>method_id</code> / <code>card_id</code>, не внутри заголовков дерева.</li>
+<li>Hub отдаёт то же дерево как снимок только для чтения.</li>
+</ul>
+<h2>Ограничения</h2>
+<ul>
+<li>Вердикт причины нельзя выставить через типичную модалку узла или <code>PATCH</code> узла: только правка <code>project.md</code> или условный разбор отчёта (<code>report_ingest</code>).</li>
+<li>Двойной клик по методу приближает камеру и <strong>не</strong> открывает канбан (канбан — обычный клик или контекстное меню).</li>
+<li>Листья <code>experiment</code> в дереве — наследие: читаются, на карте скрыты, через UI не добавляются.</li>
+<li>Hub — только просмотр; добавлять и удалять узлы нельзя.</li>
+<li>Корневую проблему удалить нельзя.</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="kanban.html">Канбан экспериментов</a></li>
+<li><a href="monitor.html">Монитор прогона</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+<li><a href="knowledge.html">База знаний</a></li>
+</ul>
+<p class="callout">Текст: <code>content/research-tree.md</code>. Медиа: <code>media/research-tree-hero.*</code>.</p>
+      </article>
+    </main>
+  </div>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Related Work · ResearcherOS Features</title>
+  <meta name="description" content="Related Work / литература: коллекция, кластеризация, Inbox, literature/." />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-docs">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
+        <span class="brand__name">ResearcherOS</span>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Документация">
+      <p class="docs-sidebar__label">Документация</p>
+      <nav class="docs-sidebar__nav">
+        <p class="docs-sidebar__group">Платформа</p>
+        <a href="index.html">Обзор</a>
+        <p class="docs-sidebar__group">Локальные фичи</p>
+        <a href="research-tree.html">Дерево</a>
+        <a href="kanban.html">Канбан</a>
+        <a href="monitor.html">Монитор</a>
+        <a href="knowledge.html">Знания</a>
+        <a href="chat.html">Чат</a>
+        <a href="related-work.html" aria-current="page">Литература</a>
+        <div class="docs-sidebar__toc">
+          <p class="docs-sidebar__toc-label">На этой странице</p>
+          <a href="#how-it-works">Как работает</a>
+          <a href="#ui">Интерфейс</a>
+          <a href="#skills">Скиллы</a>
+          <a href="#tech">Техника</a>
+        </div>
+        <a href="paper.html">Статья</a>
+        <a href="widgets.html">Виджеты</a>
+        <p class="docs-sidebar__group">Справка</p>
+        <a href="full_schema.html?embed=1" target="_blank" rel="noopener">Схема архитектуры</a>
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <article id="features-content" class="features-md" data-md="content/related-work.md" data-rendered="true">
+<h1>Related Work</h1>
+<p class="lead">Отдельная страница литературы: коллекция статей (поиск, Zotero, CSV), вопрос исследователя, кластеризация ответов и черновик Related Works. Результаты лежат в <code>koi-structure/literature/</code>; агент будится через Literature Inbox.</p>
+
+<div class="media-slot" data-filled="true"><img src="media/related-work-hero.png" alt="Слот для картинки или видео" loading="lazy"></div>
+
+<h2>Как работает</h2>
+<p>Вход с главной рабочей области — пункт <strong>RelatedWork</strong> (открывает <code>literature.html</code>, можно с <code>?project=…</code>).</p>
+<p>Три источника коллекции:</p>
+<table>
+<thead>
+<tr>
+<th>Источник</th>
+<th>Что делает</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Найти</td>
+<td>поиск (в т.ч. arXiv / настройки режима поиска) по ключевым словам</td>
+</tr>
+<tr>
+<td>Zotero</td>
+<td>подключение user id + API key, выбор коллекции</td>
+</tr>
+<tr>
+<td>CSV</td>
+<td>загрузка локальной таблицы статей</td>
+</tr>
+</tbody>
+</table>
+<p>Дальше типичный цикл:</p>
+<ol>
+<li>Собрать и отметить статьи слева.</li>
+<li>Задать <strong>исследовательский вопрос</strong> в центре.</li>
+<li>Запустить анализ (промпт / кластеризация) — агенты читают выбранные тексты относительно вопроса.</li>
+<li>Смотреть кластеры, findings, черновик Related Works справа / в панелях.</li>
+<li>История прогонов — в <code>literature/index.json</code> и по ссылке «Прошлые вопросы».</li>
+</ol>
+<p>Мультиагентная кластеризация (скилл orchestrator): 3–4 агента-работника без пересечения статей → обмен суждениями о похожести → оркестратор собирает кластеры и черновик Related Work → критик и правщик → <code>report.md</code> и <code>related_work.md</code> в каталоге прогона.</p>
+<p>Короткая очередь UI → Markdown Related Works: кнопка Related Work ставит задачу в <code>.run/related-work-queue.json</code>; скилл <code>koi-related-work</code> делает claim → пишет 2–5 абзацев только по фактам из промпта → <code>answer</code> возвращает текст на страницу.</p>
+<p>Разбор <strong>одной</strong> статьи как графа утверждений (морфология) — соседний инструмент (<code>morphology.html</code>), часто из карточки статьи; к Related Work по коллекции не подменяет.</p>
+<h2>Как человек работает в интерфейсе</h2>
+<ol>
+<li>С workspace: клик <strong>RelatedWork</strong> в доке (или прямой URL). Выберите проект в селекте, если нужно.</li>
+<li>Пустая коллекция: три кнопки Найти / Zotero / CSV. После загрузки — список, «Все» / «Сброс», «+» для добавления ещё.</li>
+<li>Введите вопрос → «Промпт» (или связанный запуск кластеризации — по текущему UI сценарию). Настройте Inbox литературы один раз: скопировать bootstrap → чат <strong>ResearchOS Literature Inbox</strong> → «Inbox готов».</li>
+<li>Пока агент работает — статус «Агент работает» / таймер. Появление отчёта и Related Works — в колонке insights / панелях просмотра.</li>
+<li>Навигация по кластерам слева; настройки поиска (шестерёнка) — режим internet/library, ключи Zotero.</li>
+<li>«←» к проекту возвращает в <code>index.html</code>.</li>
+</ol>
+<h2>Какие сценарии для агента подключаются</h2>
+<table>
+<thead>
+<tr>
+<th>Сценарий (skill)</th>
+<th>Роль</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>literature-cluster-orchestrator</code></td>
+<td>Полный прогон: работники → таблица похожести → кластеры → Related Work + критик → файлы в <code>literature/&lt;run_id&gt;/</code>.</td>
+</tr>
+<tr>
+<td><code>koi-related-work</code></td>
+<td>Очередь из UI: короткий синтез Related Works в Markdown обратно на страницу.</td>
+</tr>
+<tr>
+<td>Literature Inbox</td>
+<td><code>koi.related_work.inbox_cli</code>, wake <code>RELATED_WORK_WAKE</code> в <code>.run/logs/related-work-watch.log</code>.</td>
+</tr>
+<tr>
+<td>Article morphology (внешний скилл / <code>morphology.html</code>)</td>
+<td>Граф утверждений одной статьи со ссылками на места в тексте.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">python -m koi.related_work.cli pending
+python -m koi.related_work.cli claim &lt;queue_id&gt;
+python -m koi.related_work.cli context &lt;queue_id&gt;
+python -m koi.related_work.cli answer &lt;queue_id&gt; -f related-work.md
+python -m koi.related_work.inbox_cli watch
+</code></pre>
+<h2>Как устроено технически</h2>
+<h3>Хранение прогонов</h3>
+<pre><code class="language-text">koi-structure/literature/
+  index.json                 # история run_id
+  &lt;run_id&gt;/                  # {query_hash}_{UTC}
+    index.json
+    report.md                # основной рендер в UI
+    findings.json
+    similarity.json
+    related_work.draft.md
+    related_work.md
+    rw_critique.json
+    workers/…
+</code></pre>
+<p><code>query_hash</code> — отпечаток вопроса; <code>run_id</code> уникален на каждый запуск.</p>
+<h3>Клиент и очереди</h3>
+<p>Страница: <code>web/literature.html</code> + <code>web/literature.js</code>. Связь с проектом с главной: <code>btn-related-work</code> в <code>web/app.js</code>. Очередь Related Work: пакет <code>koi/related_work/</code>. Морфология: <code>web/morphology.html</code> (+ JS рядом).</p>
+<p>Настройки RW в <code>localStorage</code> (<code>koi-rw-settings</code>): режим поиска, Zotero.</p>
+<h3>Ограничения</h3>
+<ul>
+<li>Без выбранных статей и вопроса кластеризация не стартует.</li>
+<li>Related Works из очереди не выдумывает статьи — только материал промпта/кластеров.</li>
+<li>PDF и полные тексты зависят от того, что удалось скачать/приложить к записи библиотеки.</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="chat.html">Research Chat</a> (тот же Inbox-паттерн, другая очередь)</li>
+<li><a href="knowledge.html">База знаний</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+<li><a href="paper.html">PaperDraft</a></li>
+</ul>
+<p class="callout">Текст: <code>content/related-work.md</code>. Медиа: <code>media/related-work-hero.*</code>.</p>
+      </article>
+    </main>
+  </div>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

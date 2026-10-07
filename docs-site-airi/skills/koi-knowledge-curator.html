@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Курирование знаний · ResearcherOS</title>
+  <meta name="description" content="Собрать из отчётов и выводов связную картину: закономерности, противоречия и границы применимости." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Курирование знаний</h1>
+    <p class="skill-id">koi-knowledge-curator</p>
+    <div class="article__meta">
+      <span class="chip">Несколько новых готовых карточек или подготовка статьи</span>
+    </div>
+    <p class="article__lead">Собрать из отчётов и выводов связную картину: закономерности, противоречия и границы применимости.</p>
+
+    <h2>Что делает</h2>
+    <p>Читает отчёты и накопленные выводы и пишет курируемые заметки по темам поверх автоматической сборки базы знаний. Фиксирует, что повторяется, где данные спорят и где вывод ещё нельзя обобщать. Автоматические файлы руками не правит — они перезапишутся.</p>
+
+    <h2>Зачем</h2>
+    <p>Автосборка даёт точный, но плоский список. Курирование нужно, когда готовите статью, доклад или хотите увидеть связи между экспериментами, а не только отдельные вердикты.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>С последнего курирования накопилось несколько новых готовых экспериментов</li>
+      <li>Готовите статью, отчёт или доклад по проекту</li>
+      <li>Нужна тематическая заметка: закономерности, противоречия, открытые вопросы</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Укажите проект и попросите суммаризировать знания или написать курируемую заметку по теме. AI-помощник соберёт сырьё и положит документ в базу знаний проекта.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Суммаризируй знания проекта &lt;название&gt;:
+напиши курируемую заметку в базе знаний — закономерности, противоречия, границы.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — путь от сырых отчётов и выводов к тематической заметке. Оглавление базы знаний подхватывает новый документ само; править автогенные сводки не нужно.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Собрать отчёты и выводы] --> B[Найти повторяющиеся закономерности]
+  B --> C[Противоречия и открытые вопросы]
+  C --> D[Заметка по теме в базе знаний]
+  D --> E[Оглавление подхватит само]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-knowledge-curator">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

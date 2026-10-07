@@ -8,6 +8,7 @@
 | **Агент IDE** | [agents.md](agents.md) | [AGENTS.md](../AGENTS.md) |
 
 Страницы фич платформы: [docs-site/features/](../docs-site/features/) (ссылка **Docs** в хедере сайта).
+Спецификация новой реализации: [spec/](spec/) · витрина [docs-site/todo/](../docs-site/todo/).
 
 ## Человек (`docs/human/`)
 

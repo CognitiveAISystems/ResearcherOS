@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Стиль текста · ResearcherOS</title>
+  <meta name="description" content="Привести видимый текст проекта к естественному языку и записать только после проверки стиля." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Стиль текста</h1>
+    <p class="skill-id">koi-prose-style</p>
+    <div class="article__meta">
+      <span class="chip">Любой текст в интерфейсе</span>
+    </div>
+    <p class="article__lead">Привести видимый текст проекта к естественному языку и записать только после проверки стиля.</p>
+
+    <h2>Что делает</h2>
+    <p>Проверяет и переписывает человекочитаемый текст: заголовки узлов и карточек, описания, исследовательские вопросы и курируемые заметки. Цикл: черновик → ревью стиля → правка → снова ревью. В файл — только после «пройдено». Заголовки короткие; детали — в описаниях.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы карту исследования и ответы в интерфейсе понимал человек без внутреннего глоссария проекта, без каши языков и без технических идентификаторов на виду.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>Добавляете или правите карточки и узлы дерева</li>
+      <li>Формулируете вопрос и ответ после эксперимента</li>
+      <li>Пишете любой текст, который увидят в интерфейсе без открытия полного отчёта</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Попросите переписать конкретные заголовки или фрагмент по правилам стиля. Для строгой проверки AI-помощник гоняет цикл до «пройдено».</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Перепиши заголовки узлов в файле проекта
+по правилам стиля: короткий естественный язык, детали — в описаниях.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — замкнутый цикл качества текста. Пока ревью не сказало «пройдено», запись в файл запрещена: только правка и повторная проверка.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart LR
+  A[Черновик] --> B[Ревью стиля]
+  B --> C{Пройдено?}
+  C -->|нет| D[Переписать]
+  D --> B
+  C -->|да| E[Запись в файл]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-prose-style">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

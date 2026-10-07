@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Впервые подключаю свой код · ResearcherOS</title>
+  <meta name="description" content="Код есть, дерева гипотез нет: промпт агенту → tree/<repo>/koi-structure на ветке koi/research." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Основное">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start" aria-current="page">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <a class="back-link" href="../airi.html#start">← How to start</a>
+    <h1 class="article__title">Впервые подключаю свой код</h1>
+    <p class="article__lead">
+      Код эксперимента уже есть, карты исследования ещё нет.
+      AI-помощник соберёт дерево гипотез и положит материалы в
+      <code>tree/&lt;репо&gt;/koi-structure/</code> (ветка <code>koi/research</code>).
+    </p>
+
+    <ol class="steps">
+      <li>
+        <strong>Поставьте ResearcherOS рядом с кодом</strong>
+        <div class="example">
+          <pre><code>git clone git@github.com:CognitiveAISystems/ResearcherOS.git ReseachOS
+# рядом уже лежит ваш code-репо, например:
+# workspace/ReseachOS/
+# workspace/my_experiment/
+cd ReseachOS
+./scripts/koi-serve.sh start</code></pre>
+        </div>
+      </li>
+      <li>
+        <strong>Отправьте промпт агенту — создать дерево</strong>
+        <p>
+          В Cursor / Claude Code / другом агентном IDE, из репозитория
+          <code>ReseachOS</code>, вставьте (подставьте путь к своему репо):
+        </p>
+        <div class="example">
+          <pre><code>Подключи ../my_experiment к ResearcherOS.
+
+Следуй agents/skills/koi-project-onboard/SKILL.md до конца:
+сократовский диалог (проблема → программа → причины/гипотезы → методы),
+prose-проверка, запись в tree/my_experiment/koi-structure/,
+затем python -m koi.projects.install_cli install my_experiment
+(ветка koi/research + worktree в tree/).
+
+Не меняй git config. Не коммить секреты (.env).</code></pre>
+        </div>
+        <p>
+          Агент задаст несколько академических вопросов, предложит формулировки
+          узлов и только после вашего «пиши» запишет файлы. Подробности сценария —
+          <a href="../skills/koi-project-onboard.html">koi-project-onboard</a>.
+        </p>
+      </li>
+      <li>
+        <strong>Что вы увидите в проекте</strong>
+        <p>На диске появится такая раскладка:</p>
+        <div class="example">
+          <pre><code>workspace/
+├── ReseachOS/                         ← движок
+├── tree/
+│   └── my_experiment/
+│       └── koi-structure/
+│           ├── project.md             ← дерево гипотез + канбан
+│           ├── onboard-brief.md       ← якорь постановки из диалога
+│           ├── research.json
+│           └── reports/
+└── my_experiment/                     ← ваш код, любая ветка
+    └── …</code></pre>
+        </div>
+        <p>В интерфейсе (<a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a>, при необходимости
+          <code>./scripts/koi-serve.sh restart</code>):</p>
+        <ul>
+          <li>проект в сайдбаре с вашей формулировкой проблемы;</li>
+          <li>на карте — узлы problem → cause → hyp → method;</li>
+          <li>у методов — пустые (или seed) карточки канбана под первые эксперименты.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <div class="callout">
+      <p>
+        Если ветка <code>koi/research</code> уже есть у команды, а дерева «с нуля»
+        строить не нужно — смотрите
+        <a href="deploy.html">«Уже есть ResearcherOS-проект»</a>
+        (первый запуск на машине или миграция layout).
+      </p>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-primary" href="../skills/koi-project-onboard.html">Сценарий подключения</a>
+      <a class="btn btn-ghost" href="../airi.html#start">Другие пути</a>
+    </div>
+  </main>
+
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="../js/site.js?v=5"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

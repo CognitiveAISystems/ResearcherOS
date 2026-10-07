@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Постановка эксперимента · ResearcherOS</title>
+  <meta name="description" content="Как превратить исследовательское предположение в небольшую проверяемую карточку с помощью сценариев ResearcherOS." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <style>
+    .lesson-toc {
+      margin: 1.25rem 0 1.75rem;
+      padding: 1rem 1.15rem;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--glass);
+    }
+    .lesson-toc ol {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+    }
+    .lesson-toc a { font-weight: 600; }
+    .philo-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 0;
+      font-size: 0.92rem;
+    }
+    .philo-table th,
+    .philo-table td {
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .philo-table th {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .compare {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    @media (min-width: 720px) {
+      .compare { grid-template-columns: 1fr 1fr; }
+    }
+    .compare__col {
+      padding: 0.95rem 1.05rem;
+      border-radius: 0.7rem;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-card) 85%, transparent);
+    }
+    .compare__col--bad { border-left: 3px solid color-mix(in srgb, #f87171 70%, var(--border)); }
+    .compare__col--good { border-left: 3px solid color-mix(in srgb, #34d399 70%, var(--border)); }
+    .compare__label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .compare__col p { margin: 0; font-size: 0.95rem; }
+  </style>
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Основное">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons" aria-current="page">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <a class="back-link" href="../airi.html#lessons">← Lessons</a>
+    <h1 class="article__title">Постановка эксперимента</h1>
+    <div class="article__meta meta-row">
+      <span class="chip">Урок</span>
+      <span class="chip">~10 мин</span>
+      <span class="chip">до запуска</span>
+    </div>
+    <p class="article__lead">
+      Хорошая постановка заранее отвечает на три вопроса: что проверяем,
+      как проверяем и по какому результату принимаем решение.
+    </p>
+
+    <section class="callout" aria-labelledby="quick-start">
+      <p id="quick-start"><strong>Коротко: что делать</strong></p>
+      <ol class="steps">
+        <li>
+          Опишите исследовательское предположение в одном-двух предложениях.
+        </li>
+        <li>
+          Запустите
+          <a href="../skills/koi-grill-experiment.html">сценарий проектирования эксперимента</a>
+          (<code>koi-grill-experiment</code>): он задаст вопросы и соберёт
+          черновик карточки.
+        </li>
+        <li>
+          Запустите
+          <a href="../skills/koi-report-review.html">сценарий проверки постановки</a>
+          (<code>koi-report-review</code>): три отдельные проверки оценят текст,
+          полноту постановки и подзадачи.
+        </li>
+        <li>
+          Откройте карточку в очереди на доске задач. Исправьте неточности
+          вручную или попросите помощника внести правки.
+        </li>
+        <li>
+          Повторите не пройденные проверки. Только после этого берите карточку
+          в работу.
+        </li>
+      </ol>
+    </section>
+
+    <nav class="lesson-toc" aria-label="Содержание">
+      <strong>В этом уроке</strong>
+      <ol>
+        <li><a href="#pipeline">Типовой цикл</a></li>
+        <li><a href="#skills">Сценарии в помощь</a></li>
+        <li><a href="#task">Эксперимент или задача</a></li>
+      </ol>
+    </nav>
+
+    <!-- ───────── 1 ───────── -->
+    <h2 id="pipeline">1. Типовой цикл</h2>
+    <p>
+      Сначала дайте помощнику короткий черновик. Точную формулировку искать
+      не нужно: сценарий задаст вопросы и поможет её уточнить.
+    </p>
+    <div class="example">
+      <pre><code>Для метода &lt;название&gt; в проекте &lt;название&gt;
+хочу проверить: &lt;исследовательское предположение&gt;.
+
+Собери постановку с помощью koi-grill-experiment,
+затем проверь её через koi-report-review.
+Задавай по одному вопросу. Пока ничего не запускай.</code></pre>
+    </div>
+    <p>
+      После опроса прочитайте заголовок, описание и первые три раздела отчёта.
+      Если что-то неверно, исправьте сами или напишите помощнику:
+      «Исправь &lt;что именно&gt; и повтори не пройденные проверки».
+    </p>
+
+    <!-- ───────── 2 ───────── -->
+    <h2 id="skills">2. Сценарии в помощь</h2>
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th>Сценарий</th>
+          <th>Что делает</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><a href="../skills/koi-grill-experiment.html"><code>koi-grill-experiment</code></a></td>
+          <td>Задаёт по одному вопросу и готовит карточку с первыми тремя разделами отчёта. Ничего не запускает.</td>
+        </tr>
+        <tr>
+          <td><a href="../skills/koi-report-review.html"><code>koi-report-review</code></a></td>
+          <td>Отдельно проверяет ясность текста, полноту постановки и качество подзадач. После правок проверки повторяются.</td>
+        </tr>
+        <tr>
+          <td><code>koi-prose-style</code></td>
+          <td>Сокращает и проясняет заголовки, описания, узлы дерева и выводы. Полезен во всём проекте, а не только здесь.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Как сценарий прозы улучшает текст</h3>
+    <div class="compare">
+      <div class="compare__col compare__col--bad">
+        <div class="compare__label">До</div>
+        <p>«Подход знаменует прорывной сдвиг в способности агента к обобщению».</p>
+      </div>
+      <div class="compare__col compare__col--good">
+        <div class="compare__label">После</div>
+        <p>«С моделью мира агент решил 12 сред вместо 8».</p>
+      </div>
+    </div>
+    <div class="example">
+      <pre><code>Перепиши заголовок и описание карточки
+по koi-prose-style. Сохрани факты,
+убери канцелярит и внутренний жаргон.</code></pre>
+    </div>
+
+    <!-- ───────── 3 ───────── -->
+    <h2 id="task">3. Эксперимент или задача</h2>
+    <p>
+      Эксперимент отвечает на исследовательский вопрос. Он может требовать
+      изменения кода, но код здесь служит средством; основной результат —
+      данные, таблицы, графики и вывод.
+    </p>
+    <p>
+      Инженерная задача меняет систему. Основной результат — код,
+      а правильность подтверждают тесты.
+    </p>
+
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Эксперимент</th>
+          <th>Инженерная задача</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Цель</strong></td>
+          <td>Проверить предположение.</td>
+          <td>Реализовать поведение.</td>
+        </tr>
+        <tr>
+          <td><strong>Результат</strong></td>
+          <td>Данные и вывод.</td>
+          <td>Код и тесты.</td>
+        </tr>
+        <tr>
+          <td><strong>Готово</strong></td>
+          <td>Выполнен протокол и вынесен вердикт.</td>
+          <td>Тесты подтверждают требования.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <p>
+        Проверка предположения может включать и разработку, и эксперимент.
+        Иногда нужно сначала добавить новую возможность, а затем измерить её
+        эффект. На доске такую карточку можно пометить тегом разработки
+        (<code>feature</code>), эксперимента (<code>experiment</code>) или обоими
+        тегами.
+      </p>
+      <p>
+        Если реализацию и измерение эффекта можно завершить за одну небольшую
+        итерацию, задайте отдельный критерий готовности для кода и для
+        исследовательского вывода. Если реализация сама требует отдельной
+        проверки, создайте две карточки: инженерную задачу, затем эксперимент.
+      </p>
+    </div>
+
+    <h3>Масштаб одной карточки</h3>
+    <p>
+      Одна карточка — одна итерация. Если эксперимент нельзя завершить одним
+      вердиктом, а задачу — одним набором проверок, уменьшите объём.
+    </p>
+    <h3>SMART для одной карточки</h3>
+    <table class="philo-table">
+      <tbody>
+        <tr><td><strong>S</strong></td><td>Конкретное действие.</td></tr>
+        <tr><td><strong>M</strong></td><td>Измеримый результат.</td></tr>
+        <tr><td><strong>A</strong></td><td>Ограниченный объём.</td></tr>
+        <tr><td><strong>R</strong></td><td>Связь с узлом дерева.</td></tr>
+        <tr><td><strong>T</strong></td><td>Порядок и зависимости.</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Это внутренняя проверка ResearcherOS, названная SMART. Здесь
+      <strong>T</strong> означает порядок и зависимости, а не стандартный
+      критерий SMART.
+    </p>
+
+    <h3>Чек-лист готовой постановки</h3>
+    <ol class="steps">
+      <li>Понятно, какой результат должна дать карточка: код, исследовательский вывод или оба; для каждого результата задан свой критерий готовности.</li>
+      <li>У эксперимента есть один основной измеряемый показатель и заранее заданное правило решения.</li>
+      <li>У задачи указано требуемое поведение и тесты.</li>
+      <li>Перечислены зависимости и то, что не входит в работу.</li>
+      <li>Каждая подзадача даёт проверяемый результат.</li>
+      <li>Заголовок короткий, детали находятся в описании и отчёте.</li>
+    </ol>
+
+    <div class="compare">
+      <div class="compare__col compare__col--bad">
+        <div class="compare__label">Слабая подзадача</div>
+        <p>«Запустить эксперименты и посмотреть результаты».</p>
+      </div>
+      <div class="compare__col compare__col--good">
+        <div class="compare__label">Проверяемая подзадача</div>
+        <p>
+          «На 20 средах, не использованных при разработке, сравнить агента
+          с моделью мира и без неё: выполнить по пять запусков для каждого
+          условия, сохранить исходные показатели и заполнить итоговую таблицу».
+        </p>
+      </div>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-primary" href="../skills/koi-grill-experiment.html">Спроектировать эксперимент</a>
+      <a class="btn btn-ghost" href="../skills/koi-report-review.html">Проверить постановку</a>
+      <a class="btn btn-ghost" href="hypothesis-tree.html">Урок: дерево гипотез</a>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

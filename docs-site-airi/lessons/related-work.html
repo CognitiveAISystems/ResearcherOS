@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Related Work: от вопроса к обзору · ResearcherOS</title>
+  <meta name="description" content="Как собрать коллекцию статей, задать вопрос, запустить разбор и получить Related Work в ResearcherOS." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <style>
+    .lesson-toc {
+      margin: 1.25rem 0 1.75rem;
+      padding: 1rem 1.15rem;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--glass);
+    }
+    .lesson-toc ol {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+    }
+    .lesson-toc a { font-weight: 600; }
+    .philo-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 0;
+      font-size: 0.92rem;
+    }
+    .philo-table th,
+    .philo-table td {
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .philo-table th {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .shot {
+      margin: 0.85rem 0 1.6rem;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 0.85rem;
+      overflow: hidden;
+      background: var(--surface-card);
+      box-shadow: var(--shadow-path);
+    }
+    .shot img {
+      width: 100%;
+      display: block;
+    }
+    .shot figcaption {
+      padding: 0.7rem 1rem 0.9rem;
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+    .role-grid {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    @media (min-width: 720px) {
+      .role-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .role-card {
+      padding: 0.95rem 1.05rem;
+      border-radius: 0.7rem;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-card) 85%, transparent);
+    }
+    .role-card h3 {
+      font-family: Inter, sans-serif;
+      font-size: 1rem;
+      margin: 0 0 0.4rem;
+    }
+    .role-card p { margin: 0; font-size: 0.95rem; }
+    .cycle-diagram {
+      display: block;
+      width: 100%;
+      min-width: 620px;
+      height: auto;
+    }
+    .cycle-diagram .cycle-node {
+      fill: var(--teal);
+      stroke: var(--teal);
+      stroke-width: 2;
+    }
+    .cycle-diagram .cycle-decision {
+      fill: var(--teal);
+      stroke: var(--teal);
+      stroke-width: 2;
+    }
+    .cycle-diagram .cycle-line {
+      fill: none;
+      stroke: var(--muted);
+      stroke-width: 2;
+      marker-end: url(#cycle-arrow);
+    }
+    .cycle-diagram text {
+      fill: #fff;
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 16px;
+      text-anchor: middle;
+    }
+    .cycle-diagram .cycle-label {
+      fill: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+  </style>
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Основное">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons" aria-current="page">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <a class="back-link" href="../airi.html#lessons">← Lessons</a>
+    <h1 class="article__title">Related Work: от вопроса к обзору</h1>
+    <div class="article__meta meta-row">
+      <span class="chip">Урок</span>
+      <span class="chip">~20 мин</span>
+      <span class="chip">литература</span>
+    </div>
+    <p class="article__lead">
+      «Обзор литературы» (Related Work) помогает сравнить выбранные статьи
+      по одному вопросу. На выходе вы получите группы работ с похожими
+      ответами, цитаты из источников и связный текст для черновика статьи.
+    </p>
+
+    <section class="callout" aria-labelledby="before-start">
+      <p id="before-start"><strong>Перед началом</strong></p>
+      <p>
+        Система для исследовательских проектов (ResearcherOS) должна быть
+        установлена, а исследовательский проект — подключён. Если это ещё
+        не сделано, выберите подходящий путь в разделе
+        <a href="../airi.html#start">«Как начать»</a>.
+      </p>
+      <p>
+        Из корня репозитория ResearcherOS — папки, в которой находится
+        <code>scripts/koi-serve.sh</code>, — выполните:
+      </p>
+      <div class="example">
+        <pre><code>./scripts/koi-serve.sh start</code></pre>
+      </div>
+      <p>
+        Откройте <code>http://127.0.0.1:8080</code>. Откройте рабочую папку
+        с системой для исследовательских проектов (ResearcherOS) и подключённым
+        исследовательским проектом в редакторе или другой среде
+        с помощником-агентом. Убедитесь, что помощник-агент имеет доступ
+        к файлам этой папки.
+      </p>
+    </section>
+
+    <section class="callout" id="quick" aria-labelledby="quick-start">
+      <p id="quick-start"><strong>1. Коротко: что делать</strong></p>
+      <ol class="steps">
+        <li>
+          Выберите проект слева и откройте раздел обзора литературы
+          (Related Work) в нижней панели.
+        </li>
+        <li>
+          Добавьте статьи: найдите их по ключевым словам, импортируйте папку
+          из библиографического менеджера (Zotero) или загрузите файл
+          с таблицей данных (CSV).
+        </li>
+        <li>
+          Отметьте статьи и задайте конкретный вопрос, по которому их ответы
+          можно сравнить.
+        </li>
+        <li>
+          Нажмите <strong>Промпт</strong>. Скопируйте задание, вставьте его
+          в чат с помощником-агентом и отправьте.
+        </li>
+        <li>
+          Дождитесь отчёта. Сначала проверьте группы и цитаты, затем
+          прочитайте готовый обзор.
+        </li>
+      </ol>
+    </section>
+
+    <nav class="lesson-toc" aria-label="Содержание">
+      <strong>В этом уроке</strong>
+      <ol>
+        <li><a href="#quick">1. Коротко: что делать</a></li>
+        <li><a href="#ui">Подробный урок в интерфейсе</a></li>
+        <li><a href="#cycle">Что происходит после отправки</a></li>
+        <li><a href="#cli">Запуск без страницы обзора</a></li>
+      </ol>
+    </nav>
+
+    <!-- ───────── 2 ───────── -->
+    <h2 id="ui">2. Подробный урок в интерфейсе</h2>
+    <p>
+      Ниже показан весь путь: от выбора проекта до готового обзора.
+    </p>
+
+    <h3 id="ui-1">Шаг 1. Выберите проект и откройте Related Work</h3>
+    <p>
+      На главном экране выберите проект в левой панели. Затем нажмите
+      <strong>Related Work</strong> в нижней панели. Откроется обзор
+      литературы для выбранного проекта.
+    </p>
+    <figure class="shot">
+      <img src="assets/1.png" width="1600" height="900" alt="Главный экран ResearcherOS: слева выбран проект, внизу обведена кнопка Related Work" />
+      <figcaption>1 — проект в списке слева. 2 — кнопка Related Work в нижней панели.</figcaption>
+    </figure>
+
+    <h3 id="ui-2">Шаг 2. Добавьте статьи в коллекцию</h3>
+    <p>
+      На пустой странице слева находится коллекция, справа — поле вопроса.
+      В коллекцию можно добавить статьи тремя способами: найти по ключевым
+      словам, импортировать из библиографического менеджера (Zotero) или
+      загрузить файл в формате CSV.
+    </p>
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th>Кнопка</th>
+          <th>Откуда берутся статьи</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Найти</strong></td>
+          <td>Поиск по ключевым словам в источнике, выбранном в настройках.</td>
+        </tr>
+        <tr>
+          <td><strong>Zotero</strong></td>
+          <td>Импорт папки из вашей библиотеки Zotero.</td>
+        </tr>
+        <tr>
+          <td><strong>CSV</strong></td>
+          <td>Загрузка таблицы со столбцами <code>arxiv_url</code>, <code>title</code>, <code>authors</code> и <code>abstract</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Кнопка <strong>Найти</strong> не просит ввести запрос на этой странице.
+      Она берёт слова из поля ключевых слов
+      (<code>literature_keywords</code>) в начале файла проекта
+      <code>project.md</code>. Например, для тем «модели мира»,
+      «воплощённые агенты» и «обучение с подкреплением» укажите английские
+      ключевые слова:
+    </p>
+    <div class="example">
+      <pre><code>literature_keywords:
+- world models
+- embodied agents
+- reinforcement learning</code></pre>
+    </div>
+    <p>
+      Если этого поля нет, ResearcherOS покажет красное предупреждение.
+      Добавьте слова вручную или попросите помощника-агента обновить
+      <code>project.md</code>, затем снова нажмите <strong>Найти</strong>.
+    </p>
+    <figure class="shot">
+      <img src="assets/2.png" width="1600" height="900" alt="Пустая страница обзора: слева коллекция с кнопками Найти, Zotero и CSV, справа поле вопроса" />
+      <figcaption>Слева источники коллекции. Справа поле вопроса — его заполните после того, как статьи появятся в списке.</figcaption>
+    </figure>
+
+    <h3 id="ui-3">Шаг 3. Выберите, откуда искать</h3>
+    <p>
+      Нажмите шестерёнку в правом верхнем углу страницы. Кнопка
+      <strong>Найти</strong> использует выбранный здесь источник:
+    </p>
+    <ul>
+      <li><strong>База</strong> — загруженная библиотека в формате CSV;</li>
+      <li><strong>arXiv</strong> — открытый архив препринтов (arXiv);</li>
+      <li>
+        <strong>Оба</strong> — сначала поиск в загруженной библиотеке;
+        если найдено меньше заданного лимита, добавляются статьи с arXiv.
+      </li>
+    </ul>
+    <p>
+      Лимит относится только к результатам поиска. Для последующего разбора
+      можно отметить другое число статей.
+    </p>
+    <figure class="shot">
+      <img src="assets/3.png" width="1600" height="900" alt="Модальное окно настроек: выбран режим поиска arXiv, ниже свёрнутые блоки CSV, Zotero и Параметры" />
+      <figcaption>Режим поиска действует на кнопку «Найти». CSV и Zotero настраиваются в блоках ниже.</figcaption>
+    </figure>
+
+    <h3 id="ui-4">Шаг 4. Подключите Zotero, если импортируете библиотеку</h3>
+    <p>
+      Если вы уже храните статьи в Zotero, раскройте этот блок. Получите
+      ключ доступа (API Key) на странице
+      <a href="https://www.zotero.org/settings/keys">zotero.org/settings/keys</a>
+      и вставьте его в соответствующее поле. Идентификатор пользователя
+      заполнять необязательно.
+    </p>
+    <ol>
+      <li>Нажмите <strong>Подключить</strong>.</li>
+      <li>Дождитесь, пока появится список папок.</li>
+      <li>Выберите папку и нажмите <strong>Импортировать</strong>.</li>
+    </ol>
+    <p>
+      Если Zotero не используете, пропустите этот шаг.
+    </p>
+    <figure class="shot">
+      <img src="assets/4.png" width="1600" height="900" alt="Настройки Zotero: поля API-ключа и User ID, обведены кнопки Подключить и Импортировать" />
+      <figcaption>1 — сначала «Подключить». 2 — затем «Импортировать» выбранную папку.</figcaption>
+    </figure>
+
+    <h3 id="ui-5">Шаг 5. Задайте лимит, перевод и контекст проекта</h3>
+    <p>
+      В блоке <strong>Параметры</strong> находятся дополнительные настройки:
+    </p>
+    <ul>
+      <li>
+        <strong>Макс. статей</strong> ограничивает число результатов поиска,
+        но не число отмеченных статей в разборе.
+      </li>
+      <li>
+        <strong>Автоперевод вопроса</strong> переводит вопрос перед разбором
+        англоязычных статей.
+      </li>
+      <li>
+        <strong>Контекст проекта</strong> добавляет выбранные узлы дерева
+        к заданию для помощника-агента.
+      </li>
+      <li>
+        <strong>Перезаписывать ответы по статьям</strong> в полном разборе
+        пока не используется, поэтому оставьте этот пункт выключенным.
+      </li>
+    </ul>
+    <p>
+      Красная строка означает, что в проекте не задан список ключевых слов
+      для кнопки <strong>Найти</strong>. В этом случае импортируйте статьи
+      из Zotero или CSV либо попросите помощника-агента добавить ключевые слова
+      литературы в проект. Если статьи уже добавлены, предупреждение
+      не мешает их разбору. Нажмите <strong>Сохранить</strong>, когда закончите.
+    </p>
+    <figure class="shot">
+      <img src="assets/5.png" width="1600" height="900" alt="Блок Параметры в настройках: максимум 10 статей, включён автоперевод вопроса, контекст проекта не выбран" />
+      <figcaption>Лимит поиска, перевод вопроса и дополнительный контекст из дерева. Нажмите «Сохранить» — окно закроется.</figcaption>
+    </figure>
+
+    <h3 id="ui-6">Шаг 6. Отметьте статьи, введите вопрос, нажмите «Промпт»</h3>
+    <p>
+      Отметьте слева статьи, которые должны войти в разбор. Сформулируйте
+      вопрос так, чтобы ответы можно было сравнить. Например:
+      «Какие ограничения авторы называют для своих методов?»
+    </p>
+    <p>
+      Тема «Обучение с подкреплением» слишком широка: непонятно, по какому
+      признаку сравнивать статьи. После формулировки вопроса нажмите
+      <strong>Промпт</strong>.
+    </p>
+    <p>
+      Ссылка <strong>Прошлые вопросы</strong> открывает как законченные,
+      так и ожидающие разборы этого проекта.
+    </p>
+    <figure class="shot">
+      <img src="assets/6.png" width="1600" height="900" alt="Коллекция из шести отмеченных статей и поле вопроса с кнопкой Промпт" />
+      <figcaption>Слева отмеченный набор. Справа вопрос и кнопка «Промпт» — она сохраняет задачу для помощника-агента, а не читает статьи в браузере.</figcaption>
+    </figure>
+
+    <h3 id="ui-7">Шаг 7. Отправьте промпт помощнику-агенту</h3>
+    <p>
+      ResearcherOS сохраняет вопрос и список статей, затем показывает готовое
+      задание. Нужный сценарий уже указан внутри него.
+    </p>
+    <p>
+      Нажмите <strong>Скопировать промпт</strong>. Откройте чат
+      с помощником-агентом, у которого есть доступ к рабочей папке, вставьте
+      задание и отправьте его. Это может быть редактор кода (Cursor) или
+      другая среда с помощником-агентом. ResearcherOS не запрашивает
+      отдельный ключ к языковой модели.
+    </p>
+    <figure class="shot">
+      <img src="assets/7.png" width="1600" height="900" alt="Окно промпта для агента: инструкция вставить текст в Cursor и кнопка Скопировать промпт" />
+      <figcaption>Тот же текст страница сохраняет рядом со статьями. Если окно закрыли, его можно снова скопировать с экрана ожидания.</figcaption>
+    </figure>
+
+    <h3 id="ui-8">Шаг 8. Дождитесь отчёта</h3>
+    <p>
+      Надпись «Ждём файл отчёта report.md» означает только, что готовый
+      отчёт ещё не найден. Убедитесь, что вы отправили задание
+      и помощник-агент продолжает работу.
+    </p>
+    <p>
+      Страница проверяет появление отчёта и покажет результат после его
+      сохранения. Если задание потерялось, его можно скопировать снова.
+      Кнопка <strong>Отменить</strong> удаляет незавершённый разбор.
+    </p>
+    <figure class="shot">
+      <img src="assets/8.png" width="1600" height="900" alt="Экран ожидания: агент работает, ждём report.md; справа история запросов" />
+      <figcaption>Страница сама покажет результат, когда помощник-агент закончит отчёт. Отдельный постоянный чат для этого шага настраивать не нужно: достаточно вставить промпт один раз.</figcaption>
+    </figure>
+
+    <h3 id="ui-9">Шаг 9. Разберите группы статей</h3>
+    <p>
+      После завершения слева появятся группы статей, которые интерфейс
+      называет кластерами. Каждая группа объединяет работы с похожими
+      ответами на ваш вопрос.
+    </p>
+    <p>
+      Каждый круг на карте обозначает одну группу. Нажмите круг или название
+      слева, чтобы прочитать краткое описание каждой статьи, её ответ
+      и подтверждающие цитаты.
+    </p>
+    <p>
+      Оценка в шапке показывает, насколько готовый обзор отвечает на вопрос.
+      Оценка 80 из 100 или выше означает, что проверка пройдена. Ниже 80 —
+      текст сохранился, но вопрос раскрыт не полностью.
+    </p>
+    <figure class="shot">
+      <img src="assets/9.png" width="1600" height="900" alt="Готовый разбор: пять групп слева, карта кругов, блок Related Work и общий отчёт" />
+      <figcaption>Группы слева — навигация. Ниже уже лежит связный Related Work и разбор по статьям.</figcaption>
+    </figure>
+
+    <h3 id="ui-10">Шаг 10. Прочитайте Related Work</h3>
+    <p>
+      В разделе обзора литературы (Related Work) статьи обозначены номерами
+      <code>[1]</code>, <code>[2]</code> и далее. Их названия и разбор
+      находятся ниже в полном отчёте. Если номер нельзя уверенно сопоставить
+      статье, попросите помощника-агента добавить в конец обзора нумерованный
+      список источников и обновить отчёт.
+    </p>
+    <p>
+      Готовый обзор состоит из нескольких связанных абзацев: сначала общее
+      решение одной группы, затем отличие другой. Он должен отвечать на вопрос,
+      а не пересказывать статьи по очереди. Чтобы использовать текст в статье,
+      скопируйте его в черновик; автоматической кнопки переноса на этом
+      экране нет.
+    </p>
+    <figure class="shot">
+      <img src="assets/10.png" width="1600" height="900" alt="Развёрнутый блок Related Work: связные абзацы с ссылками [1], [2], [3] и контрастами между группами" />
+      <figcaption>Готовый выход: связный обзор с номерами работ. Скопируйте его в черновик статьи, если хотите использовать дальше.</figcaption>
+    </figure>
+
+    <!-- ───────── 3 ───────── -->
+    <h2 id="cycle">3. Что происходит после отправки</h2>
+    <p>
+      Кнопка <strong>Промпт</strong> не запускает анализ сама. Пользователь
+      копирует задание в чат с помощником-агентом и отправляет его. Один чат
+      запускает сценарий, который распределяет задачи между несколькими
+      помощниками-агентами.
+    </p>
+    <p>
+      Такое разделение сохраняет связь каждого вывода с конкретной статьёй
+      и цитатой. Затем отдельные этапы отвечают за группировку, проверку
+      и правку текста.
+    </p>
+
+    <h3>Кто и что делает</h3>
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th>Этап</th>
+          <th>Что делает</th>
+          <th>Зачем так</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Чтение статей</strong></td>
+          <td>Три или четыре помощника-агента получают разные статьи. Если статей меньше трёх, помощников-агентов тоже будет меньше. Каждый отвечает на вопрос только по своей части и приводит дословные цитаты.</td>
+          <td>Каждый вывод остаётся связан с конкретной статьёй и источником.</td>
+        </tr>
+        <tr>
+          <td><strong>Сравнение выводов</strong></td>
+          <td>Те же помощники-агенты получают краткие выводы друг друга и отмечают, какие решения похожи на прочитанные ими работы. Чужие полные тексты им не передаются.</td>
+          <td>Работы группируются по способу решения, а не по общим словам в заголовке.</td>
+        </tr>
+        <tr>
+          <td><strong>Сборка обзора</strong></td>
+          <td>Отдельный помощник-агент объединяет похожие ответы в группы и пишет первый вариант обзора.</td>
+          <td>Группы помогают увидеть общие подходы и различия между ними.</td>
+        </tr>
+        <tr>
+          <td><strong>Проверка обзора</strong></td>
+          <td>Следующий помощник-агент сверяет обзор с исходным вопросом. Оценка 80 и выше означает, что текст прошёл проверку.</td>
+          <td>Проверка отделяет ответ на вопрос от общего пересказа статей.</td>
+        </tr>
+        <tr>
+          <td><strong>Правка обзора</strong></td>
+          <td>Если проверка не пройдена, отдельный помощник-агент переписывает обзор по замечаниям. Допускается не больше двух раундов правок.</td>
+          <td>На страницу попадает последняя проверенная версия, а не первый вариант.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>Порядок такой:</p>
+
+    <div class="graph">
+      <svg class="cycle-diagram" viewBox="0 0 720 840" role="img" aria-labelledby="cycle-title cycle-desc">
+        <title id="cycle-title">Порядок подготовки обзора литературы</title>
+        <desc id="cycle-desc">От выбора статей и вопроса до чтения, сравнения, проверки, правки и появления отчёта.</desc>
+        <defs>
+          <marker id="cycle-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"></path>
+          </marker>
+        </defs>
+
+        <rect class="cycle-node" x="190" y="20" width="340" height="58" rx="14"></rect>
+        <text x="360" y="55">Статьи и вопрос</text>
+        <path class="cycle-line" d="M360 78 V108"></path>
+
+        <rect class="cycle-node" x="190" y="110" width="340" height="58" rx="14"></rect>
+        <text x="360" y="145">ResearcherOS сохраняет задание</text>
+        <path class="cycle-line" d="M360 168 V198"></path>
+
+        <rect class="cycle-node" x="170" y="200" width="380" height="58" rx="14"></rect>
+        <text x="360" y="235">Вы отправляете задание помощнику-агенту</text>
+        <path class="cycle-line" d="M360 258 V288"></path>
+
+        <rect class="cycle-node" x="165" y="290" width="390" height="58" rx="14"></rect>
+        <text x="360" y="325">Помощники-агенты читают разные статьи</text>
+        <path class="cycle-line" d="M360 348 V378"></path>
+
+        <rect class="cycle-node" x="155" y="380" width="410" height="58" rx="14"></rect>
+        <text x="360" y="415">Помощники-агенты сравнивают выводы</text>
+        <path class="cycle-line" d="M360 438 V468"></path>
+
+        <rect class="cycle-node" x="190" y="470" width="340" height="58" rx="14"></rect>
+        <text x="360" y="505">Сборка групп и обзора</text>
+        <path class="cycle-line" d="M360 528 V566"></path>
+
+        <path class="cycle-decision" d="M360 568 L520 630 L360 692 L200 630 Z"></path>
+        <text x="360" y="626">Обзор отвечает</text>
+        <text x="360" y="648">на вопрос?</text>
+
+        <path class="cycle-line" d="M360 692 V738"></path>
+        <text class="cycle-label" x="390" y="721">Да</text>
+        <rect class="cycle-node" x="180" y="740" width="360" height="58" rx="14"></rect>
+        <text x="360" y="775">Отчёт появляется на странице</text>
+
+        <path class="cycle-line" d="M520 630 H584"></path>
+        <text class="cycle-label" x="552" y="614">Нет</text>
+        <rect class="cycle-node" x="586" y="601" width="120" height="58" rx="14"></rect>
+        <text x="646" y="636">Правка обзора</text>
+        <path class="cycle-line" d="M646 601 V550 H470 V587"></path>
+      </svg>
+    </div>
+
+    <p>
+      Если итоговая оценка ниже 80, сузьте вопрос или набор статей и запустите
+      новый разбор. Вручную менять группы и служебные файлы не нужно.
+    </p>
+
+    <!-- ───────── 4 ───────── -->
+    <h2 id="cli">4. Запуск без страницы обзора</h2>
+    <p>
+      Интерфейс не обязателен. Откройте чат с помощником-агентом, у которого
+      есть доступ к ResearcherOS и файлам исследовательского проекта.
+      Вставьте задание ниже, заменив текст в угловых скобках.
+    </p>
+    <p>
+      Готовый сценарий разбора литературы
+      (<code>literature-cluster-orchestrator</code>) содержит инструкции
+      для помощника-агента. Первая строка запроса запускает этот сценарий.
+      После отправки помощник-агент открывает инструкцию и выполняет описанный
+      цикл: чтение статей, сравнение выводов, сборка групп, проверка
+      и правка обзора.
+    </p>
+
+    <h3>Задание для помощника-агента</h3>
+    <div class="example">
+      <pre><code>Используй сценарий разбора и группировки литературы
+(`literature-cluster-orchestrator`).
+
+Проект:
+&lt;полный путь к служебной папке исследовательского проекта
+(koi-structure)&gt;
+
+Исследовательский вопрос:
+&lt;один конкретный вопрос&gt;
+
+Статьи:
+- &lt;ссылка или путь к первой статье&gt;
+- &lt;ссылка или путь ко второй статье&gt;
+- &lt;добавь остальные статьи&gt;
+
+Создай новый запуск в папке literature этого проекта
+и выполни полный разбор несколькими помощниками-агентами:
+раздели статьи между ними, собери ответы с дословными цитатами,
+сравни решения, составь группы, напиши обзор, проверь его
+относительно вопроса и исправь по замечаниям.
+
+Не придумывай статьи и факты. Каждая выбранная статья должна
+попасть в одну основную группу. Обзор должен быть связным текстом
+с номерами источников, а не списком групп.
+
+Сохрани результат по правилам сценария и добавь запуск
+в историю литературы проекта. В конце сообщи путь к результатам.</code></pre>
+    </div>
+
+    <h3>Где смотреть результат</h3>
+    <p>
+      После завершения помощник-агент сообщит путь к созданной папке:
+    </p>
+    <div class="example">
+      <pre><code>&lt;путь к koi-structure&gt;/literature/&lt;идентификатор запуска&gt;/</code></pre>
+    </div>
+    <p>
+      Сначала откройте:
+    </p>
+    <ul>
+      <li><code>related_work.md</code> — готовый текст обзора;</li>
+      <li><code>report.md</code> — полный отчёт с группами, разборами статей и цитатами.</li>
+    </ul>
+    <p>Для проверки деталей:</p>
+    <ul>
+      <li><code>rw_critique.json</code> — оценка обзора и замечания;</li>
+      <li><code>findings.json</code> — ответы и цитаты по каждой статье;</li>
+      <li><code>similarity.json</code> — основания для объединения статей;</li>
+      <li><code>workers/</code> — промежуточные ответы помощников-агентов.</li>
+    </ul>
+
+    <div class="article__actions">
+      <a class="btn btn-primary" href="../features/related-work.html">Страница фичи Related Work</a>
+      <a class="btn btn-ghost" href="hypothesis-tree.html">Урок: дерево гипотез</a>
+      <a class="btn btn-ghost" href="experiment-setup.html">Урок: постановка</a>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

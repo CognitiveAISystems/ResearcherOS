@@ -1,0 +1,96 @@
+/* Shared AIRI beige theme and reading scale. Loaded after page styles. */
+@font-face { font-family: Inter; src: url('../fonts/Inter-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Inter; src: url('../fonts/Inter-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: Inter; src: url('../fonts/Inter-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+:root, [data-theme="light"], [data-theme="dark"] {
+ color-scheme: light;
+ --cream: #f2eee9; --bg: #f2eee9; --bg-elevated: #fff; --bg-mesh-center: #f2eee9;
+ --ink: #161c27; --text: #161c27; --muted: #565b63; --teal: #2fbead;
+ --glass: #fff; --surface-card: #fff; --surface-card-hover: #f2eee9;
+ --surface-topbar: #f2eee9; --surface-input: #fff; --border: #e8d5c4;
+ --pink: #2fbead; --cyan: #2fbead; --purple: #161c27; --orange: #d1a683; --lime: #2fbead; --green: #2fbead;
+ --grad-hero: linear-gradient(#2fbead, #2fbead); --grad-cool: linear-gradient(#2fbead, #2fbead);
+ --mesh-a: transparent; --mesh-b: transparent; --mesh-c: transparent; --grid-line: transparent;
+ --glow-pink: none; --glow-cyan: none; --glow-purple: none; --logo-filter: none;
+ --pre-bg: #161c27; --code-bg: #e8d5c440; --chip-bg: #fff; --callout-bg: #fff;
+ --btn-primary-text: #fff; --link: #176b61;
+}
+body { font-family: Inter, system-ui, sans-serif; background: #f2eee9; color: #161c27; }
+body::before, body::after { display: none; }
+body h1, body h2, body h3, body .brand, body .brand__name, body .layer-card__title,
+body .hero__strip-link { font-family: Inter, system-ui, sans-serif !important; font-weight: 500 !important; }
+body strong, body b { font-weight: 600; }
+body .btn-theme { display: none; }
+body .site-header { background: #f2eee9; }
+body .article, body .features-md { font-size: 1rem; line-height: 1.65; overflow-wrap: anywhere; min-width: 0; }
+body .article { width: min(46rem, calc(100% - 2.5rem)); padding: 2rem 0 3rem; }
+body .article__title, body .features-md > h1:first-child, body .todo-intro h1 {
+ font-size: clamp(1.65rem, 2.6vw, 2.1rem); line-height: 1.2; letter-spacing: -0.025em;
+}
+body .article__lead, body .features-md .lead { font-size: 1.05rem; line-height: 1.65; margin-bottom: 1.5rem; }
+body .article h2, body .features-md h2 { font-size: 1.3rem; line-height: 1.35; }
+body .article h3, body .features-md h3 { font-size: 1.1rem; line-height: 1.4; }
+body .article img { max-width: 100%; height: auto; }
+body .article pre, body .features-md pre { max-width: 100%; overflow-x: auto; font-size: .85rem; }
+body .example { padding: 1rem 1.15rem; }
+body .example pre { color: #fff; }
+body .article__meta .chip { font-size: .78rem; padding: .2rem .6rem; }
+body .article table { display: block; max-width: 100%; overflow-x: auto; }
+body .versions__docs a { color: #fff; }
+@media (max-width: 640px) {
+ body .article { width: calc(100% - 2rem); padding-top: 1.5rem; }
+ body .site-header__inner { flex-wrap: wrap; }
+ body .article__actions { flex-direction: column; }
+ body .site-footer__inner { overflow-wrap: anywhere; }
+}
+
+/* Consistent AIRI header, including pages with legacy gradient branding. */
+body .site-header, body .site-header .nav {
+  font-family: Inter, system-ui, sans-serif;
+}
+body .site-header .brand, body .site-header .brand__name {
+  color: #161c27;
+  -webkit-text-fill-color: #161c27;
+  background: none;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  filter: none;
+  text-shadow: none;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+body .site-header .nav {
+  font-size: .95rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+body .site-header .nav a { font-family: inherit; font-weight: inherit; color: #161c27; }
+
+/* Form controls do not inherit body typography in every browser. */
+button, input, select, textarea { font-family: Inter, system-ui, sans-serif; }
+code, pre, kbd, samp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* AIRI unordered-list markers; ordered steps retain their numbers. */
+body ul { list-style: none; padding-left: 0; }
+body :is(ul, .version-card__features) > li { position: relative; padding-left: 1.4em; }
+body :is(ul, .version-card__features) > li::marker { content: ""; }
+body :is(ul, .version-card__features) > li::before {
+  content: "→";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #167c70;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 1em;
+  font-weight: 400;
+  line-height: inherit;
+  transform: none;
+}
+body ul ul { margin-top: .4rem; }
+/* Do not apply unordered-list arrows to ordered lists nested in a list. */
+body .article ul ol > li::before { content: none; }

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Вывод после готовой карточки · ResearcherOS</title>
+  <meta name="description" content="Из готового эксперимента сформулировать вопрос и ответ понятным языком и сохранить в базу выводов." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Вывод после готовой карточки</h1>
+    <p class="skill-id">koi-done-research</p>
+    <div class="article__meta">
+      <span class="chip">Карточка в колонке «готово»</span>
+    </div>
+    <p class="article__lead">Из готового эксперимента сформулировать вопрос и ответ понятным языком и сохранить в базу выводов.</p>
+
+    <h2>Что делает</h2>
+    <p>Берёт контекст метода, карточку и отчёт и пишет исследовательский вопрос и ответ так, чтобы их понял человек без жаргона проекта. Технические цифры и сокращения кладёт отдельно. Отмечает, точный вывод или предварительный, и насколько он важен для метода. Результат сохраняется в базу ответов проекта.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы после эксперимента оставался не только отчёт, а короткий вывод, который можно читать в интерфейсе и дальше накапливать в знаниях лаборатории.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>Карточку только что перенесли в «готово»</li>
+      <li>В очереди есть необработанные завершённые эксперименты</li>
+      <li>Нужно обновить уже существующий вывод по методу, а не создать дубликат</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Попросите обработать очередь готовых экспериментов или конкретную карточку. AI-помощник соберёт контекст, сформулирует вывод и закроет запись в очереди.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Обработай очередь готовых экспериментов:
+сформулируй выводы по сценарию «вывод после эксперимента».</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — короткий конвейер на одну карточку: очередь → контекст → формулировка → сохранение → закрытие записи. Без закрытия очереди интерфейс будет считать задачу незавершённой.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Очередь готовых карточек] --> B[Собрать контекст]
+  B --> C[Сформулировать вопрос и ответ]
+  C --> D[Сохранить в базу выводов]
+  D --> E[Закрыть запись в очереди]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-done-research">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

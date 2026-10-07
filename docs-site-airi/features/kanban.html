@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Канбан экспериментов · ResearcherOS Features</title>
+  <meta name="description" content="Канбан методов ResearcherOS: колонки, DAG, отчёты, скиллы, project.md." />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-docs">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
+        <span class="brand__name">ResearcherOS</span>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Документация">
+      <p class="docs-sidebar__label">Документация</p>
+      <nav class="docs-sidebar__nav">
+        <p class="docs-sidebar__group">Платформа</p>
+        <a href="index.html">Обзор</a>
+        <p class="docs-sidebar__group">Локальные фичи</p>
+        <a href="research-tree.html">Дерево</a>
+        <a href="kanban.html" aria-current="page">Канбан</a>
+        <div class="docs-sidebar__toc">
+          <p class="docs-sidebar__toc-label">На этой странице</p>
+          <a href="#how-it-works">Как работает</a>
+          <a href="#ui">Интерфейс</a>
+          <a href="#skills">Скиллы</a>
+          <a href="#tech">Техника</a>
+        </div>
+        <a href="monitor.html">Монитор</a>
+        <a href="knowledge.html">Знания</a>
+        <a href="chat.html">Чат</a>
+        <a href="related-work.html">Литература</a>
+        <a href="paper.html">Статья</a>
+        <a href="widgets.html">Виджеты</a>
+        <p class="docs-sidebar__group">Справка</p>
+        <a href="full_schema.html?embed=1" target="_blank" rel="noopener">Схема архитектуры</a>
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <article id="features-content" class="features-md" data-md="content/kanban.md" data-rendered="true">
+<h1>Канбан экспериментов</h1>
+<p class="lead">Доска прогонов у каждого метода: колонки, карточки, зависимости между ними и отчёты. Таблица лежит в <code>project.md</code> сразу под узлом метода.</p>
+
+<div class="media-slot" data-filled="true"><img src="media/kanban-hero.png" alt="kanban hero" loading="lazy"></div>
+
+<h2>Как работает</h2>
+<p>Канбан появляется только у узла типа «метод». Одна доска — один способ проверки (доказательство причины или гипотеза устранения). Карточка — один запланированный или идущий эксперимент; отдельный лист дерева для прогона не создаётся.</p>
+<p>На доске всегда четыре колонки. В интерфейсе заголовки такие:</p>
+<table>
+<thead>
+<tr>
+<th>Заголовок в UI</th>
+<th>Статус</th>
+<th>Смысл</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backlog</td>
+<td>«в очереди»</td>
+<td>ещё не начали</td>
+</tr>
+<tr>
+<td>Running</td>
+<td>«в работе»</td>
+<td>идёт прогон</td>
+</tr>
+<tr>
+<td>Done</td>
+<td>«готово»</td>
+<td>закончили; есть или должен быть отчёт</td>
+</tr>
+<tr>
+<td>Успешные</td>
+<td>«Успешные»</td>
+<td>отдельная колонка завершения после «готово»</td>
+</tr>
+</tbody>
+</table>
+<p>Четвёртая колонка не опциональна: канонический набор колонок фиксирован. Устаревшая колонка <code>planned</code> при загрузке попадает во «в очереди» (<code>backlog</code>). Карточка с неизвестной колонкой тоже оказывается во «в очереди».</p>
+<p>У карточки: заголовок, описание, теги, зависимости от других карточек (рёбра на виде DAG), метки времени создания и правки, закрепление вверху колонки. В колонках «готово» и «Успешные» под заголовком показывается краткий вывод — текст описания. У каждой карточки — отдельный Markdown-отчёт; индекс отчётов ведётся рядом с доской.</p>
+<p>В модальном окне метода два режима: классическая доска и вид зависимостей (вкладки <strong>Kanban</strong> / <strong>DAG view</strong>). Сверху — фильтры по периоду изменения и тегам, сброс, блок вех с привязкой к карточкам. «Мастер-отчёты» — страницы уровня метода, не карточки.</p>
+<p>Живой монитор прогона (графики, логи) — отдельная фича. Кнопка «Live монитор» появляется у карточки «в работе», когда в описании или в содержимом отчёта заданы строки <code>live_log</code> / <code>metrics_dir</code> / <code>live_note</code>. На этой странице — доска, отчёт и связь с очередью разбора после «готово».</p>
+<p>Под узлом метода на карте мыслей — полоска сводки: всего карточек / «в работе» / в колонках завершения.</p>
+<h2>Как человек работает в интерфейсе</h2>
+<p>Пользователь выбирает проект и на карте мыслей кликает узел метода — открывается модальное окно канбана (тип «Метод»). Двойной клик по методу <strong>не</strong> открывает доску: камера подлетает к узлу. Контекстное меню у метода тоже открывает канбан.</p>
+<p>Типичный ход начинается с карточки. Пользователь нажимает «+» (или «Добавить карточку») — появляется «Новый эксперимент» во «в очереди» — и правит заголовок, описание и отчёт (↗ «Открыть отчёт»; статусы «Загрузка отчёта…» / «Сохранение отчёта…» / «Отчёт сохранён»). Булавка в правом верхнем углу карточки держит её наверху колонки после перезагрузки; повторный клик снимает закрепление. Закрепление переезжает вместе с карточкой в другую колонку.</p>
+<p>Дальше карточку перетаскивают во «в работе» (ручка ⠿; пустая колонка — «Перетащите сюда»). Если в описании или отчёте есть live-строки, доступен «Live монитор». Перенос в «готово» ставит карточку в очередь разбора после «готово» (<code>done-research</code>); сценарий агента затем пишет вопрос / ответ / рассказ в <code>research.json</code>.</p>
+<p>ResearcherOS сохраняет доску: «Сохранение…», затем «Сохранено в project.md». Закрытие окна возвращает на карту; полоска под методом отражает актуальное состояние. В Hub доска только для чтения: перетаскивание, новые карточки и новые рёбра недоступны; отчёт и фильтры — да.</p>
+<p>Подсказки («?» перезаписывает HTML-заглушку, пока окно открыто):</p>
+<ul>
+<li>доска (локально): <code>⠿ — перетащить · булавка — закрепить сверху · + — новая карточка · двойной клик — правка · ↗ — отчёт</code></li>
+<li>Hub: <code>Только просмотр · ↗ — отчёт · фильтр · DAG — связи между карточками</code></li>
+<li>DAG: <code>DAG — → зажать на карточке, отпустить на цели · двойной клик на стрелке — удалить</code></li>
+</ul>
+<h2>Какие сценарии агента подключаются</h2>
+<p>Сценарии агента необязательны: колонки и отчёты можно вести вручную. Они нужны, чтобы отчёт, колонка и вывод в базе знаний не расходились.</p>
+<table>
+<thead>
+<tr>
+<th>Сценарий агента</th>
+<th>Роль относительно канбана</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>koi-grill-experiment</code></td>
+<td>До запуска: интервью по постановке → черновик §1–§3 отчёта и карточка во «в очереди» (или уточнение существующей).</td>
+</tr>
+<tr>
+<td><code>koi-execute-card</code></td>
+<td>Закон колонок: сразу «в очереди» → «в работе», по ходу галочки в §3 отчёта, в конце «в работе» → «готово» до ответа человеку.</td>
+</tr>
+<tr>
+<td><code>koi-report-review</code></td>
+<td>Четыре критика по отчёту; та же синхронизация колонок, что у execute.</td>
+</tr>
+<tr>
+<td><code>koi-done-research</code></td>
+<td>После колонки «готово» (не «Успешные»): вопрос / ответ и рассказ в <code>research.json</code> по методу и карточке.</td>
+</tr>
+<tr>
+<td><code>koi-card-autoresearch</code></td>
+<td>Долгий прогон одной карточки (роли manager / researcher / debugger); внутри опирается на <code>koi-execute-card</code>.</td>
+</tr>
+<tr>
+<td><code>koi-prose-style</code></td>
+<td>Заголовок и описание карточки в интерфейсе — короткий title, детали в описании.</td>
+</tr>
+</tbody>
+</table>
+<p>При успешном применении разбора отчёта (<code>report_ingest</code>) карточка переходит в «готово»; при явной секции исследовательских вопросов (<code>RQ</code>) в отчёте эти вопросы обновляются у метода. Это отдельный поток от очереди <code>koi-done-research</code>.</p>
+<h2>Как устроено технически</h2>
+<h3>Хранение в Markdown</h3>
+<p>В <code>project.md</code> сразу после текста метода:</p>
+<pre><code class="language-markdown">&lt;!-- koi:kanban board-&lt;method-id&gt; --&gt;
+| backlog | running | done | successful |
+| --- | --- | --- | --- |
+| Заголовок &lt;!-- id:c1 pinned:1 desc:… tags:gpu deps:c0 created:… updated:… --&gt; | | |
+</code></pre>
+<p>Парсинг: <code>koi/core/md_io.py</code> (<code>KANBAN_START_RE</code>, метаданные карточки в HTML-комментарии). Нормализация колонок: <code>normalize_kanban_board</code> — всегда <code>DEFAULT_KANBAN_COLUMNS</code>, legacy <code>planned</code> → <code>backlog</code>, неизвестные id → <code>backlog</code>. Модель: <code>ExperimentCard</code>, <code>KanbanBoard</code> в <code>koi/core/models.py</code> (заголовки колонок: Backlog, Running, Done, Успешные); владелец доски — только <code>method</code> (<code>KANBAN_OWNER_TYPES</code>). Поле <code>linked_node_id</code> в модели есть, в UI канбана не используется. Зависимости карточек — поле <code>depends_on</code>. Закрепление вверху колонки — <code>pinned</code>; в Markdown пишется только если включено (<code>pinned:1</code>).</p>
+<p>Отчёты: <code>koi/adapters/card_reports.py</code>, путь <code>reports/{methodSlug}/{card}.md</code>, индекс в <code>reports/index.json</code>. Зависимости: <code>koi/projects/kanban/dependencies.py</code>; раскладка DAG: <code>koi/projects/kanban/layout.py</code>. Команды: <code>koi/projects/commands.py</code>.</p>
+<p>Подсказки Live — свободные строки в description или в тексте отчёта (не поля модели): <code>live_log:</code>, <code>metrics_dir:</code>, <code>live_note:</code>.</p>
+<p>Очередь разбора после «готово» (<code>done-research</code>) пополняется только когда <code>column_id == "done"</code> (перенос в «Успешные» очередь не ставит). Синхронизация: <code>koi/adapters/done_research_queue.py</code> при сохранении и загрузке проекта.</p>
+<p>Разбор отчёта (<code>report_ingest</code>): при успешном применении (не в режиме чернового прогона <code>dry_run</code>) карточка всегда переводится в <code>done</code> — логика в <code>workflow.py</code>; явная секция исследовательских вопросов (<code>RQ</code>) обновляет вопросы метода. Это отдельный поток от очереди <code>koi-done-research</code>.</p>
+<p>API (роутер <code>api/routers/projects.py</code>): <code>POST</code> / <code>PATCH</code> / <code>DELETE</code> карточек; <code>POST …/dag/suggest</code>, <code>GET</code>/<code>PUT …/dag-layout</code>; отчёты и live-снимки карточки. Отдельного API для создания произвольных колонок нет.</p>
+<h3>Клиент</h3>
+<p>Клиентские модули:</p>
+<ul>
+<li>модалка: <code>#kanban-modal</code> в <code>web/index.html</code>;</li>
+<li>открытие, перетаскивание, фильтры: <code>openKanbanModal</code> и соседние функции в <code>web/app.js</code>;</li>
+<li>зависимости: <code>web/kanban-dag.js</code>;</li>
+<li>вехи: <code>web/milestones.js</code>;</li>
+<li>Live-монитор: <code>web/card-live.js</code>;</li>
+<li>полоска под методом: сводка «всего / в работе / готово» (<code>tot</code> / <code>proc</code> / <code>done</code>, константы <code>KANBAN_BELOW_*</code>).</li>
+</ul>
+<p>Элементы UI для справки:</p>
+<ul>
+<li>фильтры: «Период изменения» (чипы «Все», «Сегодня», «7 дней», «30 дней»), «Фильтр по тегам», «Сбросить»;</li>
+<li>вехи: клик фильтрует доску (<code>Фильтр: &lt;title&gt; · ещё клик — сбросить</code>); пусто — <code>Пока нет вех — добавьте первую по шкале времени</code>; на узле — «Клик — фильтр доски»;</li>
+<li>«Мастер-отчёты» с «+ Добавить»;</li>
+<li><strong>DAG view</strong>: «Перемещение» / «Направленная связь»; зажать стрелку на карточке и отпустить на другой — зависимость; двойной клик по ребру — удалить.</li>
+</ul>
+<p>Сохранение снова пишет <code>project.md</code> (и при необходимости файлы отчёта). Синхронизация между машинами — через Git по ветке исследования, не через отдельный протокол канбана.</p>
+<h3>Тесты</h3>
+<p>Бэкенд: <code>test_md_io</code>, <code>test_project_commands</code>, <code>test_dag_*</code>, <code>test_done_research_queue</code>, <code>test_report_ingest</code>, <code>test_card_live</code>. Отдельных фронтенд unit-тестов канбана нет.</p>
+<h3>Связь с остальным</h3>
+<ul>
+<li>Дерево задаёт метод; канбан не создаёт узлов <code>experiment</code> в дереве.</li>
+<li><code>research.json</code> ссылается на <code>method_id</code> + <code>card_id</code> после разбора «готово».</li>
+<li>Монитор прогона читает артефакты живой карточки — <a href="monitor.html">страница монитора</a>.</li>
+</ul>
+<h2>Ограничения</h2>
+<ul>
+<li>Произвольные колонки через UI/API создать нельзя; неизвестные id колонок уходят во «в очереди».</li>
+<li>Колонка «Успешные» не ставит в очередь разбора после «готово»: очередь только при «готово».</li>
+<li>Hub — только просмотр мутаций доски (карточки, рёбра, перетаскивание).</li>
+<li>Live-монитор нужен статус «в работе» плюс строки <code>live_log</code> / <code>metrics_dir</code> / <code>live_note</code> в описании или отчёте.</li>
+<li><code>linked_node_id</code> в UI канбана не используется.</li>
+<li>Двойной клик по методу приближает камеру и не открывает канбан.</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="research-tree.html">Исследовательское дерево</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+<li><a href="monitor.html">Монитор прогона</a></li>
+<li><a href="knowledge.html">База знаний</a></li>
+</ul>
+<p class="callout">Текст: <code>content/kanban.md</code>. Медиа: <code>media/kanban-hero.*</code>.</p>
+      </article>
+    </main>
+  </div>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

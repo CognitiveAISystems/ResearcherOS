@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Related Work · ResearcherOS</title>
+  <meta name="description" content="Из очереди интерфейса литературы написать раздел Related Works и вернуть его на страницу." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Related Work</h1>
+    <p class="skill-id">koi-related-work</p>
+    <div class="article__meta">
+      <span class="chip">Кнопка Related Work</span>
+    </div>
+    <p class="article__lead">Из очереди интерфейса литературы написать раздел Related Works и вернуть его на страницу.</p>
+
+    <h2>Что делает</h2>
+    <p>Обрабатывает задачу из очереди Related Work: сразу принимает её, забирает контекст с кластерами статей, пишет обзор только по переданным фактам и сохраняет ответ обратно в интерфейс. Без принятия страница «ждёт запрос»; без сохранения ответа черновик не появится.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы обзор литературы рождался из выбранных в интерфейсе кластеров и сразу попадал на страницу Related Work, без ручного копирования туда-сюда.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>В интерфейсе нажали Related Work и задача попала в очередь</li>
+      <li>Постоянный чат Literature Inbox получил сигнал о новой задаче</li>
+      <li>Нужно дописать или пересохранить ответ по уже принятой задаче</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Попросите проверить очередь Related Work и обработать задачу по цепочке: принять → контекст → текст → сохранить. Удобно держать отдельный постоянный чат под литературу.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Проверь очередь Related Work и обработай задачу:
+принять → забрать контекст → написать обзор → сохранить ответ.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — линейный конвейер очереди. Каждый шаг обязателен: без «принять» интерфейс не перейдёт в работу, без «сохранить ответ» текст останется только у AI-помощника.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart LR
+  A[Очередь из интерфейса] --> B[Принять задачу]
+  B --> C[Забрать контекст]
+  C --> D[Написать обзор]
+  D --> E[Сохранить ответ в страницу]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-related-work">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

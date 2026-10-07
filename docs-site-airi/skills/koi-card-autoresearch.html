@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Автоисследование по карточке · ResearcherOS</title>
+  <meta name="description" content="Длинный прогон одной карточки с тремя ролями: Руководитель, Исследователь и Дебаггер — поверх выполнения карточки." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Автоисследование по карточке</h1>
+    <p class="skill-id">koi-card-autoresearch</p>
+    <div class="article__meta">
+      <span class="chip">«Системное исследование» / многочасовой прогон</span>
+    </div>
+    <p class="article__lead">Длинный прогон одной карточки с тремя ролями: Руководитель, Исследователь и Дебаггер — поверх выполнения карточки.</p>
+
+    <h2>Что делает</h2>
+    <p>Оркестрация долгого эксперимента по одной карточке канбана. Руководитель один раз переносит карточку в работу, настраивает живое окно и state-файл. Исследователь запускает job (через project-скилл, если он есть), следит по расписанию и отмечает подзадачи. Дебаггер только диагностирует сбои и пишет рекомендации — код и перезапуск остаются за Исследователем. Канбан, отчёт и колонка «готово» ведутся по сценарию выполнения карточки.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы многочасовой или remote-прогон не разваливался на «запустил и забыл»: есть кто стартует, кто крутит job и смотрит пульс, кто только разбирает ошибки — без смешения ролей в одном хаотичном чате.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>Просьба «проведи системное исследование / автоисследование по карточке»</li>
+      <li>Обучение или remote job на часы–сутки: нужен watch и плановый triage сбоев</li>
+      <li>В workspace есть project-скилл запуска (например для verl) — нужен общий протокол ролей поверх него</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Скажите «проведи системное исследование по карточке …» или «автоисследование по карточке …». Назовите проект и id/заголовок карточки. Если рядом с кодом есть свой скилл запуска — упомяните его; роли и cadence всё равно из этого сценария, а канбан — из выполнения карточки.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Проведи системное исследование по карточке &lt;id&gt; в проекте &lt;проект&gt;:
+роли руководитель → исследователь → дебаггер, с мониторингом по ходу.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — три роли по времени. Руководитель работает один раз в начале. Исследователь и Дебаггер идут параллельно: Исследователь чаще смотрит пульс job, Дебаггер — плановый triage и внеплановый вызов. Финиш — отчёт и колонка «готово».</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  U[Запрос пользователя] --> M[Руководитель: в работу + live + state]
+  M --> R[Исследователь: старт job]
+  R --> W[Watch: 1 мин × 20, потом 20 мин]
+  R --> D[Дебаггер: каждые 10 мин]
+  W -->|сбой| I[Вызов дебаггера]
+  I --> D
+  D -->|рекомендация в state| W
+  W -->|готово| F[Отчёт + готово + вывод]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-card-autoresearch">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

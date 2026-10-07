@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ResearcherOS — AIRI</title>
+  <meta name="description" content="ResearcherOS в визуальном стиле AIRI: гипотезы, эксперименты и знания рядом с кодом." />
+  <link rel="stylesheet" href="css/airi.css" />
+  <link rel="stylesheet" href="css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="css/image-viewer.css?v=1" />
+</head>
+<body>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" id="lang-ru" class="lang__on">RU</button>
+    <button type="button" id="lang-en">ENG</button>
+  </div>
+
+  <main>
+    <header class="hero">
+      <h1>ResearcherOS</h1>
+      <p class="links">
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">code</a>
+        <span>/</span>
+        <a href="https://d5d42tf3c88tdjqis4ei.avjje9e3.apigw.yandexcloud.net">hub</a>
+      </p>
+    </header>
+
+    <section id="about">
+      <h2 data-en="About">О проекте</h2>
+      <p class="lead" data-en="For researchers and teams who need one place: hypotheses, runs, and conclusions — next to the code, in the repository.">
+        Для исследователей и команд, которым нужна одна среда: гипотезы, прогоны и выводы —
+        рядом с кодом, в репозитории.
+      </p>
+      <div class="points">
+        <div>
+          <h3 data-en="What it is">Что это</h3>
+          <p data-en="ResearcherOS carries a study from hypotheses to reports and accumulated knowledge. Everything lives in plain text files and goes into the repository with the project.">ResearcherOS помогает вести исследование от гипотез до отчётов и накопленных знаний. Всё хранится в обычных текстовых файлах и уезжает в репозиторий вместе с проектом.</p>
+        </div>
+        <div>
+          <h3 data-en="Who it is for">Для кого</h3>
+          <p data-en="For researchers and small teams — including machine learning — who already have experiment code, or will soon.">Для исследователей и небольших команд — в том числе в машинном обучении — у кого уже есть код экспериментов или он скоро появится.</p>
+        </div>
+        <div>
+          <h3 data-en="Why">Зачем</h3>
+          <p data-en="So the important parts do not dissolve into chat. The plan, the run, and the conclusion stay visible to the person and to the AI assistant in the code editor.">Чтобы важное не растворялось в переписке. Постановку, прогон и вывод видят и человек, и AI-помощник в редакторе кода.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="versions" id="versions" aria-labelledby="versions-title">
+      <h2 id="versions-title" data-en="Versions">Версии</h2>
+      <p class="lead" data-en="Two versions for research with agents — pick the one that matches your experience.">Две версии для ведения исследований с агентами — выберите под свой опыт.</p>
+      <div class="cards versions__cards">
+        <a class="card version-card" href="https://github.com/CognitiveAISystems/ResearcherOS/releases/tag/v0.3.0">
+          <span class="version-card__badge" data-en="v0.3.0 · Stable">v0.3.0 · Стабильная</span>
+          <h3 data-en="Starting with agents">Начинаю с агентами</h3>
+          <p data-en="For a first study with agents: state hypotheses, run experiments, and keep conclusions in the stable release.">Для первых исследований с агентами: формулируйте гипотезы, проводите эксперименты и сохраняйте выводы в стабильной версии.</p>
+          <ul class="version-card__features">
+            <li data-en="Hypothesis tree and kanban">Дерево гипотез и канбан</li>
+            <li data-en="Reports, knowledge base, and literature review">Отчёты, база знаний и обзор литературы</li>
+            <li data-en="Widgets and a skill catalog">Виджеты и каталог навыков</li>
+          </ul>
+        </a>
+        <a class="card version-card" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main">
+          <span class="version-card__badge" data-en="main · In development">main · В разработке</span>
+          <h3 data-en="Building a research practice with agents">Развиваю работу с агентами</h3>
+          <p data-en="For people who already run studies with agents and want longer research cycles. Newer pieces are still being finished.">Для тех, кто уже ведёт исследования с агентами и хочет выстраивать сложные исследовательские циклы. Новые возможности ещё дорабатываются.</p>
+          <ul class="version-card__features">
+            <li data-en="Everything in the stable release">Всё из стабильной версии</li>
+            <li data-en="Joint article editing with sync">Совместное редактирование статьи с синхронизацией</li>
+            <li data-en="Pinning cards to the top of the kanban">Закрепление карточек вверху канбана</li>
+          </ul>
+        </a>
+      </div>
+      <p class="versions__docs"><a href="features/index.html"><span data-en="Open the documentation">Открыть документацию</span> <span aria-hidden="true">↗</span></a></p>
+    </section>
+
+    <section id="start">
+      <h2 data-en="How to start">Как начать</h2>
+      <p class="lead" data-en="Three situations. Pick the one that matches you now.">Три ситуации. Выберите ту, которая про вас сейчас.</p>
+      <div class="cards start-options">
+        <a class="card" href="start/with-code.html">
+          <h3 data-en="Connecting my code for the first time">Впервые подключаю свой код</h3>
+          <p data-en="The code is there, the tree is not: a prompt to the agent, onboarding, a map in the interface.">Код есть, дерева нет: промпт агенту, онбординг, карта в интерфейсе.</p>
+        </a>
+        <a class="card" href="start/no-code.html">
+          <h3 data-en="Starting from scratch">Начинаю с нуля</h3>
+          <p data-en="No code yet: install and create a project, or “+ New project” in the interface.">Кода ещё нет: установка с созданием проекта или «+ Новый проект» в интерфейсе.</p>
+        </a>
+        <a class="card" href="start/deploy.html">
+          <h3 data-en="I already have a project">Уже есть проект</h3>
+          <p data-en="First launch on a machine, or a move off the old folder layout.">Первый запуск на машине или переезд со старой раскладки каталогов.</p>
+        </a>
+      </div>
+    </section>
+
+    <section id="skills">
+      <h2 data-en="Skills">Навыки</h2>
+      <p class="lead" data-en="Ready workflows for the AI assistant in the editor.">Готовые сценарии для AI-помощника в редакторе.</p>
+      <div class="cards skill-catalog">
+        <a class="card" href="skills/koi-project-onboard.html"><h3 data-en="Repository onboarding">Онбординг репозитория</h3><p data-en="Connect existing code and build the research tree.">Подключить существующий код и собрать дерево исследования.</p></a>
+        <a class="card" href="skills/koi-grill-experiment.html"><h3 data-en="Experiment design">Проектирование эксперимента</h3><p data-en="Tighten the plan until it is clear — one question per turn.">Дожать постановку до ясного плана — один вопрос за ход.</p></a>
+        <a class="card" href="skills/koi-execute-card.html"><h3 data-en="Running a card">Выполнение карточки</h3><p data-en="Carry an experiment from “in progress” through the report and the conclusion.">Провести эксперимент от «в работу» до отчёта и вывода.</p></a>
+        <a class="card" href="skills/koi-card-autoresearch.html"><h3 data-en="Autoresearch">Автоисследование</h3><p data-en="A long run with a lead, a researcher, and a debugger.">Длинный прогон с ролями руководителя, исследователя и дебаггера.</p></a>
+        <a class="card" href="skills/koi-done-research.html"><h3 data-en="Conclusion after an experiment">Вывод по эксперименту</h3><p data-en="After “done”: a question for the person and a short answer from the result.">После «готово»: вопрос человеку и короткий ответ по результату.</p></a>
+        <a class="card" href="skills/index.html"><h3 data-en="All workflows">Все сценарии</h3><p data-en="The skill catalog: when to call one, what it does, how to ask.">Каталог навыков: когда звать, что делает, как позвать.</p></a>
+      </div>
+    </section>
+
+    <section id="lessons">
+      <h2 data-en="Lessons">Уроки</h2>
+      <p class="lead" data-en="Short lessons on real examples from actual research trees.">Короткие уроки на живых примерах из реальных деревьев исследования.</p>
+      <div class="list lesson-path">
+        <a href="lessons/hypothesis-tree.html"><strong data-en="Hypothesis tree">Дерево гипотез</strong><span data-en="From a problem to a test">От проблемы к проверке</span></a>
+        <a href="lessons/experiment-setup.html"><strong data-en="Setting up an experiment">Постановка эксперимента</strong><span data-en="Interview, critics, one card">Опрос, критики, одна карточка</span></a>
+        <a href="lessons/experiment-run.html"><strong data-en="Running an experiment">Запуск эксперимента</strong><span data-en="The card, autoresearch, the live window">Карточка, автоисследование, живое окно</span></a>
+        <a href="lessons/related-work.html"><strong>Related Work</strong><span data-en="From a question to a connected review">От вопроса к связному обзору</span></a>
+      </div>
+    </section>
+
+    <section class="partners" aria-labelledby="partners-title">
+      <h2 id="partners-title" data-en="Partners">Партнёры</h2>
+      <div class="partners__logos">
+        <img class="partners__logo partners__logo--ccm" src="assets/partners/cognitive-modeling.png" alt="Center for Cognitive Modeling" width="935" height="476" loading="lazy" />
+        <img class="partners__logo partners__logo--airi" src="assets/partners/airi-flat.svg?v=dark-text" alt="AIRI" width="592" height="180" loading="lazy" />
+        <img class="partners__logo partners__logo--mipt" src="assets/partners/fck-mipt.png" alt="ФЦК МФТИ" width="203" height="64" loading="lazy" />
+      </div>
+    </section>
+
+    <section class="contact">
+      <h2 data-en="Contact">Контакты</h2>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+      <div class="contact__emails">
+        <a href="mailto:volovikova@airi.net">volovikova@airi.net</a>
+        <a href="mailto:panov@airi.net">panov@airi.net</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var re = /(^|[\s(«—–-])([А-Яа-яЁё]{1,2}|для|при|над|под|без|про) /g;
+      var nodes = document.querySelectorAll("[data-en]");
+      nodes.forEach(function (el) { el.dataset.ru = el.textContent.trim(); });
+
+      function hang() {
+        var walker = document.createTreeWalker(document.querySelector("main"), NodeFilter.SHOW_TEXT);
+        var node;
+        while ((node = walker.nextNode())) {
+          if (node.parentElement.closest("code")) continue;
+          node.nodeValue = node.nodeValue.replace(re, function (_, before, word) {
+            return before + word + "\u00A0";
+          });
+        }
+      }
+
+      function setLang(lang) {
+        document.documentElement.lang = lang === "en" ? "en" : "ru";
+        nodes.forEach(function (el) {
+          el.textContent = lang === "en" ? el.dataset.en : el.dataset.ru;
+        });
+        document.getElementById("lang-ru").classList.toggle("lang__on", lang !== "en");
+        document.getElementById("lang-en").classList.toggle("lang__on", lang === "en");
+        if (lang !== "en") hang();
+        try { localStorage.setItem("airi-lang", lang); } catch (e) {}
+      }
+
+      document.getElementById("lang-ru").addEventListener("click", function () { setLang("ru"); });
+      document.getElementById("lang-en").addEventListener("click", function () { setLang("en"); });
+
+      var saved = "ru";
+      try { saved = localStorage.getItem("airi-lang") === "en" ? "en" : "ru"; } catch (e) {}
+      setLang(saved);
+    })();
+  </script>
+<script src="js/image-viewer.js?v=1"></script>
+</body>
+</html>

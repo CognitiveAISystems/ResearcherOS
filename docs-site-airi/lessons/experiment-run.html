@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Запуск эксперимента · ResearcherOS</title>
+  <meta name="description" content="Как выполнить карточку в ResearcherOS: короткий прогон и системное автоисследование с ролями руководитель, исследователь и дебаггер." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <style>
+    .lesson-toc {
+      margin: 1.25rem 0 1.75rem;
+      padding: 1rem 1.15rem;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--glass);
+    }
+    .lesson-toc ol {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+    }
+    .lesson-toc a { font-weight: 600; }
+    .philo-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 0;
+      font-size: 0.92rem;
+    }
+    .philo-table th,
+    .philo-table td {
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .philo-table th {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+  </style>
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Основное">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons" aria-current="page">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <a class="back-link" href="../airi.html#lessons">← Lessons</a>
+    <h1 class="article__title">Запуск эксперимента</h1>
+    <div class="article__meta meta-row">
+      <span class="chip">Урок</span>
+      <span class="chip">~15 мин</span>
+      <span class="chip">после постановки</span>
+    </div>
+    <p class="article__lead">
+      Постановка готова. Осталось запустить карточку и смотреть ход на дереве.
+    </p>
+
+    <section class="callout" aria-labelledby="quick-start">
+      <p id="quick-start"><strong>Коротко: что делать</strong></p>
+      <ol class="steps">
+        <li>
+          На доске метода скопируйте путь к отчёту карточки
+          (кнопка «скопировать путь»).
+        </li>
+        <li>
+          Вставьте путь в чат с помощником и дайте одну из фраз ниже.
+        </li>
+        <li>
+          На дереве следите за колонкой карточки и живым окном (лупа у метода).
+          Пока идёт прогон — лучше молчать; вмешивайтесь, только если помощник
+          спрашивает или видите явный сбой.
+        </li>
+      </ol>
+      <div class="example">
+        <p>Короткий прогон:</p>
+        <pre><code>Выполни карточку по пути:
+&lt;вставьте путь&gt;
+
+Сценарий koi-execute-card: сразу в работу, по подзадачам, в конце — готово.</code></pre>
+        <p>Долгий / удалённый прогон:</p>
+        <pre><code>Системное исследование по карточке:
+&lt;вставьте путь&gt;
+
+Сценарий koi-card-autoresearch: руководитель → исследователь → дебаггер.</code></pre>
+      </div>
+    </section>
+
+    <nav class="lesson-toc" aria-label="Содержание">
+      <strong>В этом уроке</strong>
+      <ol>
+        <li><a href="#choose">Какой сценарий выбрать</a></li>
+        <li><a href="#execute">Короткий прогон: выполнение карточки</a></li>
+        <li><a href="#auto">Долгий прогон: автоисследование</a></li>
+        <li><a href="#after">После «готово»</a></li>
+      </ol>
+    </nav>
+
+    <!-- ───────── 1 ───────── -->
+    <h2 id="choose">1. Какой сценарий выбрать</h2>
+    <p>
+      Оба пути работают с <strong>одной</strong> карточкой на доске метода.
+      Разница — в длине прогона и в том, сколько агентов следят за ходом.
+    </p>
+
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Выполнение карточки</th>
+          <th>Автоисследование</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Сценарий</strong></td>
+          <td><a href="../skills/koi-execute-card.html">koi-execute-card</a></td>
+          <td><a href="../skills/koi-card-autoresearch.html">koi-card-autoresearch</a></td>
+        </tr>
+        <tr>
+          <td><strong>Когда</strong></td>
+          <td>Минуты–часы в одной сессии; локальный или короткий прогон</td>
+          <td>Часы–сутки; удалённый прогон (job); нужен мониторинг и разбор сбоев</td>
+        </tr>
+        <tr>
+          <td><strong>Кто делает</strong></td>
+          <td>Один помощник: и запуск, и правки, и отчёт</td>
+          <td>Три роли: руководитель, исследователь, дебаггер</td>
+        </tr>
+        <tr>
+          <td><strong>Фраза</strong></td>
+          <td>«Выполни карточку …»</td>
+          <td>«Проведи системное исследование по карточке …» / «автоисследование»</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <p>
+        Автоисследование <em>не заменяет</em> выполнение карточки.
+        Канбан, подзадачи в отчёте и колонка «готово» по-прежнему ведутся по
+        <a href="../skills/koi-execute-card.html">koi-execute-card</a>.
+        Автоисследование добавляет поверх этого каркаса роли и расписание наблюдения.
+      </p>
+    </div>
+
+    <!-- ───────── 2 ───────── -->
+    <h2 id="execute">2. Короткий прогон: выполнение карточки</h2>
+    <p>
+      Сценарий
+      <a href="../skills/koi-execute-card.html">koi-execute-card</a>
+      — закон доски: статус карточки и галочки в отчёте двигаются вместе с работой,
+      а не «в конце для красоты».
+    </p>
+
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Найти карточку] --> B[Сразу: очередь → в работе]
+  B --> C[Читать постановку и подзадачи]
+  C --> D[Делать эксперимент по подзадачам]
+  D --> E[Отмечать сделанное в отчёте]
+  E --> F[Записать результаты]
+  F --> G[В колонку готово]
+  G --> H[Сформулировать вывод]
+      </pre>
+    </div>
+
+    <ol class="steps">
+      <li>
+        <strong>Первое действие — в работу.</strong>
+        Как только карточка найдена в очереди (backlog), её переносят в колонку
+        «в работе» (running) <em>до</em> чтения отчёта и запуска кода.
+      </li>
+      <li>
+        <strong>По ходу — галочки в §3.</strong>
+        Подзадачи живут только в разделе постановки отчёта.
+        Закончили пункт по критерию из строки — сразу отметили и сохранили файл.
+        Не копить галочки «на финиш».
+      </li>
+      <li>
+        <strong>Результаты в §4 и дальше.</strong>
+        Таблицы и графики, которые обещали в постановке; явный отказ, если пункт
+        не сделан («не выполнено, потому что …»).
+      </li>
+      <li>
+        <strong>Последнее действие — готово.</strong>
+        Когда все подзадачи отмечены и выводы записаны — колонка «готово» (done)
+        <em>до</em> ответа человеку и сценария вывода.
+      </li>
+    </ol>
+
+    <div class="example">
+      <p>Пример фразы:</p>
+      <pre><code>Выполни карточку &lt;название или id&gt; в проекте &lt;проект&gt; целиком:
+сразу перенеси в работу, сам проведи эксперимент по подзадачам,
+отмечай прогресс по ходу, в конце — готово и вывод.</code></pre>
+    </div>
+
+    <div class="callout">
+      <p>
+        Пока карточка в работе, в интерфейсе у метода есть «лупа»: живое окно.
+        Помощник может указать путь к хвосту лога, папку с графиками и короткую
+        заметку о ходе (<code>live_log</code>, <code>metrics_dir</code>, <code>live_note</code>).
+        Интерфейс (UI) читает это с диска — без отдельного потока событий.
+      </p>
+    </div>
+
+    <!-- ───────── 3 ───────── -->
+    <h2 id="auto">3. Долгий прогон: автоисследование</h2>
+    <p>
+      Сценарий
+      <a href="../skills/koi-card-autoresearch.html">koi-card-autoresearch</a>
+      нужен, когда прогон длинный или удалённый и один хаотичный чат уже не тянет:
+      кто-то должен стартовать карточку, кто-то крутить удалённый прогон (job) и смотреть пульс,
+      кто-то только разбирать сбои — без права тихо править код.
+    </p>
+
+    <h3>Три роли</h3>
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th>Роль</th>
+          <th>Делает</th>
+          <th>Не делает</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Руководитель</strong></td>
+          <td>Один раз: карточка в работу, поля живого окна, файл состояния (state), передача исследователю</td>
+          <td>Не запускает обучение, не чинит код</td>
+        </tr>
+        <tr>
+          <td><strong>Исследователь</strong></td>
+          <td>Старт прогона (job) через скилл проекта, если есть; наблюдение по расписанию; галочки в §3; вызов дебаггера; в конце — готово</td>
+          <td>Не меняет чужой код без явного одобрения человека</td>
+        </tr>
+        <tr>
+          <td><strong>Дебаггер</strong></td>
+          <td>Читает логи и монитор ресурсов; пишет рекомендацию в файл состояния</td>
+          <td>Не правит файлы и не перезапускает прогон (job)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Как это работает по времени</h3>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  U[Запрос пользователя] --> M[Руководитель: в работу + живое окно + state]
+  M --> R[Исследователь: старт прогона]
+  R --> W[Наблюдение: часто в начале, реже потом]
+  R --> D[Дебаггер: плановый разбор]
+  W -->|сбой| I[Внеплановый вызов дебаггера]
+  I --> D
+  D -->|рекомендация в state| W
+  W -->|готово| F[Отчёт + готово + вывод]
+      </pre>
+    </div>
+
+    <table class="philo-table">
+      <thead>
+        <tr>
+          <th>Кто</th>
+          <th>Как часто (по умолчанию)</th>
+          <th>Зачем</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Руководитель</td>
+          <td>Один раз в начале</td>
+          <td>Карточка, живое окно, state</td>
+        </tr>
+        <tr>
+          <td>Исследователь</td>
+          <td>Каждую минуту × 20, потом каждые 20 минут</td>
+          <td>Пульс прогона (job), заметка о ходе, вызов дебаггера при сбое</td>
+        </tr>
+        <tr>
+          <td>Дебаггер</td>
+          <td>Каждые 10 минут + сразу при старте; и по вызову</td>
+          <td>Плановый разбор логов; ранняя ошибка — не ждать таймера</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Файл состояния и скилл проекта</h3>
+    <p>
+      Рядом с прогоном лежит небольшой JSON состояния
+      (например <code>state/&lt;проект&gt;-&lt;карточка&gt;.json</code>):
+      статус обучения, последний осмотр исследователя, отложенная рекомендация дебаггера.
+      Исследователь на каждом осмотре читает рекомендацию, применяет или передаёт
+      человеку, затем сбрасывает «ожидает».
+    </p>
+    <p>
+      Конкретные скрипты запуска, удалённый хост и монитор видеокарты (GPU) задаёт
+      <strong>скилл проекта</strong> рядом с кодом эксперимента (пример в экосистеме —
+      запуск verl / CrafText). В каталоге ResearcherOS таких скриптов нет:
+      там только роли и расписание. Если скилла проекта нет, исследователь всё равно
+      ведёт расписание вручную и пишет заметку о ходе в карточку или отчёт.
+    </p>
+
+    <div class="example">
+      <p>Пример фразы:</p>
+      <pre><code>Проведи системное исследование по карточке &lt;название или id&gt;
+в проекте &lt;проект&gt;: роли руководитель → исследователь → дебаггер,
+с мониторингом по ходу.</code></pre>
+    </div>
+
+    <div class="callout">
+      <p>
+        Запрещено в одном автоисследовании: две карточки сразу; дебаггеру чинить код
+        или перезапускать прогон; руководителю запускать обучение; закрывать «готово»
+        при незакрытых подзадачах без явного отказа в отчёте.
+      </p>
+    </div>
+
+    <!-- ───────── 4 ───────── -->
+    <h2 id="after">4. После «готово»</h2>
+    <ol class="steps">
+      <li>
+        <strong>Вывод для человека</strong> —
+        <a href="../skills/koi-done-research.html">koi-done-research</a>:
+        вопрос и ответ понятным языком в базу выводов проекта
+        (технические числа — отдельно).
+      </li>
+      <li>
+        <strong>Ревью результатов</strong> —
+        <a href="../skills/koi-report-review.html">koi-report-review</a>
+        на фазе результатов: таблицы и выводы соответствуют обещаниям постановки.
+      </li>
+      <li>
+        <strong>Синхронизация</strong> —
+        <a href="../skills/koi-project-sync.html">koi-project-sync</a>,
+        если материалы исследования нужно отправить в репозиторий.
+      </li>
+    </ol>
+
+    <div class="article__actions">
+      <a class="btn btn-primary" href="../skills/koi-card-autoresearch.html">Автоисследование</a>
+      <a class="btn btn-ghost" href="../skills/koi-execute-card.html">Выполнение карточки</a>
+      <a class="btn btn-ghost" href="experiment-setup.html">Урок: постановка</a>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

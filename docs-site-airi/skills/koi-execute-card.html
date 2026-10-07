@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Выполнение карточки · ResearcherOS</title>
+  <meta name="description" content="AI-помощник сам проводит эксперимент по карточке: от «в работу» до отчёта, вывода и «готово»." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Выполнение карточки</h1>
+    <p class="skill-id">koi-execute-card</p>
+    <div class="article__meta">
+      <span class="chip">«Выполни карточку» / прогон эксперимента</span>
+    </div>
+    <p class="article__lead">AI-помощник сам проводит эксперимент по карточке: от «в работу» до отчёта, вывода и «готово».</p>
+
+    <h2>Что делает</h2>
+    <p>Это не смена статуса на доске «для галочки». AI-помощник берёт карточку целиком: переносит в работу, по подзадачам из отчёта реально делает эксперимент (код, запуски, сбор метрик и артефактов), сразу отмечает сделанное, пишет результаты в отчёт, проверяет отчёт, закрывает карточку как готовую, формулирует исследовательский вывод и при необходимости синхронизирует репозиторий. Пока карточка в работе, может обновлять короткую заметку о ходе для живого окна в интерфейсе. Для многочасового прогона с ролями руководитель / исследователь / дебаггер используйте отдельный сценарий автоисследования: канбан и отчёт остаются здесь, а оркестрация и cadence — там (плюс project-скилл запуска, если он есть).</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы «выполни карточку» означало полный прогон эксперимента одним AI-помощником, а доска, отчёт и факты не разъезжались. Человек видит прогресс; помощник не останавливается на «перенёс в работу» без самой работы.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>Просьба «выполни / проверь / сделай карточку» — нужен полный прогон, а не совет «как бы сделать»</li>
+      <li>Локальный или короткий эксперимент: помощник сам запускает, собирает результаты и закрывает карточку</li>
+      <li>Длинный remote-прогон: сначала автоисследование (роли и мониторинг), канбан и отчёт — по этому сценарию</li>
+      <li>Карточка уже в работе, подзадачи не закрыты — довести эксперимент и отчёт до конца</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Назовите проект и карточку. Скажите выполнить её по сценарию выполнения карточки: сразу в работу, дальше — сам эксперимент по подзадачам, в конце — готово и вывод. Для системного / длинного прогона скажите «автоисследование» или «системное исследование» — подключится сценарий с ролями; канбан и отчёт всё равно остаются на выполнении карточки.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Выполни карточку &lt;название или id&gt; в проекте &lt;проект&gt; целиком:
+сразу перенеси в работу, сам проведи эксперимент по подзадачам,
+отмечай прогресс по ходу, в конце — готово и вывод.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — полный цикл владения экспериментом. После «в работу» идёт не бумажная работа, а выполнение подзадач (сам прогон). Затем результаты, проверка отчёта, «готово», вывод и синхронизация. Роли руководителя и дебаггера живут в сценарии автоисследования и встраиваются внутрь шага «выполнить подзадачи».</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Найти карточку] --> B[Сразу: в работу]
+  B --> C[Прочитать постановку и подзадачи]
+  C --> D[Выполнить эксперимент по подзадачам]
+  D --> E[Отметить сделанное в отчёте]
+  E --> F[Записать результаты]
+  F --> G[Проверить отчёт]
+  G --> H[В колонку готово]
+  H --> I[Сформулировать вывод]
+  I --> J[Синхронизация]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-execute-card">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

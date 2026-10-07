@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ревью отчётов · ResearcherOS</title>
+  <meta name="description" content="Прогнать отчёт через проверки стиля, постановки, подзадач и результатов — писать в файл только после «пройдено»." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Ревью отчётов</h1>
+    <p class="skill-id">koi-report-review</p>
+    <div class="article__meta">
+      <span class="chip">Пишете или правите отчёт</span>
+    </div>
+    <p class="article__lead">Прогнать отчёт через проверки стиля, постановки, подзадач и результатов — писать в файл только после «пройдено».</p>
+
+    <h2>Что делает</h2>
+    <p>Перед сохранением отчёта запускает набор проверок. На этапе постановки — стиль, ясность setup и качество подзадач. После прогона — полноту результатов и человеческие формулировки. Параллельно следит, чтобы колонка карточки на доске совпадала с фактом работы.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы в репозиторий не уходили сырые или противоречивые отчёты, а доска не врала: «в работе» и «готово» отражают реальность.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>Пишете постановку нового отчёта до запуска</li>
+      <li>Заполняете результаты после прогона</li>
+      <li>Просите «проверь отчёт» перед сохранением или публикацией</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Передайте AI-помощнику фрагмент отчёта и этап (постановка или результаты). Попросите довести до «пройдено» по сценарию ревью и синхронизировать колонку на доске.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Проверь постановку отчёта (§1–§3) по сценарию ревью отчётов:
+критики стиля, ясности и подзадач — до «пройдено».</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — цикл правок. От этапа зависит набор проверок. Пока есть замечания, черновик переписывают и снова отправляют на ревью. В файл попадают только после «пройдено».</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Черновик отчёта] --> B{Какой этап?}
+  B -->|постановка| C[Стиль + ясность + подзадачи]
+  B -->|результаты| D[Полнота результатов]
+  C --> E{Пройдено?}
+  D --> E
+  E -->|нет| F[Переписать]
+  F --> A
+  E -->|да| G[Сохранить в файл]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-report-review">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

@@ -68,7 +68,7 @@ ThT и TEM
 - Ячейки: текст карточки; метаданные в HTML-комментарии `<!-- id:... created:... updated:... desc:... tags:... deps:... -->`.
 - `created:` / `updated:` — опционально, ISO-8601 UTC (`2026-08-07T08:18:00Z`); выставляются системой при создании и любой правке карточки.
 - `tags:` — опционально, через запятую (латиница, цифры, `-`, `_`); пример: `tags:gpu,sft,ablation`.
-- `deps:` — опционально, prerequisite-карточки (id через запятую); пример: `deps:seg-pareto-groups,seg-targeting`. Без `deps` карточки в DAG view отображаются независимо.
+- `deps:` — опционально, prerequisite-карточки (id через запятую); пример: `deps:seg-pareto-groups,seg-targeting`.
 - Словарь тегов проекта — опциональный frontmatter `card_tags: [gpu, baseline, ...]` для подсказок в UI.
 
 ## Исследовательские вопросы по методу

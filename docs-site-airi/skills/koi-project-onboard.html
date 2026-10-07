@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Онбординг репозитория · ResearcherOS</title>
+  <meta name="description" content="Подключить существующий репозиторий с кодом к ResearcherOS и собрать дерево исследования." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Онбординг репозитория</h1>
+    <p class="skill-id">koi-project-onboard</p>
+    <div class="article__meta">
+      <span class="chip">Есть код, нет материалов исследования</span>
+    </div>
+    <p class="article__lead">Подключить существующий репозиторий с кодом к ResearcherOS и собрать дерево исследования.</p>
+
+    <h2>Что делает</h2>
+    <p>Сценарий подключает уже существующий репозиторий с кодом эксперимента к ResearcherOS. AI-помощник смотрит код и близкую литературу, ведёт послойный разговор (проблема → программа → причины и гипотезы → методы), проверяет, что заголовки узлов понятны внешнему читателю, пишет файлы исследования рядом с кодом и при необходимости выносит их в отдельную ветку репозитория, чтобы ветка с кодом оставалась чистой.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы не собирать дерево гипотез вручную с нуля, когда код уже есть, и сразу получить живую карту исследования рядом с экспериментом — без смешивания материалов исследования и кода в одной ветке.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>Репозиторий с кодом лежит рядом с ResearcherOS, а папки с материалами исследования ещё нет</li>
+      <li>Нужно сформулировать проблему и гипотезы вместе с AI-помощником, опираясь на код и литературу</li>
+      <li>Команда хочет, чтобы материалы исследования жили в отдельной ветке репозитория</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Откройте чат с AI-помощником в редакторе кода (Cursor или Claude Code) в workspace, где рядом лежат ResearcherOS и ваш репозиторий. Попросите подключить путь к проекту и следовать этому сценарию до конца, включая отдельную ветку для материалов.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Подключи /path/to/my_experiment к ResearcherOS.
+
+Следуй сценарию онбординга до конца: дерево гипотез и сохранение материалов исследования в отдельной ветке репозитория.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — обязательный порядок шагов. Сначала проверка окружения и обзор кода, затем сверка с литературой. Дальше четыре слоя разговора с человеком. После этого заголовки проходят проверку понятности и стиля. Только потом пишутся файлы и, если нужно, создаётся отдельная ветка. Существующее дерево сценарий не перезаписывает.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Проверка и обзор кода] --> B[Сверка с литературой]
+  B --> C[Разговор: проблема]
+  C --> D[Разговор: программа]
+  D --> E[Разговор: причины и гипотезы]
+  E --> F[Разговор: методы]
+  F --> G[Проверка понятности заголовков]
+  G --> H[Проверка стиля текста]
+  H --> I[Запись дерева исследования]
+  I --> J[Отдельная ветка в репозитории]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-project-onboard">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

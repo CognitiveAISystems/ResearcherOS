@@ -1,0 +1,13 @@
+/* Accessible image preview; native dialog supplies focus trapping and Escape. */
+.image-zoom { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; cursor: zoom-in; }
+.image-zoom img { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+.image-zoom:focus-visible { outline: 3px solid #2fbead; outline-offset: 4px; }
+.image-viewer { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 4rem 1.5rem 1.5rem; border: 0; background: transparent; color: #fff; }
+.image-viewer::backdrop { background: rgba(22,28,39,.94); }
+.image-viewer[open] { display: grid; place-items: center; }
+.image-viewer figure { margin: 0; max-width: 100%; pointer-events: none; }
+.image-viewer img { display: block; max-width: 94vw; max-height: 76dvh; width: auto; height: auto; object-fit: contain; margin: auto; pointer-events: auto; }
+.image-viewer figcaption { max-width: 70ch; margin: .8rem auto 0; text-align: center; font: 400 .9rem/1.5 Inter, system-ui, sans-serif; }
+.image-viewer__close { position: fixed; top: 1rem; right: 1rem; width: 44px; height: 44px; border: 0; border-radius: 8px; background: #2fbead; color: #fff; font-size: 2rem; line-height: 1; cursor: pointer; }
+.image-viewer__close:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+@media (max-width: 640px) { .image-viewer { padding-inline: .5rem; } .image-viewer img { max-width: 96vw; } }

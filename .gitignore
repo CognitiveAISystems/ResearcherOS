@@ -10,6 +10,7 @@ dist/
 desktop/node_modules/
 desktop/dist/
 .figma-storyboard/
+.airi_templates/
 .DS_Store
 hub/.data/
 hub/.env

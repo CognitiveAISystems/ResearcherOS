@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Уже есть ResearcherOS-проект · ResearcherOS</title>
+  <meta name="description" content="Первый запуск: повесить koi/research в tree/. Миграция: перенести старый koi-structure в tree/." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Основное">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start" aria-current="page">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <a class="back-link" href="../airi.html#start">← How to start</a>
+    <h1 class="article__title">Уже есть ResearcherOS-проект</h1>
+    <p class="article__lead">
+      Дерево гипотез уже существует (у вас или у команды). Осталось правильно
+      разложить файлы на диске и запустить интерфейс. Выберите свой случай.
+    </p>
+
+    <div class="example">
+      <pre><code>workspace/
+├── ReseachOS/                      ← движок
+├── tree/
+│   └── &lt;репо&gt;/koi-structure/       ← ветка koi/research
+└── &lt;репо&gt;/                         ← код, любая ветка</code></pre>
+    </div>
+    <p>
+      Сервер заходит в папку <code>tree</code> и на следующем уровне ищет
+      <code>*/koi-structure/project.md</code>.
+    </p>
+
+    <h2>Первый запуск на этой машине</h2>
+    <p>
+      Ветка <code>koi/research</code> уже есть на remote. Нужно клонировать движок
+      и code-репо, повесить research-ветку в <code>tree/</code> и открыть UI.
+    </p>
+    <ol class="steps">
+      <li>
+        <strong>Клон движка и code-репо рядом</strong>
+        <div class="example">
+          <pre><code>git clone git@github.com:CognitiveAISystems/ResearcherOS.git ReseachOS
+git clone &lt;url-вашего-code-репо&gt;
+# оба каталога — siblings, имена папок любые
+# workspace/ReseachOS/
+# workspace/&lt;репо&gt;/</code></pre>
+        </div>
+      </li>
+      <li>
+        <strong>Повесить koi/research в tree/</strong>
+        <div class="example">
+          <pre><code>cd ReseachOS
+./scripts/koi-serve.sh start
+python -m koi.projects.install_cli install &lt;репо&gt;
+# имя папки code-репо, как на диске
+python -m koi.projects.install_cli status</code></pre>
+        </div>
+        <p>
+          Появится <code>tree/&lt;репо&gt;/</code> — git worktree на ветке
+          <code>koi/research</code> с <code>koi-structure/</code> внутри.
+        </p>
+      </li>
+      <li>
+        <strong>Открыть интерфейс</strong>
+        <div class="example">
+          <pre><code>./scripts/koi-serve.sh restart
+# http://127.0.0.1:8080
+# API: http://127.0.0.1:8010/docs</code></pre>
+        </div>
+      </li>
+    </ol>
+
+    <h2>Миграция со старого layout</h2>
+    <p>
+      Материалы исследования уже локально, но не в <code>tree/</code>: лежат в
+      <code>&lt;репо&gt;/koi-structure/</code> или в
+      <code>&lt;репо&gt;/.koi-sync-worktree/</code>. Code-репо и движок уже рядом.
+    </p>
+    <ol class="steps">
+      <li>
+        <strong>Проверить, что CLI видит migrate</strong>
+        <div class="example">
+          <pre><code>cd ReseachOS
+python -m koi.projects.install_cli status
+# у нужного &lt;репо&gt; case: migrate_to_tree</code></pre>
+        </div>
+      </li>
+      <li>
+        <strong>Перенести в tree/</strong>
+        <div class="example">
+          <pre><code>python -m koi.projects.install_cli migrate &lt;репо&gt;
+# то же, что install — кейс определится сам
+./scripts/koi-serve.sh restart</code></pre>
+        </div>
+        <p>
+          Старый checkout в code-репо можно удалить после проверки, что
+          <code>tree/&lt;репо&gt;/koi-structure/project.md</code> на месте и проект
+          виден в UI. На code-ветке пути остаются в <code>.gitignore</code>.
+        </p>
+      </li>
+    </ol>
+
+    <div class="callout">
+      <p>
+        Дальше синхронизация: кнопка Sync в UI или
+        <code>python -m koi.projects.sync_cli pull|push --project-id &lt;id&gt;</code>.
+        Если дерева гипотез ещё нет вообще — путь
+        <a href="with-code.html">«впервые подключаю свой код»</a> (промпт агенту).
+      </p>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-primary" href="../skills/koi-project-sync.html">Синхронизация</a>
+      <a class="btn btn-ghost" href="../airi.html#start">Другие пути</a>
+    </div>
+  </main>
+
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="../js/site.js?v=5"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

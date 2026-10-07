@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Чат из интерфейса · ResearcherOS</title>
+  <meta name="description" content="Ответить на вопрос из панели ResearcherOS: сначала база выводов, при необходимости — отчёты." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Чат из интерфейса</h1>
+    <p class="skill-id">koi-agent-chat</p>
+    <div class="article__meta">
+      <span class="chip">Вопрос из панели «Спросить агента»</span>
+    </div>
+    <p class="article__lead">Ответить на вопрос из панели ResearcherOS: сначала база выводов, при необходимости — отчёты.</p>
+
+    <h2>Что делает</h2>
+    <p>Забирает вопрос из очереди интерфейса. Если он хорошо совпадает с уже записанными выводами — отвечает быстро. Иначе читает нужные отчёты и кладёт ответ так, чтобы он появился в панели чата. Режим работы настраивается: постоянный Inbox-чат, хуки редактора или фоновый ключ API.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы вопросы к проекту задавались из интерфейса ResearcherOS и получали ответ из уже накопленных выводов и отчётов, а не терялись в обычном чате без связи с картой исследования.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>В панели «Спросить агента» появился новый вопрос</li>
+      <li>При старте сессии в очереди есть необработанные вопросы</li>
+      <li>Нужен ответ с опорой на базу выводов, а не на догадку</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Попросите проверить очередь вопросов из интерфейса и ответить по этому сценарию. Для быстрого режима настройте Inbox-чат или хуки по инструкции в документации агентного чата.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Проверь очередь вопросов из интерфейса и ответь
+на необработанные по сценарию чата ResearcherOS.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — развилка по наличию готового вывода. Сначала проверка базы ответов; чтение отчётов — только если готового совпадения нет. Ответ всегда возвращается в очередь, чтобы панель чата его показала.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart TD
+  A[Вопрос из интерфейса] --> B{Есть готовый вывод?}
+  B -->|да| C[Быстрый ответ]
+  B -->|нет| D[Прочитать отчёты]
+  D --> E[Ответ в очередь]
+  E --> F[Показать в панели чата]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-agent-chat">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

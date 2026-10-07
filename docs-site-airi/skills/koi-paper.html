@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Статья → PDF · ResearcherOS</title>
+  <meta name="description" content="Из очереди статей собрать черновик по проекту и положить PDF в репозиторий." />
+
+
+<link rel="stylesheet" href="../css/airi-page.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-detail">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — на главную">
+        ResearcherOS
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills" aria-current="page">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main class="article">
+    <a class="back-link" href="../airi.html#skills">← Skills</a>
+    <h1 class="article__title">Статья → PDF</h1>
+    <p class="skill-id">koi-paper</p>
+    <div class="article__meta">
+      <span class="chip">«Сгенерировать статью»</span>
+    </div>
+    <p class="article__lead">Из очереди статей собрать черновик по проекту и положить PDF в репозиторий.</p>
+
+    <h2>Что делает</h2>
+    <p>Берёт задачу из очереди статей, сразу помечает её принятой, собирает контекст по дереву и отчётам проекта, пишет черновик статьи и собирает PDF в репозитории. Затем закрывает задачу, чтобы статус в интерфейсе обновился.</p>
+
+    <h2>Зачем</h2>
+    <p>Чтобы из уже накопленного графа исследования можно было получить черновик статьи без ручной сборки всех кусков по папкам.</p>
+
+    <h2>Когда вызывать</h2>
+    <ul class="skill-scenarios">
+      <li>В интерфейсе нажали «Сгенерировать статью»</li>
+      <li>В очереди статей есть необработанная задача</li>
+      <li>Постоянный чат Paper Inbox получил сигнал о новой статье</li>
+    </ul>
+
+    <h2>Как вызвать</h2>
+    <p>Попросите проверить очередь статей и обработать задачу до PDF и закрытия. Держите отдельный чат Paper Inbox, если пользуетесь сигналами из интерфейса.</p>
+    <div class="example">
+      <p>Пример фразы AI-помощнику в редакторе:</p>
+      <pre><code>Проверь очередь статей и обработай задачу:
+принять → собрать контекст → черновик → PDF → закрыть.</code></pre>
+    </div>
+
+    <h2>Схема работы</h2>
+    <p class="diagram-caption">Схема — конвейер от очереди до файла PDF. Принятие в начале нужно, чтобы интерфейс показал «агент работает»; закрытие в конце — чтобы задача не висела в ожидании.</p>
+    <div class="graph">
+      <pre class="mermaid">
+flowchart LR
+  A[Очередь статей] --> B[Принять задачу]
+  B --> C[Собрать контекст проекта]
+  C --> D[Черновик статьи]
+  D --> E[PDF в проекте]
+  E --> F[Закрыть задачу]
+      </pre>
+    </div>
+
+    <div class="article__actions">
+      <a class="btn btn-ghost" href="https://github.com/CognitiveAISystems/ResearcherOS/tree/main/agents/skills/koi-paper">Исходник на GitHub</a>
+      <a class="btn btn-primary" href="../airi.html#skills">К списку Skills</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>ResearcherOS · code / hub</span>
+      <a href="https://github.com/CognitiveAISystems/ResearcherOS">CognitiveAISystems/ResearcherOS</a>
+    </div>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="../js/site.js?v=20261006-white-labels"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

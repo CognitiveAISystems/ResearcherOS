@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Монитор прогона · ResearcherOS Features</title>
+  <meta name="description" content="Live-монитор running-карточек: графики, логи, live_note, API и скиллы." />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-docs">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
+        <span class="brand__name">ResearcherOS</span>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Документация">
+      <p class="docs-sidebar__label">Документация</p>
+      <nav class="docs-sidebar__nav">
+        <p class="docs-sidebar__group">Платформа</p>
+        <a href="index.html">Обзор</a>
+        <p class="docs-sidebar__group">Локальные фичи</p>
+        <a href="research-tree.html">Дерево</a>
+        <a href="kanban.html">Канбан</a>
+        <a href="monitor.html" aria-current="page">Монитор</a>
+        <div class="docs-sidebar__toc">
+          <p class="docs-sidebar__toc-label">На этой странице</p>
+          <a href="#how-it-works">Как работает</a>
+          <a href="#ui">Интерфейс</a>
+          <a href="#skills">Скиллы</a>
+          <a href="#tech">Техника</a>
+        </div>
+        <a href="knowledge.html">Знания</a>
+        <a href="chat.html">Чат</a>
+        <a href="related-work.html">Литература</a>
+        <a href="paper.html">Статья</a>
+        <a href="widgets.html">Виджеты</a>
+        <p class="docs-sidebar__group">Справка</p>
+        <a href="full_schema.html?embed=1" target="_blank" rel="noopener">Схема архитектуры</a>
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <article id="features-content" class="features-md" data-md="content/monitor.md" data-rendered="true">
+<h1>Монитор прогона</h1>
+<p class="lead">Окно «эксперименты в работе»: графики, хвост лога, короткий комментарий агента и статус карточек в колонке «в работе». Данные подтягиваются с диска по путям из карточки или отчёта — без отдельного стрима с кластера.</p>
+
+<div class="media-slot" data-filled="true"><img src="media/monitor-hero.png" alt="Слот для картинки или видео" loading="lazy"></div>
+
+<h2>Как работает</h2>
+<p>Монитор показывает карточки канбана в колонке <code>running</code>, у которых заданы подсказки живого просмотра (или уже есть свежие файлы). Подсказки — строки в описании карточки или в отчёте:</p>
+<pre><code class="language-text">live_log: projectcode/runs/train.log
+metrics_dir: projectcode/runs/plots
+live_note: эпоха 3, loss 0.38
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Подсказка</th>
+<th>Что открывает</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>live_log:</code></td>
+<td>хвост текстового лога (до сотен килобайт / ограниченное число строк)</td>
+</tr>
+<tr>
+<td><code>metrics_dir:</code></td>
+<td>картинки из каталога (png/jpg/…), с приоритетом известных имён вроде <code>dashboard.png</code></td>
+</tr>
+<tr>
+<td><code>live_note:</code></td>
+<td>одна строка «что сейчас происходит» в панели комментария</td>
+</tr>
+</tbody>
+</table>
+<p>Пути относительные к репозиторию проекта (и при необходимости к соседней папке-родителю). Сервер читает файлы локально и отдаёт снимок по HTTP; клиент опрашивает примерно раз в три секунды.</p>
+<p>Карточка остаётся в мониторе, пока она в <code>running</code> и есть подсказки или признаки активности (лог/картинки обновлялись недавно, или есть непустой <code>live_note</code>). Закреплённая карточка (ту, с которой открыли окно) не выкидывается, пока модальное окно открыто.</p>
+<p>Монитор не двигает колонки и не пишет отчёт — только читает. Колонки и §3 отчёта ведут сценарии выполнения карточки.</p>
+<h2>Как человек работает в интерфейсе</h2>
+<ol>
+<li>Откройте канбан метода. У карточки в <code>running</code> (и при наличии подсказок) — кнопка «Live монитор» (иконка глаза).</li>
+<li>Откроется модальное окно «Эксперименты в работе»: сверху вкладки карточек (если несколько в работе, в т.ч. из разных проектов лаборатории), справа/слева навигация разделов.</li>
+<li>Разделы:
+   - <strong>Графики</strong> — сетка изображений из <code>metrics_dir</code>; клик увеличивает;
+   - <strong>Коммент модели</strong> — текст <code>live_note</code>;
+   - <strong>Логи</strong> — хвост <code>live_log</code>, прокрутка к концу;
+   - <strong>Статус</strong> — колонка, подзадачи из чеклиста, флаги «настроено / файл есть», время опроса.</li>
+<li>Переключение вкладок карточек не закрывает окно; статусная строка показывает, когда снимок обновился.</li>
+<li>На карте лаборатории у методов с прогонами может быть наложение статуса активности (кто крутит карточки в «в работе») — соседний сигнал к тому же состоянию канбана, не замена монитору.</li>
+</ol>
+<p>В Hub тот же API живого снимка доступен в режиме только чтения (если смонтированы пути); запись подсказок — локально.</p>
+<h2>Какие сценарии для агента подключаются</h2>
+<table>
+<thead>
+<tr>
+<th>Сценарий (skill)</th>
+<th>Роль относительно монитора</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>koi-execute-card</code></td>
+<td>При старте пишет <code>live_log</code> / <code>metrics_dir</code> / <code>live_note</code>; на вехах обновляет note и галочки §3. Без этих строк монитор пустой.</td>
+</tr>
+<tr>
+<td><code>koi-card-autoresearch</code></td>
+<td>Долгий прогон: исследователь держит пульс и <code>live_note</code>, менеджер заранее проектирует live-вид; дебаггер смотрит лог по <code>live_log</code>.</td>
+</tr>
+<tr>
+<td><code>koi-grill-experiment</code></td>
+<td>На этапе постановки фиксирует, куда пойдут логи и графики (чтобы потом было что указать в подсказках).</td>
+</tr>
+</tbody>
+</table>
+<p>Отдельного скилла «только монитор» нет: это экран над файлами, которые агент обязан обновлять во время <code>running</code>.</p>
+<h2>Как устроено технически</h2>
+<h3>Подсказки и снимок</h3>
+<p>Парсинг строк: <code>koi/projects/live_artifacts.py</code> (<code>parse_live_hints</code>, <code>build_live_snapshot</code>, <code>is_live_active</code>, хвост лога, список картинок, разбор <code>- [ ]</code> / <code>- [x]</code>). Активность по умолчанию — обновления за последние 30 минут (или running + настроенные пути).</p>
+<p>Опционально рядом по стилю: строка <code>compute_cost:</code> (учёт GPU/wall) — <code>koi/projects/compute_cost.py</code>; в панелях монитора это не главный раздел.</p>
+<h3>API</h3>
+<ul>
+<li><code>GET …/boards/{board}/cards/{card}/live?tail_lines=…</code> — снимок одной карточки;</li>
+<li><code>GET …/projects/{id}/kanban/live-monitor</code> — список кандидатов для монитора;</li>
+<li><code>GET …/projects/{id}/live/file?path=…</code> — отдать файл (картинка) из разрешённых корней.</li>
+</ul>
+<p>Клиент: <code>web/card-live.js</code> (опрос, вкладки, панели), вызовы в <code>web/api.js</code>, кнопка на карточке и сиды running из лаборатории в <code>web/app.js</code>. Разметка окна: <code>#card-live-modal</code> в <code>web/index.html</code>.</p>
+<h3>Ограничения</h3>
+<ul>
+<li>Нет push с remote GPU: агент или ваш пайплайн должен писать лог/png на диск, видимый локальному ResearcherOS (или синхронизировать туда).</li>
+<li>Пути вне репо и родителя репо отклоняются.</li>
+<li>Лимиты: размер хвоста лога, число строк, число картинок (см. константы в <code>live_artifacts.py</code>).</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="kanban.html">Канбан экспериментов</a></li>
+<li><a href="research-tree.html">Исследовательское дерево</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+<li><a href="knowledge.html">База знаний</a></li>
+</ul>
+<p class="callout">Текст: <code>content/monitor.md</code>. Медиа: <code>media/monitor-hero.*</code>.</p>
+      </article>
+    </main>
+  </div>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>

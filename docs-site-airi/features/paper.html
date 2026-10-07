@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PaperDraft · ResearcherOS Features</title>
+  <meta name="description" content="PaperDraft: LaTeX, PDF, proposals, Yjs/WebRTC, koi-paper Inbox." />
+
+
+<link rel="stylesheet" href="css/features.css?v=8" />
+  <link rel="stylesheet" href="../css/airi-docs.css" />
+  <link rel="stylesheet" href="../css/airi-theme.css?v=20261006-arrows" />
+<link rel="stylesheet" href="../css/image-viewer.css?v=1" />
+</head>
+<body class="page-docs">
+  <header class="site-header site-header--detail">
+    <div class="site-header__inner">
+      <a class="brand" href="../airi.html" aria-label="ResearcherOS — главная">
+        <span class="brand__name">ResearcherOS</span>
+      </a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="../airi.html#about">О проекте</a>
+        <a href="../airi.html#versions">Версии</a>
+        <a href="../airi.html#start">Как начать</a>
+        <a href="../airi.html#skills">Навыки</a>
+        <a href="../airi.html#lessons">Уроки</a>
+        <a href="https://github.com/CognitiveAISystems/ResearcherOS">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Документация">
+      <p class="docs-sidebar__label">Документация</p>
+      <nav class="docs-sidebar__nav">
+        <p class="docs-sidebar__group">Платформа</p>
+        <a href="index.html">Обзор</a>
+        <p class="docs-sidebar__group">Локальные фичи</p>
+        <a href="research-tree.html">Дерево</a>
+        <a href="kanban.html">Канбан</a>
+        <a href="monitor.html">Монитор</a>
+        <a href="knowledge.html">Знания</a>
+        <a href="chat.html">Чат</a>
+        <a href="related-work.html">Литература</a>
+        <a href="paper.html" aria-current="page">Статья</a>
+        <div class="docs-sidebar__toc">
+          <p class="docs-sidebar__toc-label">На этой странице</p>
+          <a href="#how-it-works">Как работает</a>
+          <a href="#ui">Интерфейс</a>
+          <a href="#skills">Скиллы</a>
+          <a href="#tech">Техника</a>
+        </div>
+        <a href="widgets.html">Виджеты</a>
+        <p class="docs-sidebar__group">Справка</p>
+        <a href="full_schema.html?embed=1" target="_blank" rel="noopener">Схема архитектуры</a>
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <article id="features-content" class="features-md" data-md="content/paper.md" data-rendered="true">
+<h1>PaperDraft</h1>
+<p class="lead">Черновик научной статьи в проекте: LaTeX и PDF в <code>paper/&lt;slug&gt;/</code>, генерация из контекста исследования, предложения правок от агента с ревью человека, совместное редактирование по Yjs/WebRTC. Долговременная копия — коммиты Git.</p>
+
+<div class="media-slot" data-filled="true"><img src="media/paper-hero.png" alt="Слот для картинки или видео" loading="lazy"></div>
+
+<h2>Как работает</h2>
+<p>Кнопка <strong>PaperDraft</strong> на панели workspace открывает модальное окно статьи. Внутри:</p>
+<ul>
+<li>список статей проекта (вкладки / slug);</li>
+<li>редактор LaTeX (тело или полный файл — по текущей схеме UI);</li>
+<li>превью / сборка PDF;</li>
+<li>генерация или перегенерация из очереди Paper Inbox;</li>
+<li>статус совместного редактирования;</li>
+<li>предложения правок от агента: агент предлагает правки с подсветкой изменений, человек принимает или отклоняет по фрагментам;</li>
+<li>комментарии;</li>
+<li>выгрузка версии в Git (push чекпоинта).</li>
+</ul>
+<p>Генерация: задача в <code>.run/paper-queue.json</code> → агент по <code>koi-paper</code> пишет английский LaTeX из дерева, <code>research.json</code>, отчётов и figures → <code>answer</code> собирает <code>main.tex</code> и PDF. Без выдуманных путей к картинкам — только из списка в промпте.</p>
+<p>Совместная работа: документ в браузере — CRDT (Yjs); обмен между инстансами — WebRTC (до ~5 человек); signaling только для SDP/ICE (и relay, если DataChannel не открылся). Пиры с разным Git <code>HEAD</code> не синхронизируют текст. Realtime <strong>не</strong> создаёт коммиты.</p>
+<p>Правило продукта: предложения агента по тексту статьи остаются на проверке человека — агент (и ассистент в IDE) не должен сам принимать предложение в основной текст от имени пользователя.</p>
+<h2>Как человек работает в интерфейсе</h2>
+<ol>
+<li>Выберите проект → <strong>PaperDraft</strong> в доке.</li>
+<li>Первый раз для Paper Inbox: скопировать bootstrap → чат <strong>ResearchOS Paper Inbox</strong> → «Inbox готов» (в модалке статьи).</li>
+<li><strong>Сгенерировать статью</strong> / перегенерировать — статус «Агент работает», затем появление tex/PDF.</li>
+<li>Правите LaTeX в поле; <strong>Сохранить</strong> пишет на диск; <strong>Собрать PDF</strong> запускает компиляцию.</li>
+<li>Если пришло предложение правок — в превью сегменты; принять или отклонить фрагмент. Пока предложение активно, поле tex может быть только для чтения.</li>
+<li>Комментарии — кнопка добавления в панели статьи.</li>
+<li>Статус коллаба показывает пиров / ошибки signaling. Для двух машин — одинаковые <code>KOI_COLLAB_*</code> в <code>.env</code>.</li>
+<li><strong>Push версии</strong> — зафиксировать рукопись в Git, когда нужна долгая точка сохранения.</li>
+</ol>
+<h2>Какие сценарии для агента подключаются</h2>
+<table>
+<thead>
+<tr>
+<th>Сценарий (skill)</th>
+<th>Роль</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>koi-paper</code></td>
+<td>Очередь UI: claim → context → LaTeX → answer (PDF).</td>
+</tr>
+<tr>
+<td>Paper Inbox</td>
+<td><code>koi.paper.inbox_cli</code>, wake <code>PAPER_WAKE</code>.</td>
+</tr>
+<tr>
+<td>Контекст проекта</td>
+<td>Дерево, инсайты, отчёты, figures — уже в промпте context; отдельно «читать всё подряд» не нужно.</td>
+</tr>
+<tr>
+<td>(коллаб)</td>
+<td>Клиент <code>paper-collab.js</code> / <code>paper-webrtc.js</code>; сервер signaling в <code>koi/paper/collaboration/</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">python -m koi.paper.cli pending
+python -m koi.paper.cli claim &lt;queue_id&gt;
+python -m koi.paper.cli context &lt;queue_id&gt;
+python -m koi.paper.cli answer &lt;queue_id&gt; -f paper-body.txt
+python -m koi.paper.inbox_cli watch
+</code></pre>
+<h2>Как устроено технически</h2>
+<h3>Файлы</h3>
+<p>Обычно <code>koi-structure/paper/&lt;slug&gt;/</code> — <code>main.tex</code>, PDF, ассеты, метаданные прогресса (в UI есть блок настроек прогресса). Точный layout slug’ов задаёт backend paper API.</p>
+<h3>Очередь и API</h3>
+<p>Пакет <code>koi/paper/</code> (cli, inbox, сборка). Клиент: <code>#paper-modal</code> в <code>web/index.html</code>, логика в <code>web/app.js</code> (состояние статьи, генерация, предложения правок, статус коллаба).</p>
+<h3>Realtime</h3>
+<ul>
+<li>Yjs-документ в браузере;</li>
+<li>полная сеть WebRTC между инстансами;</li>
+<li>комната от Git remote + slug + путь файла;</li>
+<li>несовместимый <code>HEAD</code> — без обмена апдейтами;</li>
+<li>переменные: <code>KOI_COLLAB_SIGNALING_URL</code>, <code>KOI_COLLAB_TOKEN_SECRET</code>, STUN/TURN.</li>
+</ul>
+<p>Чеклист и деплой signaling: <code>docs/paper-collaboration-spike-b.md</code>. На главной features-странице раздел «Синхронизация» описывает, как это стыкуется с Git.</p>
+<h3>Ограничения</h3>
+<ul>
+<li>Генерация на английском под шаблон конференции (NeurIPS-ориентированный поток в скилле).</li>
+<li>Без совместимой Git-базы коллаб между машинами не стартует.</li>
+<li>Предложение правок без явного принятия человеком в основной текст не должно попадать.</li>
+</ul>
+<h2>Связанные страницы</h2>
+<ul>
+<li><a href="related-work.html">Related Work</a></li>
+<li><a href="knowledge.html">База знаний</a></li>
+<li><a href="chat.html">Research Chat</a></li>
+<li><a href="index.html">Обзор архитектуры</a></li>
+<li><a href="widgets.html">Виджеты</a></li>
+</ul>
+<p class="callout">Текст: <code>content/paper.md</code>. Медиа: <code>media/paper-hero.*</code>.</p>
+      </article>
+    </main>
+  </div>
+  <script src="js/features.js?v=airi-static-1"></script>
+<script src="../js/image-viewer.js?v=1"></script>
+</body>
+</html>
