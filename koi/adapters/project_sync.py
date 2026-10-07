@@ -406,8 +406,10 @@ def _ensure_push_worktree(mount: ProjectMount) -> tuple[Path | None, str | None]
 
 
 def tree_preferred_worktree(mount: ProjectMount) -> Path:
-    from koi.adapters.project_mount import tree_worktree_for
+    from koi.adapters.project_mount import is_under_tree, tree_worktree_for
 
+    if is_under_tree(mount.koi_root):
+        return mount.koi_root.parent
     return tree_worktree_for(mount.repo_root.parent, mount.repo_root.name)
 
 

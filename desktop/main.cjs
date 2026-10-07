@@ -86,13 +86,17 @@ function createWindow(url) {
       if (/^https?:\/\//i.test(target)) shell.openExternal(target);
     }
   });
-  mainWindow.loadURL(serverUrl);
+  const initialUrl = process.argv.includes('--reconfigure')
+    ? `${serverUrl}/?onboarding=1`
+    : serverUrl;
+  mainWindow.loadURL(initialUrl);
 }
 
-ipcMain.handle('researchos:choose-workspace', async () => {
+ipcMain.handle('researchos:choose-directory', async (_event, purpose) => {
+  const selectingRepo = purpose === 'repository';
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Выберите папку для проектов ResearcherOS',
-    properties: ['openDirectory', 'createDirectory'],
+    title: selectingRepo ? 'Выберите Git-репозиторий с кодом' : 'Выберите папку для проектов ResearcherOS',
+    properties: selectingRepo ? ['openDirectory'] : ['openDirectory', 'createDirectory'],
   });
   return result.canceled ? null : result.filePaths[0];
 });

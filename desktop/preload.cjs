@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('researchOSDesktop', Object.freeze({
-  chooseWorkspace: () => ipcRenderer.invoke('researchos:choose-workspace'),
+  chooseDirectory: (purpose) => ipcRenderer.invoke('researchos:choose-directory', purpose),
 }));

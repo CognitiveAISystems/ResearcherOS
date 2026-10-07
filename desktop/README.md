@@ -2,8 +2,9 @@
 
 This first desktop build opens the existing ResearcherOS web UI in its own
 window. It starts a bundled Python server on free loopback ports and shuts the
-server down when the application exits. The first launch asks for a workspace
-folder; its path and other application settings live under
+server down when the application exits. The first launch walks through existing
+research projects or connecting a local Git repository, then asks where research
+data should live. Its path and other application settings live under
 `~/Library/Application Support/researchos-desktop/`, outside the research projects.
 
 ## Install from a clone
@@ -18,6 +19,13 @@ build paths; both must be validated on their respective hardware before release.
 
 Close the app, run `git pull`, and run the installer again to update. Project
 folders and `~/Library/Application Support/researchos-desktop/` are not replaced.
+The installer opens the app in reconfiguration mode, so the onboarding wizard
+appears again even when a workspace was previously selected. Users can keep
+the current workspace; their project files are never deleted by this flow.
+The macOS onboarding first accepts an existing `tree/` directory. Otherwise it
+attaches a repository with an existing research branch or creates the orphan
+`koi-project` branch for a new repository. Research worktrees are placed at
+`~/Documents/tree/<project>/koi-structure/`.
 The `.command` launcher saves a timestamped log under `.run/logs/` and keeps
 Terminal open on both success and failure. A running app blocks replacement.
 

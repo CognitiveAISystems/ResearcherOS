@@ -13,11 +13,25 @@ mkdir -p "$TOOLS"
 # mkdir is atomic: concurrent builds must not share node_modules or build output.
 LOCK="$TOOLS/install.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "Установщик уже запущен. Если предыдущий запуск был прерван, удалите $LOCK и повторите."
-  exit 1
+  # An interrupted Terminal session can leave the directory behind.
+  sleep 2
+  lock_pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
+  if [[ "$lock_pid" =~ ^[0-9]+$ ]] && kill -0 "$lock_pid" 2>/dev/null; then
+    echo "Установщик уже запущен (PID $lock_pid)."
+    exit 1
+  fi
+  rm -f "$LOCK/pid"
+  rmdir "$LOCK" 2>/dev/null || true
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    echo "Не удалось снять блокировку установщика: $LOCK"
+    exit 1
+  fi
 fi
+echo "$$" > "$LOCK/pid"
 TMP="$(mktemp -d "$TOOLS/download.XXXXXX")"
-trap 'rm -rf "$TMP"; rmdir "$LOCK"' EXIT
+cleanup() { rm -rf "$TMP"; rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null || true; }
+trap cleanup EXIT
+trap 'exit 130' INT HUP TERM
 fetch() { curl --fail --location --retry 3 --connect-timeout 30 --output "$2" "$1"; }
 verify() {
   local expected actual
@@ -64,6 +78,7 @@ cd "$ROOT/desktop"
 npm ci --no-audit --no-fund
 
 echo "[3/5] Сборка приложения с иконкой…"
+echo "Упаковка может несколько минут не показывать прогресс. Дождитесь шага [4/5] или сообщения об ошибке."
 export CSC_IDENTITY_AUTO_DISCOVERY=false
 npm run pack:mac -- --config.mac.identity=- --config.mac.hardenedRuntime=false
 APP="$ROOT/desktop/dist/mac/ResearcherOS.app"
@@ -107,3 +122,5 @@ else
 fi
 touch "$DEST"
 echo "ResearcherOS установлен: $DEST"
+echo "Открываю мастер настройки ResearcherOS…"
+open "$DEST" --args --reconfigure

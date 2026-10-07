@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ResearchOS</title>
   <script>
+    if (window.researchOSDesktop) document.documentElement.classList.add('desktop-onboarding-pending');
+  </script>
+  <script>
     (function () {
       var m = location.pathname.match(/^\/p\/([^/?#]+)/);
       if (!m) return;
@@ -809,7 +812,7 @@
   </dialog>
   <div id="koi-widgets-root" aria-live="polite"></div>
 
-  <script type="module" src="app.js?v=20261007grill-sticky"></script>
   <script type="module" src="desktop-onboarding.js"></script>
+  <script type="module" src="app.js?v=20261007grill-sticky"></script>
 </body>
 </html>

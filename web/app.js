@@ -11815,7 +11815,10 @@ async function init() {
   }
 }
 
-init().catch((err) => {
+Promise.resolve(window.researchOSOnboardingReady).then((ready) => {
+  if (ready === false) return;
+  return init();
+}).catch((err) => {
   console.error(err);
   setStatus(`Ошибка UI: ${err.message}`, true);
 });

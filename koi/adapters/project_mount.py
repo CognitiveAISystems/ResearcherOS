@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 KOI_STRUCTURE_DIR = "koi-structure"
 PROJECT_MD = "project.md"
 TREE_DIR = "tree"
+DESKTOP_TREE_DIR = ".tree"
 
 _SKIP_DIR_NAMES = frozenset(
     {
@@ -90,7 +91,7 @@ def _parse_programs(raw: Any) -> tuple[str, ...]:
 
 
 def is_under_tree(path: Path) -> bool:
-    return TREE_DIR in path.resolve().parts
+    return bool({TREE_DIR, DESKTOP_TREE_DIR} & set(path.resolve().parts))
 
 
 def tree_dir_for(scan_root: Path) -> Path:
@@ -277,9 +278,9 @@ def _iter_mount_candidates(scan_root: Path) -> list[tuple[Path, Path]]:
     pairs: list[tuple[Path, Path]] = []
     claimed_names: set[str] = set()
 
-    # 1) Canonical: folder named tree → next level */koi-structure
+    # 1) Research worktrees: canonical tree/ and macOS Documents/.tree/.
     for child in children:
-        if not child.is_dir() or child.name != TREE_DIR:
+        if not child.is_dir() or child.name not in {TREE_DIR, DESKTOP_TREE_DIR}:
             continue
         try:
             projects = sorted(child.iterdir())
