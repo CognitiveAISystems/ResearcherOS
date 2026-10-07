@@ -16,8 +16,21 @@
   "build": {
     "appId": "org.researchos.desktop",
     "productName": "ResearcherOS",
-    "files": ["main.cjs", "preload.cjs", "package.json"],
-    "extraResources": [{"from": "../dist/researchos-server", "to": "server"}],
-    "mac": {"target": "dir", "category": "public.app-category.productivity"}
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/researchos-server",
+        "to": "server"
+      }
+    ],
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns"
+    }
   }
 }

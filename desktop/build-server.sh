@@ -4,12 +4,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
-if [[ ! -x .venv/bin/pyinstaller ]]; then
+build_venv="${RESEARCHOS_BUILD_VENV:-$repo_root/.venv}"
+if [[ ! -x "$build_venv/bin/pyinstaller" ]]; then
   echo "Create .venv and install requirements.txt plus pyinstaller before building." >&2
   exit 1
 fi
 
-.venv/bin/pyinstaller \
+"$build_venv/bin/pyinstaller" \
   --noconfirm --clean --onedir \
   --name researchos-server \
   --distpath dist \
