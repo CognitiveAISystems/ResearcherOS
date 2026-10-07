@@ -123,4 +123,7 @@ fi
 touch "$DEST"
 echo "ResearcherOS установлен: $DEST"
 echo "Открываю мастер настройки ResearcherOS…"
-open "$DEST" --args --reconfigure
+USER_DATA="$HOME/Library/Application Support/researchos-desktop"
+mkdir -p "$USER_DATA"
+touch "$USER_DATA/.show-onboarding"
+env -u ELECTRON_RUN_AS_NODE open -n "$DEST"

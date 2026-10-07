@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from api.deps import get_project as require_project
@@ -162,7 +162,11 @@ def post_card(project_id: str, board_id: str, body: CreateCardBody) -> dict:
 
 @router.patch("/projects/{project_id}/boards/{board_id}/cards/{card_id}")
 def patch_card(
-    project_id: str, board_id: str, card_id: str, body: UpdateCardBody
+    project_id: str,
+    board_id: str,
+    card_id: str,
+    body: UpdateCardBody,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     try:
         project = project_commands.update_card(
@@ -182,6 +186,10 @@ def patch_card(
         raise HTTPException(404, str(e)) from e
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+    if body.column_id == "done":
+        from koi.projects.done_research_auto import kick_recent
+
+        background_tasks.add_task(kick_recent)
     return project_to_client(project)
 
 

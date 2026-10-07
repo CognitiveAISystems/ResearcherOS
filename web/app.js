@@ -7986,6 +7986,7 @@ const RQ_DISCOVERY_READ_KEY = "koi-rq-discoveries-read";
 
 let rqDiscoveryFeed = [];
 let rqBellPanelOpen = false;
+const rqDiscoverySessionStartedAt = Date.now();
 
 function loadSeenRqDiscoveryKeys() {
   try {
@@ -8221,7 +8222,14 @@ async function refreshProjectsForDiscoveries(discoveries) {
 async function checkPendingRqDiscoveries() {
   try {
     const data = await KoiApi.getRqDiscoveries();
-    const discoveries = data?.discoveries || [];
+    let discoveries = data?.discoveries || [];
+    if (!discoveries.length) {
+      const feed = await KoiApi.getRqDiscoveriesFeed();
+      discoveries = filterUnseenRqDiscoveries(feed?.items || []).filter(
+        (item) =>
+          new Date(item.discovered_at || 0).getTime() >= rqDiscoverySessionStartedAt
+      );
+    }
     if (!discoveries.length) return;
     await presentRqDiscoveries(discoveries);
     await refreshProjectsForDiscoveries(discoveries);

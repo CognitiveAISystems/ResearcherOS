@@ -48,6 +48,9 @@ def _startup() -> None:
 
     load_env_file()
     start_project_discovery_watch()
+    from koi.projects.done_research_auto import kick_recent
+
+    kick_recent()
 
 
 @app.on_event("shutdown")

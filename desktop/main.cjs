@@ -86,7 +86,10 @@ function createWindow(url) {
       if (/^https?:\/\//i.test(target)) shell.openExternal(target);
     }
   });
-  const initialUrl = process.argv.includes('--reconfigure')
+  const onboardingFlag = path.join(app.getPath('userData'), '.show-onboarding');
+  const showOnboarding = fs.existsSync(onboardingFlag);
+  if (showOnboarding) fs.rmSync(onboardingFlag, { force: true });
+  const initialUrl = showOnboarding
     ? `${serverUrl}/?onboarding=1`
     : serverUrl;
   mainWindow.loadURL(initialUrl);
