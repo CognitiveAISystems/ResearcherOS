@@ -55,19 +55,48 @@ def _any_backend_available() -> bool:
     )
 
 
-def _run_local_agent(prompt: str, item_id: str) -> tuple[str | None, str | None]:
+def _cursor_print_command(agent_bin, *, mode: str | None, force: bool, model: str | None = None) -> list[str]:
+    command = [str(agent_bin), "--print", "--trust"]
+    if mode:
+        command.extend(["--mode", mode])
+    if force:
+        command.append("--force")
+    if model:
+        command.extend(["--model", model])
+    command.extend(["--output-format", "stream-json"])
+    return command
+
+
+def _note_chat(item_id: str, message: str) -> None:
+    if not item_id.startswith("aq-"):
+        return
+    record(item_id, message)
+
+
+def _run_local_agent(
+    prompt: str,
+    item_id: str,
+    *,
+    mode: str | None = "ask",
+    force: bool = False,
+    cwd=None,
+    timeout: int = 1800,
+    model: str | None = None,
+    fallback: bool = True,
+) -> tuple[str | None, str | None]:
     """Prefer the same Cursor CLI used by literature, without opening Terminal.app."""
+    workdir = cwd or _ws.agent_cwd()
     agent_bin = find_agent_bin()
     if agent_bin:
         process = subprocess.Popen(
-            [str(agent_bin), "--print", "--trust", "--mode", "ask", "--output-format", "stream-json"],
-            cwd=str(_ws.agent_cwd()),
+            _cursor_print_command(agent_bin, mode=mode, force=force, model=model),
+            cwd=str(workdir),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
         )
-        timer = threading.Timer(1800, process.kill)
+        timer = threading.Timer(timeout, process.kill)
         timer.start()
         answer = ""
         result_text = ""
@@ -86,11 +115,11 @@ def _run_local_agent(prompt: str, item_id: str) -> tuple[str | None, str | None]
                     message = "".join(part.get("text", "") for part in parts if part.get("type") == "text").strip()
                     if message:
                         answer = message
-                        record(item_id, f"Агент: {message[:500]}")
+                        _note_chat(item_id, f"Агент: {message[:500]}")
                 elif kind == "tool_call" and event.get("subtype") == "started":
                     calls = event.get("tool_call") or {}
                     name = next((key.removesuffix("ToolCall") for key in calls if key.endswith("ToolCall")), "tool")
-                    record(item_id, f"Агент использует инструмент: {name}.")
+                    _note_chat(item_id, f"Агент использует инструмент: {name}.")
                 elif kind == "result":
                     result_text = str(event.get("result") or "").strip()
             process.wait()
@@ -101,9 +130,13 @@ def _run_local_agent(prompt: str, item_id: str) -> tuple[str | None, str | None]
                 process.wait()
         if process.returncode == 0 and (answer or result_text):
             return answer or result_text, "Cursor CLI"
-        record(item_id, "Cursor CLI не вернул ответ; пробую другой локальный агент.")
+        _note_chat(item_id, "Cursor CLI не вернул ответ; пробую другой локальный агент.")
+        if not fallback:
+            return None, None
+    if agent_bin and not fallback:
+        return None, None
     for backend in ("codex", "claude"):
-        text, name = run_agent(prompt, cwd=_ws.agent_cwd(), backend=backend)
+        text, name = run_agent(prompt, cwd=workdir, backend=backend, timeout=timeout, allow_edits=force)
         if text:
             return text, name
     return None, None

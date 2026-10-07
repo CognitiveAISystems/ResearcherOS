@@ -12,7 +12,7 @@ import {
   computeCostChipHtml,
   mergeComputeCost,
 } from "./compute-cost.js";
-import { KoiApi } from "./api.js?v=20260902a";
+import { KoiApi } from "./api.js?v=20261007b";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
 import {
   refreshInlineLoaderHints,
@@ -8903,6 +8903,7 @@ const PAPER_COMMENT_ICONS = {
   alert: `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`,
   save: `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>`,
   cancel: `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`,
+  agent: `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2.5 13.8 8 19.5 9.2 13.8 10.5 12 16 10.2 10.5 4.5 9.2 10.2 8z"/></svg>`,
 };
 
 function showPaperToast(message, { variant = "success" } = {}) {
@@ -8996,6 +8997,8 @@ const paperState = {
   texText: "",
   texLines: [],
   comments: [],
+  commentAgents: {},
+  commentAgentTimers: {},
   selectedLineStart: null,
   selectedLineEnd: null,
   selectedCharStart: null,
@@ -9057,6 +9060,7 @@ const paperCollab = createPaperCollabClient({
   onProposal: (proposal, resolution = "") => {
     paperState.collabProposal = proposal || null;
     paperState.collabProposalResolving = false;
+    if (proposal) setPaperCommentsOpen(true);
     renderPaperCollabProposal();
     updatePaperSaveUi();
     if (!proposal && resolution === "accepted") {
@@ -9164,7 +9168,7 @@ function renderPaperCollabProposal() {
 async function resolvePaperCollabProposalHunk(hunkId, resolution) {
   const proposal = paperState.collabProposal;
   const paper = activePaperEntry();
-  if (!proposal || !paper || paperState.collabProposalResolving) return;
+  if (!proposal || !paper || paperState.collabProposalResolving || paperCommentAgentBusy()) return;
   paperState.collabProposalResolving = `${proposal.id}:${hunkId}`;
   renderPaperCollabProposal();
   try {
@@ -10055,6 +10059,26 @@ function paperCommentClipboardText(projectId, slug, comment) {
   return lines.join("\n");
 }
 
+function setPaperPaneFlag(flag, open) {
+  const split = paperEls().split;
+  if (!split) return;
+  split.classList.toggle(flag, open);
+  const btn = document.getElementById(
+    flag === "is-git-open" ? "btn-paper-git" : "btn-paper-comments"
+  );
+  btn?.setAttribute("aria-pressed", open ? "true" : "false");
+}
+
+function togglePaperPane(flag) {
+  const split = paperEls().split;
+  if (!split) return;
+  setPaperPaneFlag(flag, !split.classList.contains(flag));
+}
+
+function setPaperCommentsOpen(open) {
+  setPaperPaneFlag("is-comments-open", open);
+}
+
 function setPaperViewerVisible({ split = false, empty = false } = {}) {
   const els = paperEls();
   els.empty?.classList.toggle("hidden", !empty);
@@ -10113,10 +10137,8 @@ function parseTexareaSelection(ta) {
 
 function syncPaperTextSelection() {
   const ta = paperEls().texInput;
-  if (!ta || document.activeElement !== ta) {
-    applyPaperTextSelection(null);
-    return;
-  }
+  // Keep the selection while focus moves to the comment button.
+  if (!ta || document.activeElement !== ta) return;
   applyPaperTextSelection(parseTexareaSelection(ta));
 }
 
@@ -10874,8 +10896,10 @@ function paperCommentAnchorHtml(comment, { expanded = false, stale = false } = {
             .join("")}
         </div>
         <textarea class="paper-comment-thread-reply" rows="2" placeholder="Ответ…" data-paper-thread-reply="${escapeHtml(comment.id)}"></textarea>
+        ${paperState.commentAgents[comment.id] === "running" ? `<p class="paper-comment-card__agent">Агент правит…</p>` : ""}
         <footer class="paper-comment-card__actions paper-comment-card__actions--compact">
           ${paperCommentBtn("Ответить", PAPER_COMMENT_ICONS.send, `data-paper-thread-send="${escapeHtml(comment.id)}"`, "paper-comment-btn--primary", { iconOnly: true })}
+          ${paperCommentBtn("Попросить агента", PAPER_COMMENT_ICONS.agent, `data-paper-thread-agent="${escapeHtml(comment.id)}"${paperState.commentAgents[comment.id] === "running" ? " disabled" : ""}`, "", { iconOnly: true })}
           ${paperCommentBtn("Копировать", PAPER_COMMENT_ICONS.copy, `data-paper-thread-copy="${escapeHtml(comment.id)}"`, "", { iconOnly: true })}
           ${paperCommentBtn(comment.resolved ? "Открыть снова" : "Resolve", comment.resolved ? PAPER_COMMENT_ICONS.reopen : PAPER_COMMENT_ICONS.resolve, `data-paper-thread-resolve="${escapeHtml(comment.id)}"`, "", { iconOnly: true })}
           ${paperCommentBtn("Удалить", PAPER_COMMENT_ICONS.delete, `data-paper-thread-delete="${escapeHtml(comment.id)}"`, "paper-comment-btn--danger", { iconOnly: true })}
@@ -10908,6 +10932,35 @@ function paperCommentComposeHtml() {
   </div>`;
 }
 
+function paperCommentAgentBusy() {
+  return Object.values(paperState.commentAgents || {}).some(
+    (status) => status === "running" || status === "finishing"
+  );
+}
+
+function paperProposalDiffHtml(hunk) {
+  const before = String(hunk.old_text || "").replace(/\n$/, "");
+  const after = String(hunk.new_text || "").replace(/\n$/, "");
+  let prefix = 0;
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (
+    suffix < before.length - prefix &&
+    suffix < after.length - prefix &&
+    before[before.length - suffix - 1] === after[after.length - suffix - 1]
+  ) suffix += 1;
+  const highlight = (value, kind) => {
+    const changed = value.slice(prefix, value.length - suffix);
+    return `${escapeHtml(value.slice(0, prefix))}<mark class="paper-proposal-change paper-proposal-change--${kind}">${escapeHtml(changed)}</mark>${escapeHtml(value.slice(value.length - suffix))}`;
+  };
+  return `<div class="paper-proposal-diff" aria-label="Предлагаемая правка">
+    <div class="paper-proposal-diff__row"><span class="paper-proposal-diff__label">Было</span><div class="paper-proposal-diff__text">${highlight(before, "before")}</div></div>
+    <div class="paper-proposal-diff__row"><span class="paper-proposal-diff__label">Стало</span><div class="paper-proposal-diff__text">${highlight(after, "after")}</div></div>
+  </div>`;
+}
+
 function paperProposalAnchorHtml(proposal, hunk) {
   const start = Math.max(1, Number(hunk.line_start) || 1);
   const end = Math.max(start, Number(hunk.line_end) || start);
@@ -10915,11 +10968,18 @@ function paperProposalAnchorHtml(proposal, hunk) {
   const source =
     proposal.source === "cursor-buffer"
       ? "Cursor · не сохранено"
-      : proposal.source === "agent"
+      : proposal.source === "agent" || proposal.source === "paper-comment-agent"
         ? "Агент"
         : "main.tex";
   const resolving =
     paperState.collabProposalResolving === `${proposal.id}:${hunk.id}`;
+  const agentBusy = paperCommentAgentBusy();
+  const actions = agentBusy
+    ? `<p class="paper-comment-card__agent">Агент правит…</p>`
+    : `<div class="paper-comment-card__actions paper-comment-card__actions--compact">
+          <button type="button" class="paper-comment-btn" data-proposal-hunk-reject="${escapeHtml(hunk.id)}" ${resolving ? "disabled" : ""}>Отклонить</button>
+          <button type="button" class="paper-comment-btn paper-comment-btn--primary" data-proposal-hunk-accept="${escapeHtml(hunk.id)}" ${resolving ? "disabled" : ""}>Принять</button>
+        </div>`;
   return `<div class="paper-proposal-anchor" data-proposal-id="${escapeHtml(proposal.id)}" data-hunk-id="${escapeHtml(hunk.id)}" data-line-no="${start}" data-line-top="${lineTop}" style="top:${lineTop}px">
     <article class="paper-comment-card">
       <div class="paper-comment-card__rail" aria-hidden="true"></div>
@@ -10928,11 +10988,8 @@ function paperProposalAnchorHtml(proposal, hunk) {
           <span class="paper-comment-card__badge">L${start}${end !== start ? `–${end}` : ""}</span>
           <span class="paper-comment-card__status is-stale">${escapeHtml(source)}</span>
         </header>
-        <pre class="paper-proposal-diff">${escapeHtml(hunk.diff || "")}</pre>
-        <div class="paper-comment-card__actions paper-comment-card__actions--compact">
-          <button type="button" class="paper-comment-btn" data-proposal-hunk-reject="${escapeHtml(hunk.id)}" ${resolving ? "disabled" : ""}>Отклонить</button>
-          <button type="button" class="paper-comment-btn paper-comment-btn--primary" data-proposal-hunk-accept="${escapeHtml(hunk.id)}" ${resolving ? "disabled" : ""}>Принять</button>
-        </div>
+        ${paperProposalDiffHtml(hunk)}
+        ${actions}
       </div>
     </article>
   </div>`;
@@ -10984,6 +11041,12 @@ function bindPaperCommentMarginEvents() {
       void copyPaperCommentLink(btn.getAttribute("data-paper-thread-copy"), btn);
     });
   });
+  margin.querySelectorAll("[data-paper-thread-agent]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void askPaperCommentAgent(btn.getAttribute("data-paper-thread-agent"));
+    });
+  });
   margin.querySelectorAll("[data-paper-thread-send]").forEach((btn) => {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -11022,7 +11085,10 @@ async function renderPaperCommentMargin() {
   const comments = [...(paperState.comments || [])].sort(
     (a, b) => commentLinesFor(a).start - commentLinesFor(b).start
   );
-  if (els.commentsCount) els.commentsCount.textContent = String(comments.length);
+  if (els.commentsCount) {
+    els.commentsCount.textContent = String(comments.length);
+    els.commentsCount.classList.toggle("is-zero", comments.length === 0);
+  }
 
   const composeDraft = paperState.composeOpen
     ? els.commentMargin?.querySelector("[data-paper-compose-body]")?.value || ""
@@ -11072,6 +11138,7 @@ function scrollPaperToComment(commentId) {
 
 function focusPaperComment(commentId, { scroll = true } = {}) {
   if (!commentId) return;
+  setPaperCommentsOpen(true);
   paperState.composeOpen = false;
   paperState.activeCommentId = commentId;
   const comment = paperState.comments.find((item) => item.id === commentId);
@@ -11223,6 +11290,7 @@ async function copyPaperCommentLink(commentId, triggerBtn = null) {
 
 function openPaperCommentCompose() {
   if (!paperState.selectedLineStart) return;
+  setPaperCommentsOpen(true);
   paperState.composeOpen = true;
   paperState.activeCommentId = null;
   updatePaperSelectionUi();
@@ -11274,6 +11342,73 @@ async function savePaperComment() {
     void copyPaperCommentLink(paperState.activeCommentId);
   } catch (err) {
     if (els.status) els.status.textContent = `Не удалось сохранить комментарий: ${err.message}`;
+  }
+}
+
+function stopPaperCommentAgentPoll(commentId) {
+  const timer = paperState.commentAgentTimers[commentId];
+  if (timer) clearInterval(timer);
+  delete paperState.commentAgentTimers[commentId];
+}
+
+async function finishPaperCommentAgent(commentId, res) {
+  if (paperState.commentAgents[commentId] !== "running") return;
+  paperState.commentAgents[commentId] = "finishing";
+  stopPaperCommentAgentPoll(commentId);
+  const entry = activePaperEntry();
+  try {
+    if (entry) {
+      await loadPaperComments(entry.project_id, entry.slug);
+      if (res?.status === "done") {
+        const proposalEvent = await KoiApi.getPaperCollabProposal(entry.project_id, entry.slug);
+        paperState.collabProposal = proposalEvent?.proposal || null;
+        if (paperState.collabProposal) setPaperCommentsOpen(true);
+        renderPaperCollabProposal();
+        updatePaperSaveUi();
+      }
+    }
+    if (entry) focusPaperComment(commentId, { scroll: false });
+  } catch (err) {
+    showPaperToast(err.message || "Не удалось обновить статью", { variant: "error" });
+  } finally {
+    delete paperState.commentAgents[commentId];
+    void renderPaperCommentMargin();
+  }
+  if (res?.status === "done") showPaperToast("Агент ответил и предложил правку");
+  else showPaperToast(res?.error || "Агент не смог поправить", { variant: "error" });
+}
+
+function pollPaperCommentAgent(commentId) {
+  stopPaperCommentAgentPoll(commentId);
+  paperState.commentAgentTimers[commentId] = setInterval(() => {
+    const entry = activePaperEntry();
+    if (!entry) {
+      stopPaperCommentAgentPoll(commentId);
+      return;
+    }
+    void KoiApi.paperCommentAgentStatus(entry.project_id, entry.slug, commentId)
+      .then((res) => {
+        if (!res || res.status === "running") return;
+        void finishPaperCommentAgent(commentId, res);
+      })
+      .catch(() => {});
+  }, 3000);
+}
+
+async function askPaperCommentAgent(commentId) {
+  const entry = activePaperEntry();
+  const comment = paperState.comments.find((item) => item.id === commentId);
+  if (!entry || !comment || paperState.commentAgents[commentId] === "running") return;
+  paperState.commentAgents[commentId] = "running";
+  void renderPaperCommentMargin();
+  try {
+    await KoiApi.askPaperCommentAgent(entry.project_id, entry.slug, commentId, {});
+    showPaperToast("Агент правит по комментарию");
+    pollPaperCommentAgent(commentId);
+  } catch (err) {
+    delete paperState.commentAgents[commentId];
+    await renderPaperCommentMargin();
+    showPaperToast(err.message || "Не удалось запустить агента", { variant: "error" });
   }
 }
 
@@ -11546,6 +11681,12 @@ function initPaper() {
   });
   document.getElementById("btn-paper-comment-add")?.addEventListener("click", () => {
     openPaperCommentCompose();
+  });
+  document.getElementById("btn-paper-git")?.addEventListener("click", () => {
+    togglePaperPane("is-git-open");
+  });
+  document.getElementById("btn-paper-comments")?.addEventListener("click", () => {
+    togglePaperPane("is-comments-open");
   });
   document.getElementById("btn-paper-tex-save")?.addEventListener("click", () => {
     void savePaperTex();

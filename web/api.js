@@ -511,6 +511,13 @@ export const KoiApi = {
     api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}`, {
       method: "DELETE",
     }),
+  askPaperCommentAgent: (projectId, slug, commentId, payload) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}/agent`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  paperCommentAgentStatus: (projectId, slug, commentId) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/comments/${encodeURIComponent(commentId)}/agent`),
   getKnowledge: (projectId) => apiText(`/projects/${projectId}/knowledge`),
   getKnowledgeSummary: (projectId) => api(`/projects/${projectId}/knowledge/summary`),
   getKnowledgeLog: (projectId) => apiText(`/projects/${projectId}/knowledge/log`),

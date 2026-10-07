@@ -355,6 +355,37 @@ def test_session_agent_from_old_revision_does_not_clobber(tmp_path: Path) -> Non
     session.close()
 
 
+def test_rejected_snapshot_does_not_return_or_clobber_edits(tmp_path: Path) -> None:
+    tex = tmp_path / "main.tex"
+    original = "policies for interactive tasks,\n"
+    replacement = "policies for sequential decision making,\n"
+    tex.write_text(original, encoding="utf-8")
+    session = CollabSession(
+        "demo", "emnlp", tex, watch=False, debounce_s=10, proposal_root=tmp_path / "proposals"
+    )
+    session.import_external(replacement, source="external")
+    assert session.proposal is not None
+    session.reject_proposal(session.proposal.id)
+    assert session.proposal is None
+    assert session.document.to_string() == original
+
+    tex.write_text(replacement, encoding="utf-8")
+    again = session.import_external(replacement, source="external")
+    assert again.changed is False
+    assert session.proposal is None
+    assert session.document.to_string() == original
+    assert tex.read_text(encoding="utf-8") == original
+
+    edited = "policies for interactive tasks, with a definition.\n"
+    session.apply_client_text("alice", edited, 0)
+    tex.write_text(replacement, encoding="utf-8")
+    session.import_external(replacement, source="external")
+    assert session.document.to_string() == edited
+    assert tex.read_text(encoding="utf-8") == edited
+    assert session.proposal is None
+    session.close()
+
+
 def test_proposal_survives_session_restart(tmp_path: Path) -> None:
     tex = tmp_path / "main.tex"
     tex.write_text("live\n", encoding="utf-8")

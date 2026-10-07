@@ -285,6 +285,7 @@ class CollabSession:
             self.bridge.materialize()
         self.peers: dict[str, Peer] = {}
         self.agent_tasks: dict[str, AgentTask] = {}
+        self.rejected_hashes: set[str] = set()
         self.editor_commands: list[dict[str, Any]] = []
         self.conflict: CollabConflict | None = None
         self.op_log: list[tuple[int, TextSpan]] = []
@@ -708,6 +709,21 @@ class CollabSession:
                     pass
                 result = MergeResult(ok=True, text=current, changed=False)
                 resolved = cleared
+            elif content_hash(incoming) in self.rejected_hashes:
+                # The reviewer already refused this exact disk snapshot.
+                # Put their text back on disk so the next agent write of the
+                # same bytes does not open the proposal again.
+                if (
+                    self.proposal is not None
+                    and content_hash(self.proposal.candidate) == content_hash(incoming)
+                ):
+                    self.proposal = None
+                    self._delete_proposal()
+                    resolved = True
+                else:
+                    resolved = False
+                self.bridge.materialize()
+                result = MergeResult(ok=True, text=current, changed=False)
             elif (
                 self.proposal is not None
                 and content_hash(incoming) == content_hash(self.proposal.candidate)
@@ -789,6 +805,7 @@ class CollabSession:
             proposal = self.proposal
             if proposal is None or proposal.id != proposal_id:
                 raise KeyError("proposal is no longer current")
+            self.rejected_hashes.add(content_hash(proposal.candidate))
             self.proposal = None
             if proposal.source == "cursor-buffer":
                 self._queue_editor_command(self.document.to_string())
@@ -842,6 +859,7 @@ class CollabSession:
                     origin="proposal",
                 )
             else:
+                self.rejected_hashes.add(content_hash(proposal.candidate))
                 current_lines = proposal.current.splitlines(keepends=True)
                 candidate_lines = proposal.candidate.splitlines(keepends=True)
                 proposal.candidate = "".join(

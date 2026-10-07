@@ -35,6 +35,29 @@ def test_local_agent_uses_cursor_print_mode(monkeypatch, tmp_path: Path) -> None
     assert calls[1] == "Вопрос"
 
 
+def test_local_agent_write_mode_omits_ask(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(runner, "find_agent_bin", lambda: Path("/usr/bin/agent"))
+    monkeypatch.setattr(runner, "_ws", SimpleNamespace(agent_cwd=lambda: tmp_path))
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(
+            returncode=0,
+            stdin=SimpleNamespace(write=lambda text: None, close=lambda: None),
+            stdout=[json.dumps({"type": "result", "result": "done"})],
+            wait=lambda: None,
+            poll=lambda: 0,
+            kill=lambda: None,
+        )
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_run)
+    assert runner._run_local_agent("Paper review", "proj/slug/c_1", mode=None, force=True)[0] == "done"
+    assert calls[0] == [
+        "/usr/bin/agent", "--print", "--trust", "--force", "--output-format", "stream-json"
+    ]
+
+
 def test_local_process_records_progress_and_answer(monkeypatch) -> None:
     item = {"id": "aq-abc123", "project_id": "demo", "question": "Что известно?", "status": "pending"}
     events = []

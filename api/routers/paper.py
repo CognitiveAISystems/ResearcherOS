@@ -32,11 +32,14 @@ from koi.paper.versions import (
     paper_tex_at_commit,
     pull_paper_versions,
 )
+from koi.paper.comment_agent import launch as launch_comment_agent
+from koi.paper.comment_agent import status as comment_agent_status
 from koi.paper.comments import (
     add_reply,
     apply_comment_merge,
     create_comment,
     delete_comment,
+    extract_anchor_text,
     load_comments,
     set_comment_resolved,
 )
@@ -65,6 +68,10 @@ class PaperCommentReplyBody(BaseModel):
 
 class PaperCommentResolveBody(BaseModel):
     resolved: bool = True
+
+
+class PaperCommentAgentBody(BaseModel):
+    pass
 
 
 class PaperCommentsMergeBody(BaseModel):
@@ -428,6 +435,60 @@ def patch_project_paper_comment(
     except KeyError as e:
         raise HTTPException(404, "Comment not found") from e
     return {"ok": True, "comment": comment}
+
+
+@router.post("/projects/{project_id}/papers/{slug}/comments/{comment_id}/agent")
+def post_project_paper_comment_agent(
+    project_id: str,
+    slug: str,
+    comment_id: str,
+    body: PaperCommentAgentBody,
+) -> dict:
+    _, slot_dir = _require_paper_slot(project_id, slug)
+    store = load_comments(slot_dir)
+    comment = next((item for item in store.get("comments") or [] if item.get("id") == comment_id), None)
+    if comment is None:
+        raise HTTPException(404, "Comment not found")
+    anchor = comment.get("anchor") or {}
+    thread = comment.get("thread") or []
+    note = thread[0].get("body", "").strip() if thread else ""
+    line = max(1, int(anchor.get("line_start") or 1))
+    end_line = max(line, int(anchor.get("line_end") or line))
+    char_start = anchor.get("char_start")
+    char_end = anchor.get("char_end")
+    tex_lines = (slot_dir / "main.tex").read_text(encoding="utf-8").splitlines()
+    selected = anchor.get("selected_text") or extract_anchor_text(
+        "\n".join(tex_lines), line, end_line, char_start, char_end
+    )
+    location = f"строки {line}–{end_line}" if end_line != line else f"строка {line}"
+    if line == end_line and char_start is not None and char_end is not None:
+        location += f", символы {char_start + 1}–{char_end}"
+    excerpt = "\n".join(
+        f"{index + 1}: {tex_lines[index]}"
+        for index in range(max(0, line - 6), min(len(tex_lines), end_line + 5))
+    )
+    prompt = (
+        f"Замечание к main.tex ({location}): {note}\n"
+        f"Выделенный текст, к которому относится замечание:\n{selected}\n\n"
+        f"Строки статьи вокруг выделения:\n{excerpt}\n\n"
+        "Исправь прежде всего выделенный текст в указанном месте. Меняй соседние фразы "
+        "только если без этого правка не будет связной. Если выделенный текст уже изменился, "
+        "не правь другое место наугад, а сообщи об этом. Работай только с main.tex; "
+        "не читай всю статью и не запускай внешние инструменты. Кратко объясни предложенную правку."
+    )
+    try:
+        job = launch_comment_agent(project_id, slug, comment_id, prompt, slot_dir)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True, **job}
+
+
+@router.get("/projects/{project_id}/papers/{slug}/comments/{comment_id}/agent")
+def get_project_paper_comment_agent(project_id: str, slug: str, comment_id: str) -> dict:
+    _require_paper_slot(project_id, slug)
+    return comment_agent_status(project_id, slug, comment_id)
 
 
 @router.delete("/projects/{project_id}/papers/{slug}/comments/{comment_id}")
