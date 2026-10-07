@@ -1,3 +1,4 @@
+import { ReportEditor, EMPTY_REPORT, applySetup } from "./report-editor.js";
 import {
   bindCardLiveModal,
   bindLiveInspectButtons,
@@ -13,10 +14,7 @@ import {
 } from "./compute-cost.js";
 import { KoiApi } from "./api.js?v=20260902a";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
-import { destroyKanbanDagView, fitKanbanDagView, refreshKanbanDagView } from "./kanban-dag.js?v=20260715a";
-import { clearKanbanMilestones, clearMilestoneBoardFilter, refreshKanbanMilestones } from "./milestones.js?v=20260807e";
 import {
-  koiLoaderTypingHtml,
   refreshInlineLoaderHints,
   clearInlineLoaderHints,
   showKoiLoader,
@@ -25,7 +23,7 @@ import {
 import { MindmapCamera } from "./lab-canvas.js?v=20260803b";
 import { renderMarkdown } from "./markdown.js";
 import { initImageLightbox } from "./image-lightbox.js?v=20260703b";
-import { initWidgets } from "./widgets-loader.js?v=20260723a";
+import { initWidgets } from "./widgets-loader.js?v=20261007widgets";
 import {
   METHOD_ACTIVITY_H,
   bindMethodActivityZoomPreview,
@@ -137,9 +135,11 @@ function applyHubReadonlyChrome() {
   document.body.classList.add("hub-readonly");
   for (const id of [
     "btn-sync",
-    "btn-settings",
+    "btn-theme",
+    "btn-widgets",
     "btn-new-project",
     "btn-agent-chat",
+    "btn-agent-chat-welcome",
     "btn-knowledge",
     "btn-related-work",
     "btn-paper",
@@ -152,7 +152,6 @@ function applyHubReadonlyChrome() {
   document.querySelector(".workspace-dock")?.classList.add("hidden");
   document.querySelector(".projects-sidebar__footer")?.classList.add("hidden");
   document.querySelector(".agent-chat-panel")?.classList.add("hidden");
-  document.querySelector(".topbar-nav a[href='tour.html']")?.classList.add("hidden");
   const toolbar = document.querySelector(".toolbar");
   if (toolbar) {
     let wrap = document.getElementById("hub-toolbar-links");
@@ -311,8 +310,7 @@ let state = {
   kanbanNodeId: null,
   kanbanDisabledTagFilters: [],
   kanbanDateFilter: "all",
-  kanbanMilestoneFilterId: null,
-  kanbanMilestoneCardIds: null,
+  kanbanFocus: false,
   questionsNodeId: null,
   reportCardId: null,
   reportBoardId: null,
@@ -766,14 +764,7 @@ function applyRunningCardAuthorTitles(root, projectId) {
     el.classList.add("kanban-card--running-active");
   });
 
-  root.querySelectorAll(".kanban-dag-card--running[data-node-id]").forEach((el) => {
-    el.querySelector(":scope > .kanban-dag-card__author")?.remove();
-    const cardId = el.dataset.nodeId;
-    const author = authors[cardId] || fallbackAuthor;
-    if (!author) return;
-    const card = cardsById.get(cardId);
-    el.title = formatRunningAuthorHint(author, card?.title || cardId);
-  });
+
 }
 
 /** @type {HTMLElement | null} */
@@ -1048,8 +1039,7 @@ function wireCardWorkersHover(root, project) {
 
   root.addEventListener("pointerover", (e) => {
     const card =
-      e.target.closest?.(".kanban-card[data-card-id]") ||
-      e.target.closest?.(".kanban-dag-card[data-node-id]");
+      e.target.closest?.(".kanban-card[data-card-id]");
     if (!card || !root.contains(card)) return;
     const proj = resolveProject();
     if (!proj) return;
@@ -1062,8 +1052,7 @@ function wireCardWorkersHover(root, project) {
 
   root.addEventListener("pointerout", (e) => {
     const card =
-      e.target.closest?.(".kanban-card[data-card-id]") ||
-      e.target.closest?.(".kanban-dag-card[data-node-id]");
+      e.target.closest?.(".kanban-card[data-card-id]");
     if (!card) return;
     const related = e.relatedTarget;
     if (related && (card.contains(related) || ensureNodeWorkersPanel().contains(related))) return;
@@ -1209,7 +1198,6 @@ function refreshMethodActivityAuthors(projectId) {
       syncMethodActivity(below, node, board, context);
     });
   applyRunningCardAuthorTitles(document.getElementById("kanban-board"), projectId);
-  applyRunningCardAuthorTitles(document.getElementById("kanban-dag-view"), projectId);
   syncLabActivityOverlay();
 }
 
@@ -2976,40 +2964,260 @@ function hideModal(id) {
   if (id === "node-modal") resetNodeModal();
   if (id === "method-questions-modal") resetMethodQuestionsEditMode();
   if (id === "kanban-modal") {
-    state.kanbanMilestoneFilterId = null;
-    state.kanbanMilestoneCardIds = null;
-    clearKanbanMilestones();
   }
   if (!document.querySelector(".modal:not(.hidden)")) {
     document.body.classList.remove("modal-open");
   }
 }
 
-let reportPreviewTimer;
-
-function setReportViewMode(mode) {
-  const isWrite = mode === "write";
-  const writeBtn = document.getElementById("card-report-mode-write");
-  const viewBtn = document.getElementById("card-report-mode-view");
-  const writePane = document.getElementById("card-report-pane-write");
-  const viewPane = document.getElementById("card-report-pane-view");
-  if (!writeBtn || !viewBtn || !writePane || !viewPane) return;
-
-  writeBtn.classList.toggle("is-active", isWrite);
-  viewBtn.classList.toggle("is-active", !isWrite);
-  writeBtn.setAttribute("aria-selected", String(isWrite));
-  viewBtn.setAttribute("aria-selected", String(!isWrite));
-  writePane.classList.toggle("is-active", isWrite);
-  viewPane.classList.toggle("is-active", !isWrite);
-  writePane.hidden = !isWrite;
-  viewPane.hidden = isWrite;
-
-  if (isWrite) {
-    document.getElementById("card-report-editor")?.focus();
-  } else {
-    updateReportPreview();
+let reportBlockEditor;
+let reportLinkedReadOnly = false;
+let reportAutoSaveTimer;
+let reportInterviewTimer;
+let reportInterviewItems = [];
+let reportInterviewSignature = "";
+let reportInterviewSending = false;
+function reportIdentity() { return `${reportWriteProjectId()}/${state.reportBoardId}/${state.reportCardId}`; }
+function getReportBlockEditor() {
+  if (!reportBlockEditor) reportBlockEditor = new ReportEditor(document.getElementById("card-report-preview"), {
+    render: source => renderMarkdown(source, { assetUrlFn: reportAssetUrlFn, collapsibleSections: false }),
+    hookLinks: hookReportLinks,
+    readOnly: isHubMode(),
+    onChange: content => {
+      document.getElementById("card-report-editor").value = content;
+      state.reportDirty = true;
+      document.getElementById("report-save-status").textContent = "Есть изменения";
+      syncReportComputeCostBadge(content);
+      clearTimeout(reportAutoSaveTimer);
+      reportAutoSaveTimer = setTimeout(() => void saveCardReport(), 900);
+    },
+    onAgent: idea => void openReportInterview(idea),
+    onPaste: async (event, input, commit) => {
+      const file = clipboardImageFile(event.clipboardData);
+      if (!file) return;
+      event.preventDefault();
+      const identity = reportIdentity();
+      const start = input.selectionStart, end = input.selectionEnd, original = input.value;
+      try {
+        const data = await KoiApi.uploadReportAsset(reportWriteProjectId(), state.reportBoardId, state.reportCardId, file);
+        if (identity !== reportIdentity()) return;
+        if (!input.isConnected || input.value !== original) {
+          setStatus("Изображение загружено. Повторите вставку в выбранный блок.", true); return;
+        }
+        const path = data.markdown_path || `assets/${data.filename}`;
+        input.setRangeText(`\n![image](${path})\n`, start, end, "end"); commit();
+      } catch (err) { setStatus(err.message, true); }
+    },
+  });
+  return reportBlockEditor;
+}
+function reportChatCommand(text) {
+  const grill = text.match(/^\/grill_me\b\s*([\s\S]*)$/i);
+  if (grill) return { purpose: "grill_me", question: grill[1].trim() || "Пройди постановку этой задачи." };
+  const report = text.match(/^\/make_report\b\s*([\s\S]*)$/i);
+  if (report) return { purpose: "make_report", question: report[1].trim() || "Собери отчёт по этой задаче." };
+  return { purpose: "question", question: text };
+}
+function reportGrillDraft(idea = "") {
+  const seed = String(idea || "").trim();
+  if (/^\/(?:grill_me|make_report)\b/i.test(seed)) return seed;
+  return seed ? `/grill_me ${seed}` : "/grill_me ";
+}
+function formatReportGrillAnswer(text) {
+  const src = text || "";
+  const re = /```question\s*\n([\s\S]*?)```/gi;
+  let html = "";
+  let last = 0;
+  let match;
+  while ((match = re.exec(src)) !== null) {
+    html += formatAgentChatReply(src.slice(last, match.index));
+    html += `<aside class="agent-chat-ask"><p class="agent-chat-ask__label">Вопрос</p><div>${formatAgentChatReply(match[1].trim())}</div></aside>`;
+    last = match.index + match[0].length;
+  }
+  return html + formatAgentChatReply(src.slice(last));
+}
+function reportInterviewStuck(item) {
+  if (!item || item.status === "answered") return false;
+  const started = Date.parse(item.processing_at || item.enqueued_at || "");
+  const age = Number.isFinite(started) ? Date.now() - started : 0;
+  if (isInboxAgentMode() && !isChatInboxWatcherRunning() && item.status !== "processing" && age > 15000) return true;
+  return age > 3 * 60 * 1000;
+}
+function setReportInterviewStatus(message = "", kind = "") {
+  const status = document.getElementById("report-interview-status");
+  if (!status) return;
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle("is-error", kind === "error");
+}
+function showReportInterviewTab(tab) {
+  const activity = tab === "activity";
+  document.getElementById("report-interview-log")?.classList.toggle("hidden", activity);
+  document.getElementById("report-interview-activity")?.classList.toggle("hidden", !activity);
+  for (const name of ["chat", "activity"]) {
+    const button = document.getElementById(`report-interview-tab-${name}`);
+    button?.classList.toggle("is-active", name === tab);
+    button?.setAttribute("aria-selected", String(name === tab));
+  }
+  if (activity) void refreshReportInterviewActivity();
+}
+function stopReportInterview() {
+  clearInterval(reportInterviewTimer);
+  reportInterviewTimer = null;
+  reportInterviewItems = [];
+  reportInterviewSignature = "";
+  reportInterviewSending = false;
+  document.querySelector(".report-agent-menu")?.remove();
+  document.getElementById("report-interview-input").value = "";
+  document.getElementById("report-interview-status").textContent = "";
+  document.getElementById("report-interview-status").hidden = true;
+}
+async function openReportInterview(idea = "") {
+  if (isHubMode() || reportLinkedReadOnly) return;
+  const identity = reportIdentity();
+  const panel = document.getElementById("report-interview");
+  panel.hidden = false;
+  await refreshReportInterview();
+  if (identity !== reportIdentity() || !state.reportCardId) return;
+  const input = document.getElementById("report-interview-input");
+  input.value = reportGrillDraft(idea);
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  if (!reportInterviewTimer) reportInterviewTimer = setInterval(refreshReportInterview, 2500);
+}
+async function refreshReportInterview() {
+  if (!state.reportCardId) return;
+  const identity = reportIdentity();
+  try {
+    const data = await KoiApi.listAgentChat(reportWriteProjectId(), state.reportBoardId, state.reportCardId);
+    if (identity !== reportIdentity()) return;
+    reportInterviewItems = data.items || [];
+    const signature = JSON.stringify(reportInterviewItems);
+    if (signature !== reportInterviewSignature) {
+      reportInterviewSignature = signature;
+      renderReportInterview();
+    }
+    if (!document.getElementById("report-interview-activity")?.classList.contains("hidden")) {
+      void refreshReportInterviewActivity();
+    }
+    const pending = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i));
+    document.querySelector("#report-interview-form button").disabled = pending || reportInterviewSending;
+    if (!reportInterviewSending && reportInterviewItems.some(reportInterviewStuck)) {
+      setReportInterviewStatus("Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.", "error");
+    }
+  } catch (err) {
+    if (identity === reportIdentity()) setReportInterviewStatus(`Не удалось загрузить интервью: ${err.message}`, "error");
   }
 }
+async function refreshReportInterviewActivity() {
+  const host = document.getElementById("report-interview-activity");
+  const pid = reportWriteProjectId();
+  if (!host || !pid || !state.reportCardId) return;
+  try {
+    const data = await KoiApi.listAgentChatActivity(pid, state.reportBoardId, state.reportCardId);
+    const ids = new Set(reportInterviewItems.map((item) => item.id));
+    const items = (data.items || []).filter((item) => ids.has(item.id) && item.events?.length);
+    host.innerHTML = items.length ? items.map((item) =>
+      `<section><h3>${escapeHtml(item.question)}</h3>${item.events.map((event) =>
+        `<p><time>${escapeHtml(formatAgentChatTime(event.at))}</time>${escapeHtml(event.message)}</p>`
+      ).join("")}</section>`
+    ).join("") : "Пока нет запусков агента для этой постановки.";
+  } catch {
+    host.textContent = "Не удалось загрузить журнал работы агента.";
+  }
+}
+function renderReportInterview() {
+  const log = document.getElementById("report-interview-log");
+  const nearBottom = agentChatLogNearBottom(log);
+  log.replaceChildren();
+  if (!reportInterviewItems.length) {
+    log.innerHTML = '<p class="agent-chat-empty">Начните с идеи. Агент изучит контекст задачи и поможет уточнить постановку.</p>';
+  }
+  for (const item of [...reportInterviewItems].reverse()) {
+    const pending = item.status !== "answered";
+    const isProcessing = item.status === "processing";
+    const article = document.createElement("article");
+    article.className = `agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}`;
+    const stuck = reportInterviewStuck(item);
+    const answerBody = item.purpose === "grill_me" || item.purpose === "report_grill"
+      ? formatReportGrillAnswer(item.answer || "")
+      : formatAgentChatReply(item.answer || "");
+    const answerHtml = item.status === "answered"
+      ? `<div class="agent-chat-reply${item.answer_kind === "warning" ? " agent-chat-reply--warning" : ""}">${answerBody}</div>`
+      : stuck
+        ? `<div class="agent-chat-reply agent-chat-reply--warning">Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.</div>`
+        : (isProcessing ? agentChatTypingHtml() : `<div class="agent-chat-reply agent-chat-reply--pending" role="status">${escapeHtml(agentChatPendingLabel(item))}</div>`);
+    article.innerHTML =
+      `<div class="agent-chat-q-row">` +
+      `<p class="agent-chat-q">${escapeHtml(item.question)}</p>` +
+      agentChatDeliveryHtml(item) +
+      `</div>` +
+      answerHtml +
+      `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>`;
+    if (item.proposal) {
+      const details = document.createElement("details");
+      details.className = "report-setup-proposal";
+      details.open = true;
+      const proposed = applySetup("", item.proposal);
+      details.innerHTML = `<summary>Предложение постановки</summary><div class="markdown-preview">${renderMarkdown(proposed)}</div>`;
+      const apply = document.createElement("button");
+      apply.className = "btn btn-primary";
+      apply.textContent = "Заполнить постановку";
+      apply.onclick = async () => {
+        const editor = document.getElementById("card-report-editor");
+        const before = editor.value;
+        if (before !== item.report_markdown && !window.confirm("Документ изменился после отправки сообщения. Заменить разделы «Цель», «Постановка эксперимента» и «Задачи» предложением агента? Остальные разделы сохранятся.")) return;
+        const after = applySetup(before, item.proposal);
+        editor.value = after;
+        getReportBlockEditor().setValue(after);
+        state.reportDirty = true;
+        if (await saveCardReport(true)) {
+          apply.textContent = "Применено"; apply.disabled = true;
+          const undo = document.createElement("button");
+          undo.className = "btn"; undo.textContent = "Отменить применение";
+          undo.onclick = async () => {
+            if (editor.value !== after) { setReportInterviewStatus("Документ уже изменён. Автоматическая отмена недоступна.", "error"); return; }
+            editor.value = before; getReportBlockEditor().setValue(before); state.reportDirty = true;
+            if (await saveCardReport(true)) { undo.remove(); apply.disabled = false; apply.textContent = "Заполнить постановку"; }
+          };
+          details.append(undo);
+        }
+      };
+      details.append(apply); article.append(details);
+    }
+    log.append(article);
+  }
+  if (nearBottom) log.scrollTop = log.scrollHeight;
+}
+async function sendReportInterview(event) {
+  event.preventDefault();
+  const live = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i));
+  if (reportInterviewSending || live) return;
+  const input = document.getElementById("report-interview-input");
+  const question = input.value.trim();
+  if (!question) return;
+  const identity = reportIdentity();
+  const button = document.querySelector("#report-interview-form button");
+  reportInterviewSending = true; button.disabled = true; setReportInterviewStatus("Отправляем вопрос…");
+  const command = reportChatCommand(question);
+  try {
+    for (const item of reportInterviewItems.filter(reportInterviewStuck)) {
+      await KoiApi.deleteAgentChatItem(item.id);
+    }
+    await KoiApi.sendAgentQuestion({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value });
+    if (identity !== reportIdentity()) return;
+    input.value = command.purpose === "grill_me" ? "/grill_me " : "";
+    input.setSelectionRange(input.value.length, input.value.length);
+    setReportInterviewStatus("");
+    await refreshReportInterview();
+  } catch (err) { if (identity === reportIdentity()) setReportInterviewStatus(err.message, "error"); }
+  finally {
+    if (identity === reportIdentity()) { reportInterviewSending = false; button.disabled = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i)); }
+  }
+}
+
+let reportPreviewTimer;
+
 
 function reportWriteProjectId() {
   return state.reportProjectId || primaryMemberProjectId() || state.project?.id;
@@ -3076,11 +3284,19 @@ function hookReportLinks(container) {
 
 async function openLinkedReportMarkdown(knowledgePath) {
   if (!state.project?.id) return;
+  if (await saveCardReport() === false) return;
   const editor = document.getElementById("card-report-editor");
   if (!editor) return;
   setStatus("Загрузка отчёта…");
   try {
     const content = await KoiApi.getKnowledgeFile(state.project.id, knowledgePath);
+    reportLinkedReadOnly = true;
+    getReportBlockEditor().readOnly = true;
+    document.getElementById("report-agent-open").hidden = true;
+    document.getElementById("report-agent-fab").hidden = true;
+    document.getElementById("card-report-save").hidden = true;
+    document.getElementById("report-interview").hidden = true;
+    document.getElementById("report-save-status").textContent = "Связанный документ · только чтение";
     editor.value = content;
     state.reportRelativePath = knowledgePath;
     state.reportDirty = false;
@@ -3096,8 +3312,7 @@ function updateReportPreview() {
   const preview = document.getElementById("card-report-preview");
   if (!preview) return;
   const content = document.getElementById("card-report-editor")?.value ?? "";
-  preview.innerHTML = renderMarkdown(content, { assetUrlFn: reportAssetUrlFn });
-  hookReportLinks(preview);
+  getReportBlockEditor().setValue(content);
   syncReportComputeCostBadge(content);
 }
 
@@ -3189,6 +3404,8 @@ function scheduleReportPreview() {
 
 function closeCardReport() {
   closeCardTagPopover();
+  clearTimeout(reportAutoSaveTimer);
+  stopReportInterview();
   hideModal("card-report-modal");
   state.reportCardId = null;
   state.reportBoardId = null;
@@ -3197,25 +3414,34 @@ function closeCardReport() {
   state.reportDirty = false;
 }
 
+let reportSaving = null;
 async function saveCardReport(force = false) {
-  if (!state.reportCardId || !state.reportBoardId || !state.project) return;
+  if (reportSaving) { await reportSaving; return saveCardReport(force); }
+  if (isHubMode() || reportLinkedReadOnly || !state.reportCardId || !state.reportBoardId || !state.project) return true;
+  if (!force && !state.reportDirty) return true;
+  clearTimeout(reportAutoSaveTimer);
   const editor = document.getElementById("card-report-editor");
-  if (!force && !state.reportDirty) return;
-  setStatus("Сохранение отчёта…");
-  try {
-    const data = await KoiApi.saveCardReport(
-      reportWriteProjectId(),
-      state.reportBoardId,
-      state.reportCardId,
-      editor.value
-    );
-    document.getElementById("card-report-filename").textContent =
-      data.relative_path;
-    state.reportDirty = false;
-    setStatus("Отчёт сохранён");
-  } catch (err) {
-    setStatus(err.message, true);
-  }
+  const content = editor.value;
+  const identity = reportIdentity();
+  const status = document.getElementById("report-save-status");
+  status.textContent = "Сохранение…";
+  reportSaving = (async () => {
+    try {
+      const data = await KoiApi.saveCardReport(reportWriteProjectId(), state.reportBoardId, state.reportCardId, content);
+      if (identity === reportIdentity()) {
+        document.getElementById("card-report-filename").textContent = data.relative_path;
+        state.reportDirty = editor.value !== content;
+        status.textContent = state.reportDirty ? "Есть изменения" : "Сохранено";
+      }
+      return true;
+    } catch (err) {
+      if (identity === reportIdentity()) status.textContent = `Не сохранено: ${err.message}`;
+      return false;
+    }
+  })();
+  const result = await reportSaving;
+  reportSaving = null;
+  return result;
 }
 
 async function openCardReport(card, board) {
@@ -3223,15 +3449,27 @@ async function openCardReport(card, board) {
     setStatus("Сначала выберите проект", true);
     return;
   }
+  stopReportInterview();
+  reportLinkedReadOnly = false;
+  getReportBlockEditor().readOnly = isHubMode();
+  document.getElementById("report-interview").hidden = true;
   state.reportCardId = card.id;
   state.reportBoardId = board.id;
   state.reportProjectId = boardWriteProjectId(board);
+  const identity = reportIdentity();
+  document.getElementById("report-agent-open").hidden = isHubMode();
+  document.getElementById("report-agent-fab").hidden = isHubMode();
+  document.getElementById("card-report-save").hidden = isHubMode();
   const editor = document.getElementById("card-report-editor");
   if (!editor) {
     setStatus("Модалка отчёта не найдена в DOM", true);
     return;
   }
   editor.value = "";
+  getReportBlockEditor().setValue("");
+  document.getElementById("card-report-preview").inert = true;
+  document.getElementById("report-agent-open").disabled = true;
+  document.getElementById("report-agent-fab").disabled = true;
   document.getElementById("card-report-card-title").textContent = card.title;
   renderCardReportTags(card);
   document.getElementById("card-report-filename").textContent = "…";
@@ -3244,6 +3482,7 @@ async function openCardReport(card, board) {
       board.id,
       card.id
     );
+    if (identity !== reportIdentity()) return;
     const content = typeof data?.content === "string" ? data.content : "";
     if (!content.trim()) {
       setStatus(
@@ -3253,20 +3492,22 @@ async function openCardReport(card, board) {
     } else {
       setStatus("");
     }
-    editor.value = content;
+    editor.value = content || EMPTY_REPORT;
     state.reportRelativePath = data.relative_path || null;
     const fnameEl = document.getElementById("card-report-filename");
     if (data.source === "run") {
       fnameEl.textContent = `${data.run_relative_path || data.relative_path} — рабочий отчёт (основание вердикта и инсайтов); сохранение создаст публичную версию в ${data.relative_path}`;
     } else if (data.source === "template") {
-      fnameEl.textContent = `${data.relative_path} — преднаполненный шаблон: заполните и сохраните`;
+      fnameEl.textContent = data.relative_path;
     } else {
       fnameEl.textContent = data.relative_path || "reports/";
     }
     state.reportDirty = false;
-    setReportViewMode(content.trim() ? "view" : "write");
     updateReportPreview();
-    if (!content.trim()) editor.focus();
+    document.getElementById("card-report-preview").inert = false;
+    document.getElementById("report-agent-open").disabled = false;
+    document.getElementById("report-agent-fab").disabled = false;
+    document.getElementById("report-save-status").textContent = data.source === "template" ? "Новый документ" : "Сохранено";
   } catch (err) {
     const msg = String(err?.message || err || "Не удалось загрузить отчёт");
     editor.value = "";
@@ -3608,6 +3849,7 @@ function syncKanbanDescClamp() {
 }
 
 function initKanbanModalChrome() {
+  document.getElementById("kanban-method-details")?.addEventListener("toggle", syncKanbanDescClamp);
   document.getElementById("kanban-desc-toggle")?.addEventListener("click", () => {
     const desc = document.getElementById("kanban-node-desc-display");
     const toggle = document.getElementById("kanban-desc-toggle");
@@ -3619,13 +3861,14 @@ function initKanbanModalChrome() {
     toggle.setAttribute("aria-expanded", expand ? "true" : "false");
     if (!expand) syncKanbanDescClamp();
   });
-  document.getElementById("kanban-hint-toggle")?.addEventListener("click", () => {
-    const hint = document.getElementById("kanban-modal-hint");
-    const btn = document.getElementById("kanban-hint-toggle");
-    if (!hint || !btn) return;
-    const show = hint.classList.toggle("hidden");
-    btn.classList.toggle("is-active", !show);
-    btn.setAttribute("aria-pressed", show ? "false" : "true");
+  document.getElementById("kanban-focus-toggle")?.addEventListener("click", () => {
+    state.kanbanFocus = !state.kanbanFocus;
+    const btn = document.getElementById("kanban-focus-toggle");
+    btn?.classList.toggle("is-active", state.kanbanFocus);
+    btn?.setAttribute("aria-pressed", state.kanbanFocus ? "true" : "false");
+    const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
+    const board = node?.board_id ? state.project.boards[node.board_id] : null;
+    if (board && node) renderActiveKanbanView(board, node);
   });
 }
 
@@ -4770,13 +5013,13 @@ function openMethodQuestionsModal(node) {
 }
 
 function openKanbanModal(node) {
+  document.getElementById("kanban-method-details").open = false;
   state.kanbanNodeId = node.id;
   const board = getBoardForNode(state.project, node);
   if (!board) return;
 
   state.kanbanDisabledTagFilters = loadKanbanDisabledTagFilters(state.project?.id, board.id);
   state.kanbanDateFilter = loadKanbanDateFilter(state.project?.id, board.id);
-  state.kanbanViewMode = state.kanbanViewMode || "board";
 
   document.getElementById("kanban-modal-type").textContent =
     TYPE_LABELS[node.node_type];
@@ -4786,227 +5029,17 @@ function openKanbanModal(node) {
     addBtnId: "btn-kanban-add-master-page",
   });
 
-  setKanbanViewMode(state.kanbanViewMode);
-  renderActiveKanbanView(board, node);
-  void refreshKanbanMilestones({
-    projectId: boardWriteProjectId(board) || state.project?.id,
-    node,
-    board,
-    readOnly: isHubMode(),
-    onStatus: (msg, isError = false) => setStatus(msg, isError),
-    onBoardFilterChange: (payload) => {
-      if (!payload) {
-        state.kanbanMilestoneFilterId = null;
-        state.kanbanMilestoneCardIds = null;
-      } else {
-        state.kanbanMilestoneFilterId = payload.milestoneId;
-        state.kanbanMilestoneCardIds = new Set(payload.cardIds || []);
-      }
-      const live =
-        state.project?.boards?.[board.id] ||
-        (node?.board_id ? state.project?.boards?.[node.board_id] : null) ||
-        board;
-      if (live) rerenderKanbanAfterFilters(live);
-    },
-  });
-  showModal("kanban-modal");
-}
-
-function setKanbanViewMode(mode) {
-  const boardTab = document.getElementById("kanban-tab-board");
-  const dagTab = document.getElementById("kanban-tab-dag");
-  const boardPane = document.getElementById("kanban-pane-board");
-  const dagPane = document.getElementById("kanban-pane-dag");
-  const tagFilter = document.getElementById("kanban-tag-filter");
-  const filtersBar = document.getElementById("kanban-board-filters");
   const hint = document.getElementById("kanban-modal-hint");
-  const modalPanel = document.querySelector(".modal-panel--kanban");
-  const isBoard = mode !== "dag";
-  state.kanbanViewMode = isBoard ? "board" : "dag";
-  modalPanel?.classList.toggle("is-dag-mode", !isBoard);
-  boardTab?.classList.toggle("is-active", isBoard);
-  dagTab?.classList.toggle("is-active", !isBoard);
-  boardTab?.setAttribute("aria-selected", isBoard ? "true" : "false");
-  dagTab?.setAttribute("aria-selected", isBoard ? "false" : "true");
-  boardPane?.classList.toggle("is-active", isBoard);
-  dagPane?.classList.toggle("is-active", !isBoard);
-  if (boardPane) boardPane.hidden = !isBoard;
-  if (dagPane) dagPane.hidden = isBoard;
-  if (isBoard) destroyKanbanDagView();
-  tagFilter?.classList.toggle("hidden", !tagFilter.childElementCount);
-  filtersBar?.classList.toggle("is-filtering", hasActiveKanbanFilters());
-  if (hint) {
-    hint.textContent = isHubMode()
-      ? "Только просмотр · ↗ — отчёт · фильтр · DAG — связи между карточками"
-      : isBoard
-        ? "⠿ — перетащить · булавка — закрепить сверху · + — новая карточка · двойной клик — правка · ↗ — отчёт"
-        : "DAG — → зажать на карточке, отпустить на цели · двойной клик на стрелке — удалить";
-  }
-}
-
-function getKanbanDagContext(board, node) {
-  const writeProjectId = boardWriteProjectId(board);
-  const boardId = board.id;
-  const liveBoard = () => state.project?.boards?.[boardId] || board;
-  const liveNode = () =>
-    state.project?.nodes?.find((n) => n.id === node?.id) || node;
-  if (isHubMode()) {
-    return {
-      node,
-      projectId: state.project?.id,
-      tagFilters: state.kanbanDisabledTagFilters || [],
-      cardMatchesFilter: cardMatchesKanbanFilters,
-      cardTagsHtml: (card) => cardTagsRowHtml(card.tags, { dag: true }),
-      onOpenReport: (card) => void openCardReport(card, liveBoard()),
-      readOnly: true,
-    };
-  }
-  const refreshDag = async () => {
-    state.project = await reloadProjectView();
-    syncLabProject(state.project);
-    const refreshedNode = liveNode();
-    const refreshedBoard = liveBoard();
-    if (refreshedBoard) {
-      const dagEl = document.getElementById("kanban-dag-view");
-      if (dagEl) refreshKanbanDagView(dagEl, refreshedBoard, getKanbanDagContext(refreshedBoard, refreshedNode));
-    }
-  };
-  return {
-    node,
-    projectId: writeProjectId || state.project?.id,
-    tagFilters: state.kanbanDisabledTagFilters || [],
-    cardMatchesFilter: cardMatchesKanbanFilters,
-    cardTagsHtml: (card) => cardTagsRowHtml(card.tags, { dag: true }),
-    onOpenReport: (card) => void openCardReport(card, liveBoard()),
-    onStatus: (msg, isError = false) => setStatus(msg, isError),
-    onRefresh: refreshDag,
-    onSuggestDag: async () => {
-      if (!writeProjectId) throw new Error("Не удалось определить проект");
-      return KoiApi.suggestBoardDag(writeProjectId, boardId, { apply: false });
-    },
-    onApplySuggestions: async (selected) => {
-      if (!selected?.length || !writeProjectId) return;
-      const byTo = new Map();
-      for (const item of selected) {
-        const toId = item.to_card_id;
-        if (!byTo.has(toId)) byTo.set(toId, []);
-        byTo.get(toId).push(item.from_card_id);
-      }
-      for (const [toId, fromIds] of byTo.entries()) {
-        const b = liveBoard();
-        const card = getBoardCard(b, toId);
-        if (!card) continue;
-        const deps = [...new Set([...(card.depends_on || []), ...fromIds])];
-        await persistCard(b, toId, { depends_on: deps }, { rerenderKanban: false });
-      }
-      await refreshDag();
-    },
-    onAddEdge: async (toCardId, fromCardId) => {
-      const b = liveBoard();
-      const writeProjectId = boardWriteProjectId(b);
-      if (!writeProjectId) {
-        setStatus("Не удалось определить проект для сохранения связи", true);
-        throw new Error("No write project id");
-      }
-      const card = getBoardCard(b, toCardId);
-      if (!card) {
-        setStatus("Целевая карточка не найдена", true);
-        throw new Error("Target card not found");
-      }
-      if ((card.depends_on || []).includes(fromCardId)) return;
-      const deps = [...new Set([...(card.depends_on || []), fromCardId])];
-      const updated = await persistCard(b, toCardId, { depends_on: deps }, { rerenderKanban: false });
-      if (!updated) {
-        setStatus("Ошибка сохранения связи в project.md", true);
-        throw new Error("Persist failed");
-      }
-      const dagEl = document.getElementById("kanban-dag-view");
-      if (dagEl && state.kanbanViewMode === "dag") {
-        refreshKanbanDagView(dagEl, liveBoard(), getKanbanDagContext(liveBoard(), liveNode()));
-      }
-    },
-    onRemoveEdge: async (toCardId, fromCardId) => {
-      const b = liveBoard();
-      const writeProjectId = boardWriteProjectId(b);
-      if (!writeProjectId) {
-        setStatus("Не удалось определить проект для удаления связи", true);
-        throw new Error("No write project id");
-      }
-      const card = getBoardCard(b, toCardId);
-      if (!card) {
-        setStatus("Целевая карточка не найдена", true);
-        throw new Error("Target card not found");
-      }
-      const deps = (card.depends_on || []).filter((d) => d !== fromCardId);
-      const updated = await persistCard(b, toCardId, { depends_on: deps }, { rerenderKanban: false });
-      if (!updated) {
-        setStatus("Не удалось удалить связь в project.md", true);
-        throw new Error("Persist failed");
-      }
-      const dagEl = document.getElementById("kanban-dag-view");
-      if (dagEl && state.kanbanViewMode === "dag") {
-        refreshKanbanDagView(dagEl, liveBoard(), getKanbanDagContext(liveBoard(), liveNode()));
-      }
-    },
-    onLinkCardToQuestion: async (cardId, rqId) => {
-      if (!node?.id) return;
-      const questions = (node.research_questions || []).map((q) =>
-        q.id === rqId ? { ...q, card_id: cardId } : q
-      );
-      await patchNodeFields(node.id, { research_questions: questions });
-      await refreshDag();
-    },
-    onUnlinkQuestion: async (rqId) => {
-      if (!node?.id) return;
-      const questions = (node.research_questions || []).map((q) =>
-        q.id === rqId ? { ...q, card_id: null } : q
-      );
-      await patchNodeFields(node.id, { research_questions: questions });
-      await refreshDag();
-    },
-    onClearAllLinks: async () => {
-      const b = liveBoard();
-      for (const card of b.cards || []) {
-        if (!(card.depends_on || []).length) continue;
-        await persistCard(b, card.id, { depends_on: [] }, { rerenderKanban: false });
-      }
-      await refreshDag();
-    },
-  };
-}
-
-function renderKanbanDagBoard(board, node) {
-  const dagEl = document.getElementById("kanban-dag-view");
-  if (!dagEl || !board) return;
-  refreshKanbanDagView(dagEl, board, getKanbanDagContext(board, node));
-  requestAnimationFrame(() => fitKanbanDagView());
-  if (state.project) wireCardWorkersHover(dagEl, state.project);
+  if (hint) hint.textContent = isHubMode()
+    ? "Только просмотр · ↗ — отчёт · фильтр"
+    : "⠿ — перетащить · булавка — закрепить сверху · + — новая карточка · двойной клик — правка · ↗ — отчёт";
+  renderActiveKanbanView(board, node);
+  showModal("kanban-modal");
 }
 
 function renderActiveKanbanView(board, node) {
   renderKanbanBoardFilters(state.project, board);
-  if (state.kanbanViewMode === "dag") {
-    renderKanbanDagBoard(board, node);
-    return;
-  }
   renderKanbanBoard(board);
-}
-
-function initKanbanViewTabs() {
-  const boardTab = document.getElementById("kanban-tab-board");
-  const dagTab = document.getElementById("kanban-tab-dag");
-  boardTab?.addEventListener("click", () => {
-    setKanbanViewMode("board");
-    const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
-    const board = node?.board_id ? state.project?.boards?.[node.board_id] : null;
-    if (board && node) renderActiveKanbanView(board, node);
-  });
-  dagTab?.addEventListener("click", () => {
-    setKanbanViewMode("dag");
-    const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
-    const board = node?.board_id ? state.project?.boards?.[node.board_id] : null;
-    if (board && node) renderActiveKanbanView(board, node);
-  });
 }
 
 function getBoardCard(board, cardId) {
@@ -5039,7 +5072,7 @@ async function persistCard(board, cardId, fields, opts = {}) {
   setStatus("Сохранение…");
   try {
     // Partial PATCH only — do not re-send depends_on/tags/etc. unless the
-    // caller changed them. Re-posting existing DAG edges fails when the board
+    // caller changed them. Re-posting existing dependencies fails when the board
     // already has cycles (common after manual deps), blocking tag edits.
     const payload = { ...fields };
     await KoiApi.patchCard(boardWriteProjectId(board), board.id, cardId, payload);
@@ -5307,7 +5340,11 @@ function cardTagHue(tag) {
 }
 
 function cardTagHueStyle(tag) {
-  return `--tag-h:${cardTagHue(tag)}`;
+  const node = state.project?.nodes?.find(n => n.id === state.kanbanNodeId);
+  const board = node?.board_id ? state.project?.boards?.[node.board_id] : null;
+  const colors = state.project?.card_tag_colors_by_project?.[boardWriteProjectId(board)] || state.project?.card_tag_colors;
+  const color = colors?.[String(tag).toLowerCase()];
+  return `--tag-h:${cardTagHue(tag)}${/^#[0-9a-f]{6}$/i.test(color || "") ? `;--tag-color:${color}` : ""}`;
 }
 
 function isKanbanModalOpen() {
@@ -5451,8 +5488,7 @@ function reconcileKanbanDisabledTagFilters(board, project = state.project) {
 function hasActiveKanbanFilters() {
   return Boolean(
     (state.kanbanDateFilter && state.kanbanDateFilter !== "all") ||
-      (state.kanbanDisabledTagFilters || []).length ||
-      state.kanbanMilestoneFilterId
+      (state.kanbanDisabledTagFilters || []).length
   );
 }
 
@@ -5466,6 +5502,11 @@ function parseCardTimestamp(raw) {
 
 function cardActivityTimestamp(card) {
   return parseCardTimestamp(card?.updated_at) ?? parseCardTimestamp(card?.created_at);
+}
+
+function cardStaysInKanbanFocus(card) {
+  if (card?.column_id === "running" || card?.column_id === "backlog") return true;
+  return cardWithinDateWindow(card, "today");
 }
 
 function cardWithinDateWindow(card, windowId) {
@@ -5542,9 +5583,6 @@ function cardMatchesKanbanTagFilter(card, disabledFilters) {
 function cardMatchesKanbanFilters(card, disabledFilters = state.kanbanDisabledTagFilters) {
   if (!cardMatchesKanbanTagFilter(card, disabledFilters)) return false;
   if (!cardWithinDateWindow(card, state.kanbanDateFilter || "all")) return false;
-  if (state.kanbanMilestoneCardIds) {
-    return state.kanbanMilestoneCardIds.has(card.id);
-  }
   return true;
 }
 
@@ -5590,9 +5628,6 @@ function syncKanbanFilterChrome(project, board) {
       if (!b) return;
       state.kanbanDateFilter = "all";
       state.kanbanDisabledTagFilters = [];
-      state.kanbanMilestoneFilterId = null;
-      state.kanbanMilestoneCardIds = null;
-      clearMilestoneBoardFilter();
       const pid = project?.id || state.project?.id;
       if (pid && b.id) {
         saveKanbanDateFilter(pid, b.id, "all");
@@ -5607,6 +5642,11 @@ function renderKanbanTagFilter(project, board) {
   const el = document.getElementById("kanban-tag-filter");
   if (!el) return;
 
+  const settingsButton = document.getElementById("kanban-tags-settings");
+  if (settingsButton) {
+    settingsButton.hidden = isHubMode() || !boardWriteProjectId(board);
+    settingsButton.onclick = () => openTagSettings(board);
+  }
   const tags = boardCardTagSuggestions(board, project);
   if (!tags.length) {
     el.classList.add("hidden");
@@ -5660,10 +5700,6 @@ function rerenderKanbanAfterFilters(board) {
   const liveBoard =
     (node?.board_id && state.project?.boards?.[node.board_id]) || board;
   renderKanbanBoardFilters(state.project, liveBoard);
-  if (state.kanbanViewMode === "dag") {
-    renderKanbanDagBoard(liveBoard, node);
-    return;
-  }
   renderKanbanBoard(liveBoard);
 }
 
@@ -5679,9 +5715,9 @@ function cardTagsEqual(a, b) {
   return aa.length === bb.length && aa.every((v, i) => v === bb[i]);
 }
 
-function cardTagsRowHtml(tags, { kanban = false, dag = false } = {}) {
+function cardTagsRowHtml(tags, { kanban = false, readOnly = false } = {}) {
   const list = tags || [];
-  if (dag) {
+  if (readOnly) {
     const maxVisible = 3;
     const visible = list.slice(0, maxVisible);
     const hidden = list.slice(maxVisible);
@@ -5699,7 +5735,7 @@ function cardTagsRowHtml(tags, { kanban = false, dag = false } = {}) {
         ? `<span class="card-tag-kanban-overflow" title="${escapeHtml(hidden.join(", "))}">+${hidden.length}</span>`
         : "";
     return list.length
-      ? `<div class="card-tags card-tags--kanban card-tags--dag-readonly">${chips}${overflowHtml}</div>`
+      ? `<div class="card-tags card-tags--kanban card-tags--readonly">${chips}${overflowHtml}</div>`
       : "";
   }
   if (kanban) {
@@ -6272,8 +6308,9 @@ function kanbanCardHtml(c, col, variant = "modal") {
               <input type="text" class="card-title-input inline-edit-field hidden" />`;
   const pinned = cardIsPinned(c);
   const pinControl = kanbanCardPinControlHtml(c, { map });
+  const focusMuted = variant === "modal" && state.kanbanFocus && !cardStaysInKanbanFocus(c);
   return `
-        <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
+        <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}${focusMuted ? " is-focus-muted" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
           <div class="kanban-card-head">
             <span class="card-drag-handle" draggable="true" title="Перетащить в другую колонку" aria-label="Перетащить">${gripIcon}</span>
             <div class="card-text-block">
@@ -6292,7 +6329,7 @@ function kanbanCardHtml(c, col, variant = "modal") {
           ${todoProgress}
           <div class="kanban-card-footer">
             ${costChip}
-            ${cardTagsRowHtml(c.tags, { dag: isHubMode(), kanban: !isHubMode() })}
+            ${cardTagsRowHtml(c.tags, { readOnly: isHubMode(), kanban: !isHubMode() })}
             ${kanbanCardTimeHtml(c)}
             <div class="kanban-card-actions">
               ${copyBtn}
@@ -6370,6 +6407,7 @@ function renderKanbanBoard(board) {
   const node = project?.nodes?.find((n) => n.id === state.kanbanNodeId) || null;
   const boardEl = document.getElementById("kanban-board");
   if (!boardEl) return;
+  boardEl.classList.toggle("is-focus", Boolean(state.kanbanFocus));
   renderKanbanBoardInto(boardEl, board, {
     variant: "modal",
     tagFilters: state.kanbanDisabledTagFilters || [],
@@ -7284,16 +7322,17 @@ async function switchProject(id) {
 }
 
 async function closeReportModal() {
-  await saveCardReport();
-  closeCardReport();
+  if (await saveCardReport() !== false) closeCardReport();
 }
 
 let agentChatItems = [];
 let agentChatPollTimer = null;
+let agentChatProjectOverrideId = null;
+let agentChatDisplayedProjectId = null;
 let lastAgentChatInboxMessage = "";
 const AGENT_CHAT_POLL_MS = 5000;
 let appSettings = {
-  agent_chat_mode: "cursor_inbox",
+  agent_chat_mode: "local",
   cursor_api_key_configured: false,
   cursor_api_key_masked: null,
   cursor_api_key_url: "https://cursor.com/dashboard/integrations",
@@ -7314,6 +7353,10 @@ let appSettings = {
 
 function isApiAgentMode() {
   return appSettings.agent_chat_mode === "api";
+}
+
+function isLocalAgentMode() {
+  return appSettings.agent_chat_mode === "local";
 }
 
 function isInboxAgentMode() {
@@ -7506,6 +7549,7 @@ function updateAgentChatInboxNotice() {
 
 function agentChatPendingLabel(item) {
   if (item?.status === "processing") return "";
+  if (isLocalAgentMode()) return "Агент запускается…";
   if (isApiAgentMode()) return "Агент обрабатывает…";
   if (isInboxAgentMode()) {
     if (!isInboxConfigured()) return "Отправлено — настройте Chat Inbox";
@@ -7529,10 +7573,15 @@ function agentChatDeliveryHtml(item) {
 }
 
 function agentChatTypingHtml() {
-  return koiLoaderTypingHtml("agent");
+  return '<div class="agent-chat-reply agent-chat-reply--pending agent-chat-typing" role="status">' +
+    '<span class="agent-chat-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>' +
+    '<span>Агент отвечает…</span></div>';
 }
 
 function agentChatContext() {
+  if (agentChatProjectId() !== primaryMemberProjectId()) {
+    return { method_id: null, node_id: null, label: null };
+  }
   const project = state.project;
   if (!project) return { method_id: null, node_id: null, label: null };
 
@@ -7584,7 +7633,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const prevScrollTop = log.scrollTop;
   const items = [...agentChatItems].reverse();
   if (!items.length) {
-    log.innerHTML = '<p class="agent-chat-empty">Задайте вопрос по проекту — ответ появится здесь.</p>';
+    log.innerHTML = '<p class="agent-chat-empty">Задайте первый вопрос.</p>';
     return;
   }
   log.innerHTML = items
@@ -7599,10 +7648,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         answerHtml = agentChatTypingHtml();
       } else if (pending) {
         answerHtml =
-          `<div class="agent-chat-reply agent-chat-reply--pending" data-koi-loader-pool="agent">` +
-          `<span class="agent-chat-typing-label">${escapeHtml(pendingLabel)}</span>` +
-          `<span class="koi-loader__hint koi-loader__hint--inline"></span>` +
-          `</div>`;
+          `<div class="agent-chat-reply agent-chat-reply--pending" role="status">${escapeHtml(pendingLabel)}</div>`;
       } else {
         answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(item.answer || "")}</div>`;
       }
@@ -7628,16 +7674,59 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
 }
 
 async function refreshAgentChat({ scrollToBottom = false } = {}) {
-  const pid = primaryMemberProjectId();
-  if (!pid) return;
+  const pid = agentChatProjectId();
+  if (!pid) {
+    agentChatItems = [];
+    renderAgentChatLog();
+    return;
+  }
   try {
     const data = await KoiApi.listAgentChat(pid);
-    agentChatItems = data.items || [];
+    if (pid !== agentChatProjectId()) return;
+    agentChatItems = (data.items || []).filter(i => !i.card_id);
     renderAgentChatLog({ scrollToBottom });
+    if (!document.getElementById("agent-chat-activity")?.classList.contains("hidden")) {
+      void refreshAgentChatActivity();
+    }
     syncAgentChatPolling();
   } catch {
     /* API may be restarting */
   }
+}
+
+async function refreshAgentChatActivity() {
+  const pid = agentChatProjectId();
+  const host = document.getElementById("agent-chat-activity");
+  if (!host) return;
+  if (!pid) {
+    host.textContent = "Выберите проект для чата.";
+    return;
+  }
+  try {
+    const data = await KoiApi.listAgentChatActivity(pid);
+    if (pid !== agentChatProjectId()) return;
+    const items = (data.items || []).filter((item) => item.events?.length);
+    host.innerHTML = items.length ? items.map((item) =>
+      `<section><h3>${escapeHtml(item.question)}</h3>${item.events.map((event) =>
+        `<p><time>${escapeHtml(formatAgentChatTime(event.at))}</time>${escapeHtml(event.message)}</p>`
+      ).join("")}</section>`
+    ).join("") : "Пока нет запусков агента для этого проекта.";
+  } catch {
+    if (pid !== agentChatProjectId()) return;
+    host.textContent = "Не удалось загрузить журнал работы агента.";
+  }
+}
+
+function showAgentChatTab(tab) {
+  const activity = tab === "activity";
+  document.getElementById("agent-chat-log")?.classList.toggle("hidden", activity);
+  document.getElementById("agent-chat-activity")?.classList.toggle("hidden", !activity);
+  for (const name of ["chat", "activity"]) {
+    const button = document.getElementById(`agent-chat-tab-${name}`);
+    button?.classList.toggle("is-active", name === tab);
+    button?.setAttribute("aria-selected", String(name === tab));
+  }
+  if (activity) void refreshAgentChatActivity();
 }
 
 function syncAgentChatPolling() {
@@ -7654,8 +7743,83 @@ function syncAgentChatPolling() {
   }
 }
 
+function agentChatProjectId() {
+  return agentChatProjectOverrideId || primaryMemberProjectId() || null;
+}
+
+function agentChatProjectOptions() {
+  const projects = Object.values(state.lab?.projectsById || {})
+    .filter((project) => project?.id && !isCompositeVirtualId(project.id) && !project.is_composite);
+  const knownIds = new Set(projects.map((project) => project.id));
+  for (const group of state.lab?.grouped?.groups || []) {
+    for (const composite of group.composites || []) {
+      const members = state.lab?.projectsById?.[compositeVirtualId(composite.id)]?.members || [];
+      for (const id of composite.member_ids || []) {
+        if (knownIds.has(id)) continue;
+        const member = members.find((item) => item.project_id === id);
+        projects.push({ id, title: member?.title || id });
+        knownIds.add(id);
+      }
+    }
+  }
+  if (!projects.length && state.project?.id && !isCompositeVirtualId(state.project.id)) {
+    projects.push(state.project);
+  }
+  const currentId = agentChatProjectId();
+  if (currentId && !projects.some((project) => project.id === currentId)) {
+    const member = state.project?.members?.find((item) => item.project_id === currentId);
+    projects.push({ id: currentId, title: member?.title || currentId });
+  }
+  return projects.sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id, "ru"));
+}
+
+function resizeAgentChatInput() {
+  const input = document.getElementById("agent-chat-input");
+  if (!input) return;
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+}
+
+function setAgentChatProjectMenu(open) {
+  const menu = document.getElementById("agent-chat-project-menu");
+  if (!menu) return;
+  menu.hidden = !open;
+  document.getElementById("agent-chat-project")?.setAttribute("aria-expanded", String(open));
+  if (open) {
+    const search = document.getElementById("agent-chat-project-search");
+    search.value = "";
+    renderAgentChatProjectOptions();
+    search.focus();
+  }
+}
+
+function renderAgentChatProjectOptions() {
+  const host = document.getElementById("agent-chat-project-options");
+  if (!host) return;
+  const query = document.getElementById("agent-chat-project-search")?.value.trim().toLocaleLowerCase() || "";
+  const projects = agentChatProjectOptions().filter((project) => `${project.title} ${project.id}`.toLocaleLowerCase().includes(query));
+  host.innerHTML = projects.map((project) => `<button type="button" data-chat-project="${escapeHtml(project.id)}" aria-pressed="${project.id === agentChatProjectId()}">${escapeHtml(project.title || project.id)}</button>`).join("") || '<p>Проекты не найдены</p>';
+}
+
 function updateAgentChatScope() {
   const el = document.getElementById("agent-chat-scope");
+  const projectEl = document.getElementById("agent-chat-project");
+  const selectedId = agentChatProjectId();
+  if (selectedId !== agentChatDisplayedProjectId) {
+    agentChatDisplayedProjectId = selectedId;
+    agentChatItems = [];
+    renderAgentChatLog();
+    const activity = document.getElementById("agent-chat-activity");
+    if (activity) activity.textContent = "";
+  }
+  if (projectEl) {
+    const projects = agentChatProjectOptions();
+    const selected = projects.find((project) => project.id === selectedId);
+    document.getElementById("agent-chat-project-name").textContent = selected?.title || selected?.id || "Выберите проект";
+    projectEl.disabled = !projects.length;
+    projectEl.title = selected?.title || "Выберите проект";
+    renderAgentChatProjectOptions();
+  }
   if (!el) return;
   const { label } = agentChatContext();
   if (label) {
@@ -7672,15 +7836,20 @@ function toggleAgentChatPanel(open) {
   const workspace = document.getElementById("workspace");
   if (!panel) return;
   const show = open ?? panel.classList.contains("hidden");
+  setAgentChatProjectMenu(false);
   panel.classList.toggle("hidden", !show);
   workspace?.classList.toggle("is-chat-open", show);
-  document.getElementById("btn-agent-chat")?.classList.toggle("hidden", show);
+  document.body.classList.toggle("chat-open", show);
+  document.getElementById("btn-agent-chat-welcome")?.classList.toggle("hidden", show);
+  const trigger = document.getElementById("btn-agent-chat");
+  trigger?.setAttribute("aria-expanded", String(show));
+  trigger?.setAttribute("aria-label", show ? "Свернуть чат" : "Открыть чат");
+  if (trigger) trigger.title = show ? "Свернуть чат" : "Открыть чат";
   if (show) {
-    void refreshAppSettings().then(() => {
-      updateAgentChatInboxNotice();
-      updateAgentChatKeyNotice();
-    });
+    agentChatProjectOverrideId = null;
+    void refreshAppSettings();
     updateAgentChatScope();
+    showAgentChatTab("chat");
     void refreshAgentChat({ scrollToBottom: true });
     document.getElementById("agent-chat-input")?.focus();
   } else {
@@ -7689,48 +7858,54 @@ function toggleAgentChatPanel(open) {
   scheduleMindmapRender();
 }
 
+function setAgentChatFormStatus(message = "", kind = "") {
+  const status = document.getElementById("agent-chat-form-status");
+  if (!status) return;
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle("is-error", kind === "error");
+}
+
 async function submitAgentQuestion(e) {
   e.preventDefault();
-  if (!state.project?.id) {
-    setStatus("Сначала выберите проект", true);
+  const input = document.getElementById("agent-chat-input");
+  if (document.getElementById("btn-agent-chat-send")?.disabled) return;
+  const text = input?.value?.trim();
+  if (!text) {
+    setAgentChatFormStatus("Напишите вопрос перед отправкой.", "error");
+    input?.focus();
     return;
   }
-  const input = document.getElementById("agent-chat-input");
-  const text = input?.value?.trim();
-  if (!text) return;
+  const projectId = agentChatProjectId();
+  if (!projectId || isCompositeVirtualId(projectId)) {
+    setAgentChatFormStatus("Сначала выберите проект для чата.", "error");
+    return;
+  }
 
   const { method_id, node_id } = agentChatContext();
   const btn = document.getElementById("btn-agent-chat-send");
   if (btn) btn.disabled = true;
-  setStatus("Отправка вопроса агенту…");
+  setAgentChatFormStatus("Отправляем вопрос…");
 
   try {
     const res = await KoiApi.sendAgentQuestion({
-      project_id: primaryMemberProjectId(),
+      project_id: projectId,
       question: text,
       method_id: method_id || undefined,
       node_id: node_id || undefined,
     });
-    if (res?.item) {
-      agentChatItems = [res.item, ...agentChatItems.filter((i) => i.id !== res.item.id)];
-      renderAgentChatLog({ scrollToBottom: true });
-    }
-    if (isInboxAgentMode() && res?.inbox_message && res?.item?.status !== "answered" && !isInboxConfigured()) {
-      showAgentChatInboxPrompt(res.inbox_message);
-    } else if (isInboxAgentMode() && !isInboxConfigured()) {
-      const bootstrap =
-        appSettings.chat_inbox_bootstrap_prompt || appSettings.inbox_bootstrap_prompt || "";
-      if (bootstrap) showAgentChatInboxPrompt(bootstrap);
-      else showAgentChatInboxPrompt("");
-    } else {
-      showAgentChatInboxPrompt("");
-    }
+    if (!res?.item?.id) throw new Error("Сервер не подтвердил отправку. Попробуйте ещё раз.");
+    if (projectId !== agentChatProjectId()) return;
+    agentChatItems = [res.item, ...agentChatItems.filter((i) => i.id !== res.item.id)];
+    showAgentChatTab("chat");
+    renderAgentChatLog({ scrollToBottom: true });
     input.value = "";
-    void refreshAgentChat();
+    resizeAgentChatInput();
     syncAgentChatPolling();
-    setStatus("Вопрос отправлен — ждём ответ в панели");
+    setAgentChatFormStatus("");
+    void refreshAgentChat();
   } catch (err) {
-    setStatus(err.message, true);
+    setAgentChatFormStatus(err.message || "Не удалось отправить вопрос.", "error");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -7753,19 +7928,25 @@ function updateAgentChatKeyNotice() {
     const url = appSettings.cursor_api_key_url || "https://cursor.com/dashboard/integrations";
     el.classList.remove("hidden");
     el.innerHTML =
-      'Режим API: укажите <button type="button" class="agent-chat-key-link" id="agent-chat-open-settings">ключ Cursor API</button> в настройках. ' +
+      'Режим API недоступен без ключа Cursor API. ' +
       `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Как получить ключ</a>`;
     return;
   }
+  if (isLocalAgentMode()) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
   el.classList.remove("hidden");
-  el.innerHTML =
-    'Режим hooks: откройте чат агента в IDE — вопросы подхватятся при старте/stop сессии. ' +
-    '<button type="button" class="agent-chat-key-link" id="agent-chat-open-settings">Настройки</button>';
+  el.textContent = 'Режим hooks: откройте чат агента в IDE — вопросы подхватятся при старте/stop сессии.';
 }
 
 async function refreshAppSettings() {
   try {
-    appSettings = await KoiApi.getSettings();
+    const settings = await KoiApi.getSettings();
+    appSettings = settings.agent_chat_mode === "local"
+      ? settings
+      : await KoiApi.saveAgentChatSettings({ agent_chat_mode: "local" });
     appSettings.chat_inbox_configured = Boolean(appSettings.chat_inbox_configured);
     appSettings.chat_inbox_watcher_running = Boolean(appSettings.chat_inbox_watcher_running);
     appSettings.paper_inbox_configured = Boolean(appSettings.paper_inbox_configured);
@@ -7786,152 +7967,6 @@ async function refreshAppSettings() {
     return appSettings;
   } catch {
     return appSettings;
-  }
-}
-
-function hideSettingsSaveNotice() {
-  const notice = document.getElementById("settings-save-notice");
-  if (!notice) return;
-  notice.classList.add("hidden");
-  notice.classList.remove("is-success", "is-error");
-  notice.textContent = "";
-}
-
-function showSettingsSaveNotice(message, { error = false } = {}) {
-  const notice = document.getElementById("settings-save-notice");
-  if (!notice) return;
-  notice.textContent = message;
-  notice.classList.remove("hidden", "is-success", "is-error");
-  notice.classList.add(error ? "is-error" : "is-success");
-}
-
-function selectedAgentChatMode() {
-  const checked = document.querySelector('input[name="agent_chat_mode"]:checked');
-  return checked?.value || appSettings.agent_chat_mode || "cursor_ide";
-}
-
-function syncSettingsModeBlocksVisibility(mode = selectedAgentChatMode()) {
-  document.getElementById("settings-api-block")?.classList.toggle("hidden", mode !== "api");
-  document.getElementById("settings-inbox-block")?.classList.toggle("hidden", mode !== "cursor_inbox");
-}
-
-function applySettingsToForm(data = appSettings) {
-  const mode = data.agent_chat_mode || "cursor_ide";
-  document.querySelectorAll('input[name="agent_chat_mode"]').forEach((el) => {
-    el.checked = el.value === mode;
-  });
-  syncSettingsModeBlocksVisibility(mode);
-
-  const status = document.getElementById("settings-key-status");
-  const link = document.getElementById("settings-key-link");
-  const sdkHint = document.getElementById("settings-sdk-hint");
-  const input = document.getElementById("settings-cursor-key");
-  if (link && data.cursor_api_key_url) {
-    link.href = data.cursor_api_key_url;
-  }
-  if (status) {
-    if (mode === "api") {
-      status.textContent = data.cursor_api_key_configured
-        ? `Ключ сохранён (${data.cursor_api_key_masked || "••••"}). Оставьте поле пустым, чтобы не менять.`
-        : "Укажите ключ — без него фоновый агент не запустится.";
-      status.classList.toggle("is-ok", Boolean(data.cursor_api_key_configured));
-    } else if (mode === "cursor_inbox") {
-      status.textContent = isChatInboxOperational()
-        ? "Inbox работает — watcher пишет в agent-chat-watch.log."
-        : isInboxConfigured()
-          ? "Inbox отмечен, но watcher не запущен — ./scripts/koi-serve.sh start."
-          : "Скопируйте bootstrap и отправьте в чат «ResearchOS Chat Inbox» в Cursor.";
-      status.classList.toggle("is-ok", isChatInboxOperational());
-    } else {
-      status.textContent = data.agent_worker_running
-        ? "Фоновый воркер ещё запущен — перезапустите KOI после смены режима."
-        : "Ключ API не нужен — вопросы через hooks.";
-      status.classList.toggle("is-ok", !data.agent_worker_running);
-    }
-  }
-  if (sdkHint) {
-    if (mode === "api" && data.cursor_sdk_installed === false) {
-      sdkHint.classList.remove("hidden");
-      sdkHint.textContent =
-        "Пакет cursor-sdk не установлен в .venv — после сохранения ключа выполните: pip install cursor-sdk";
-    } else {
-      sdkHint.classList.add("hidden");
-      sdkHint.textContent = "";
-    }
-  }
-  if (input && !input.matches(":focus")) {
-    input.value = "";
-    input.placeholder = data.cursor_api_key_configured ? "Новый ключ (необязательно)" : "crsr_…";
-  }
-  document
-    .getElementById("btn-settings-clear-key")
-    ?.classList.toggle("hidden", mode !== "api" || !data.cursor_api_key_configured);
-}
-
-async function openSettingsModal() {
-  await refreshAppSettings();
-  hideSettingsSaveNotice();
-  applySettingsToForm();
-  updateThemeControl(getTheme());
-  showModal("settings-modal");
-  document.getElementById("settings-cursor-key")?.focus();
-}
-
-async function saveSettings(e) {
-  e.preventDefault();
-  const input = document.getElementById("settings-cursor-key");
-  const btn = document.getElementById("btn-settings-save");
-  const mode = selectedAgentChatMode();
-  const key = input?.value?.trim() || "";
-  if (mode === "api" && !key && !appSettings.cursor_api_key_configured) {
-    showSettingsSaveNotice("В режиме API нужен ключ Cursor", { error: true });
-    setStatus("Введите ключ Cursor API", true);
-    return;
-  }
-  hideSettingsSaveNotice();
-  if (btn) btn.disabled = true;
-  setStatus("Сохранение настроек…");
-  try {
-    const body = { agent_chat_mode: mode };
-    if (key) body.cursor_api_key = key;
-    const data = await KoiApi.saveAgentChatSettings(body);
-    appSettings = data;
-    applySettingsToForm(data);
-    updateAgentChatKeyNotice();
-    renderAgentChatLog();
-    updateAgentChatInboxNotice();
-    const msg =
-      mode === "api"
-        ? "Режим API сохранён" + (key ? ", ключ обновлён" : "")
-        : mode === "cursor_inbox"
-          ? "Режим Inbox-чат сохранён — откройте панель «Спросить агента» для инструкции"
-          : "Режим hooks сохранён";
-    showSettingsSaveNotice(msg);
-    setStatus(msg);
-  } catch (err) {
-    showSettingsSaveNotice(err.message, { error: true });
-    setStatus(err.message, true);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function clearCursorApiKey() {
-  const btn = document.getElementById("btn-settings-clear-key");
-  if (btn) btn.disabled = true;
-  setStatus("Удаление ключа…");
-  try {
-    const data = await KoiApi.saveAgentChatSettings({ cursor_api_key: "" });
-    appSettings = data;
-    applySettingsToForm(data);
-    updateAgentChatKeyNotice();
-    showSettingsSaveNotice("Ключ удалён");
-    setStatus("Ключ Cursor API удалён");
-  } catch (err) {
-    showSettingsSaveNotice(err.message, { error: true });
-    setStatus(err.message, true);
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
@@ -8451,18 +8486,6 @@ function initProjectDiscoveryPoll() {
 }
 
 function initSettings() {
-  document.getElementById("btn-settings")?.addEventListener("click", () => {
-    void openSettingsModal();
-  });
-  document.getElementById("settings-form")?.addEventListener("submit", (e) => {
-    void saveSettings(e);
-  });
-  document.querySelectorAll('input[name="agent_chat_mode"]').forEach((el) => {
-    el.addEventListener("change", () => {
-      syncSettingsModeBlocksVisibility();
-      applySettingsToForm({ ...appSettings, agent_chat_mode: selectedAgentChatMode() });
-    });
-  });
   document.getElementById("btn-dismiss-inbox-hint")?.addEventListener("click", () => {
     dismissInboxHint();
   });
@@ -8483,34 +8506,57 @@ function initSettings() {
     const status = document.getElementById("agent-chat-inbox-prompt-status");
     await copyAgentChatInboxPrompt(status);
   });
-  document.getElementById("btn-settings-copy-inbox")?.addEventListener("click", () => {
-    void copyInboxBootstrap(document.getElementById("settings-inbox-copy-status"));
-  });
-  document.getElementById("agent-chat-open-settings-from-inbox")?.addEventListener("click", () => {
-    void openSettingsModal();
-  });
-  document.getElementById("btn-settings-clear-key")?.addEventListener("click", () => {
-    void clearCursorApiKey();
-  });
-  document.getElementById("agent-chat-key-notice")?.addEventListener("click", (e) => {
-    if (e.target.closest("#agent-chat-open-settings")) {
-      void openSettingsModal();
-    }
-  });
   void refreshAppSettings();
 }
 
 function initAgentChat() {
-  document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
+  document.getElementById("btn-agent-chat-welcome")?.addEventListener("click", () => {
     toggleAgentChatPanel(true);
+  });
+  document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
+    toggleAgentChatPanel();
     void refreshAppSettings();
   });
-  document.getElementById("btn-agent-chat-close")?.addEventListener("click", () => {
-    toggleAgentChatPanel(false);
+  const picker = document.querySelector(".agent-chat-project-picker");
+  document.getElementById("agent-chat-project")?.addEventListener("click", () => {
+    const open = document.getElementById("agent-chat-project-menu").hidden;
+    setAgentChatProjectMenu(open);
+  });
+  document.getElementById("agent-chat-project-search")?.addEventListener("input", renderAgentChatProjectOptions);
+  document.getElementById("agent-chat-project-options")?.addEventListener("click", (e) => {
+    const option = e.target.closest("[data-chat-project]");
+    if (!option) return;
+    agentChatProjectOverrideId = option.dataset.chatProject;
+    updateAgentChatScope();
+    setAgentChatProjectMenu(false);
+    document.getElementById("agent-chat-project").focus();
+    setAgentChatFormStatus("");
+    void refreshAgentChat({ scrollToBottom: true });
+  });
+  document.addEventListener("click", (e) => {
+    if (!picker?.contains(e.target)) setAgentChatProjectMenu(false);
+  });
+  picker?.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      setAgentChatProjectMenu(false);
+      document.getElementById("agent-chat-project").focus();
+    }
   });
   document.getElementById("agent-chat-form")?.addEventListener("submit", (e) => {
     void submitAgentQuestion(e);
   });
+  document.getElementById("agent-chat-input")?.addEventListener("input", () => {
+    setAgentChatFormStatus("");
+    resizeAgentChatInput();
+  });
+  document.getElementById("agent-chat-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+    }
+  });
+  document.getElementById("agent-chat-tab-chat")?.addEventListener("click", () => showAgentChatTab("chat"));
+  document.getElementById("agent-chat-tab-activity")?.addEventListener("click", () => showAgentChatTab("activity"));
   document.getElementById("agent-chat-log")?.addEventListener("click", (e) => {
     const btn = e.target.closest(".agent-chat-delete");
     if (!btn) return;
@@ -8568,8 +8614,11 @@ function getTheme() {
 }
 
 function updateThemeControl(theme) {
-  const select = document.getElementById("settings-theme-select");
-  if (select) select.value = theme === "light" ? "light" : "dark";
+  const button = document.getElementById("btn-theme");
+  if (!button) return;
+  const label = theme === "light" ? "Включить тёмную тему" : "Включить светлую тему";
+  button.title = label;
+  button.setAttribute("aria-label", label);
 }
 
 function setTheme(theme) {
@@ -8585,13 +8634,15 @@ function setTheme(theme) {
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  const theme = stored === "light" ? "light" : "dark";
+  const theme = stored === "dark" ? "dark" : "light";
   if (theme === "light") {
     document.documentElement.setAttribute("data-theme", "light");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
   }
   updateThemeControl(theme);
-  document.getElementById("settings-theme-select")?.addEventListener("change", (e) => {
-    setTheme(e.target.value);
+  document.getElementById("btn-theme")?.addEventListener("click", () => {
+    setTheme(getTheme() === "light" ? "dark" : "light");
   });
 }
 
@@ -11577,7 +11628,6 @@ async function init() {
   } else {
     applyHubReadonlyChrome();
   }
-  initKanbanViewTabs();
   initKanbanModalChrome();
   document.getElementById("btn-master-page-create")?.addEventListener("click", () => {
     if (_masterPagePickNodeId) void createEmptyMasterPage(_masterPagePickNodeId);
@@ -11600,6 +11650,7 @@ async function init() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (document.getElementById("tag-settings-dialog")?.open) return;
       if (document.activeElement?.classList.contains("inline-edit-field")) return;
       const deleteConfirmModal = document.getElementById("delete-node-confirm-modal");
       if (deleteConfirmModal && !deleteConfirmModal.classList.contains("hidden")) {
@@ -11621,7 +11672,6 @@ async function init() {
         return;
       }
       hideModal("create-project-modal");
-      hideModal("settings-modal");
       hideModal("node-modal");
       hideModal("kanban-modal");
       hideModal("method-questions-modal");
@@ -11636,7 +11686,7 @@ async function init() {
         void savePaperTex();
         return;
       }
-      if (document.activeElement?.id === "card-report-editor") {
+      if (document.activeElement?.closest(".report-document")) {
         e.preventDefault();
         void saveCardReport();
       }
@@ -11645,28 +11695,22 @@ async function init() {
   document.getElementById("card-report-save").addEventListener("click", () => {
     void saveCardReport(true);
   });
-  document
-    .getElementById("card-report-mode-write")
-    ?.addEventListener("click", () => setReportViewMode("write"));
-  document
-    .getElementById("card-report-mode-view")
-    ?.addEventListener("click", () => setReportViewMode("view"));
+  document.getElementById("report-agent-open").onclick = () => openReportInterview("");
+  document.getElementById("report-agent-fab").onclick = () => openReportInterview("");
+  document.getElementById("report-agent-close").onclick = () => { document.getElementById("report-interview").hidden = true; };
+  document.getElementById("report-interview-form").onsubmit = sendReportInterview;
+  document.getElementById("report-interview-tab-chat")?.addEventListener("click", () => showReportInterviewTab("chat"));
+  document.getElementById("report-interview-tab-activity")?.addEventListener("click", () => showReportInterviewTab("activity"));
+  document.getElementById("report-interview-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+    }
+  });
   document.getElementById("card-report-editor").addEventListener("input", () => {
     state.reportDirty = true;
     scheduleReportPreview();
   });
-  const reportEditor = document.getElementById("card-report-editor");
-  reportEditor?.addEventListener("paste", (e) => {
-    void onReportEditorPaste(e);
-  });
-  document.getElementById("card-report-modal")?.addEventListener(
-    "paste",
-    (e) => {
-      if (e.target.id === "card-report-editor") return;
-      void onReportEditorPaste(e);
-    },
-    true
-  );
 
   if (!hubMode) setupInlineEdits();
   document.getElementById("add-child-form").addEventListener("submit", onAddChildSubmit);
@@ -11775,3 +11819,210 @@ init().catch((err) => {
   console.error(err);
   setStatus(`Ошибка UI: ${err.message}`, true);
 });
+
+
+const TAG_COLOR_PALETTE = [
+  "#ff6384", "#ff835c", "#ffa94d", "#e4c83f", "#a7ce45",
+  "#55c879", "#32c99e", "#35ccc5", "#36bde9", "#549fff",
+  "#7377ff", "#9870ff", "#bd6af0", "#e56ed1", "#ff65ae",
+  "#e88499", "#de9a77", "#b8b768", "#79b899", "#73b8c5",
+  "#83a0d6", "#a091cf", "#c58cab", "#93a4bf", "#7486a6",
+];
+
+function confirmTagDeletion(name) {
+  const dialog = document.getElementById("tag-delete-confirm");
+  document.getElementById("tag-delete-title").textContent = `Удалить тег «${name}»?`;
+  return new Promise(resolve => {
+    const finish = accepted => { dialog.close(); resolve(accepted); };
+    document.getElementById("tag-delete-cancel").onclick = () => finish(false);
+    document.getElementById("tag-delete-accept").onclick = () => finish(true);
+    dialog.oncancel = event => { event.preventDefault(); finish(false); };
+    dialog.showModal();
+    document.getElementById("tag-delete-cancel").focus();
+  });
+}
+
+async function openTagSettings(board) {
+  const dialog = document.getElementById("tag-settings-dialog");
+  const list = document.getElementById("tag-settings-list");
+  const palette = document.getElementById("tag-settings-palette");
+  const nameInput = document.getElementById("tag-settings-name");
+  const status = document.getElementById("tag-settings-error");
+  const form = document.getElementById("tag-settings-form");
+  const deleteButton = document.getElementById("tag-settings-delete");
+  deleteButton.disabled = true;
+  deleteButton.onclick = null;
+  const projectId = boardWriteProjectId(board);
+  if (!projectId || isHubMode() || dialog.open) return;
+  list.innerHTML = palette.innerHTML = "";
+  nameInput.value = "";
+  nameInput.disabled = true;
+  status.textContent = "";
+  form.onsubmit = event => event.preventDefault();
+  nameInput.oninput = nameInput.onblur = null;
+  dialog.oncancel = null;
+  document.getElementById("tag-settings-cancel").onclick = () => dialog.close();
+  dialog.showModal();
+  try {
+    const project = await KoiApi.getProject(projectId);
+    if (!dialog.open) return;
+    const tags = [...new Map([...(project.card_tags || []),
+      ...Object.values(project.boards || {}).flatMap(b => (b.cards || []).flatMap(c => c.tags || []))]
+      .map(t => [t.toLowerCase(), t])).values()].sort((a,b) => a.localeCompare(b));
+    const entries = tags.map(tag => ({name: tag, savedName: tag,
+      count: Object.values(project.boards || {}).reduce((n, b) => n + (b.cards || []).filter(c => (c.tags || []).some(t => t.toLowerCase() === tag.toLowerCase())).length, 0),
+      color: project.card_tag_colors?.[tag.toLowerCase()] || null, dirty: false}));
+    let selected = entries[0];
+    let timer;
+    let saving = null;
+    let deleting = false;
+    const defaultColor = tag => {
+      const h = cardTagHue(tag) / 60, c = 0.7488, m = 0.1456;
+      const x = c * (1 - Math.abs(h % 2 - 1));
+      const rgb = [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h)];
+      return "#" + rgb.map(v => Math.round((v+m)*255).toString(16).padStart(2,"0")).join("");
+    };
+    // Keep controls mounted during autosave: replacing them between pointerdown
+    // and click drops the user's next selection and keyboard focus.
+    const paintList = () => {
+      if (!list.childElementCount) {
+        list.innerHTML = entries.map((entry, index) => `<button type="button" class="tag-settings-item kanban-tag-filter-chip card-tag--hue is-active" data-index="${index}">
+          <span class="kanban-tag-filter-dot" aria-hidden="true"></span><span class="tag-settings-label"></span><span class="tag-settings-count"></span></button>`).join("");
+        list.querySelectorAll("button").forEach(btn => btn.onclick = () => {
+          if (deleting) return;
+          selected = entries[Number(btn.dataset.index)];
+          populate();
+          void flush();
+        });
+      }
+      list.querySelectorAll("button").forEach((btn, index) => {
+        const entry = entries[index];
+        btn.style.cssText = `--tag-h:${cardTagHue(entry.savedName)}${entry.color ? `;--tag-color:${entry.color}` : ""}`;
+        btn.setAttribute("aria-pressed", String(entry === selected));
+        btn.querySelector(".tag-settings-label").textContent = entry.name;
+        const count = btn.querySelector(".tag-settings-count");
+        count.textContent = entry.count;
+        count.setAttribute("title", `Карточек с тегом: ${entry.count}`);
+        count.setAttribute("aria-label", `Карточек с тегом: ${entry.count}`);
+      });
+    };
+    const paintPalette = () => {
+      if (!palette.childElementCount) {
+        palette.innerHTML = TAG_COLOR_PALETTE.map(color =>
+          `<button type="button" class="tag-color-swatch" style="--swatch:${color}" data-color="${color}" aria-label="${color}" title="${color}"></button>`).join("");
+        palette.querySelectorAll("button").forEach(btn => btn.onclick = () => {
+          if (deleting || !selected) return;
+          selected.color = btn.dataset.color;
+          selected.dirty = true;
+          selected.error = null;
+          paintPalette();
+          paintList();
+          void flush();
+        });
+      }
+      palette.querySelectorAll("button").forEach(btn => {
+        btn.disabled = deleting || !selected;
+        const active = btn.dataset.color === selected?.color;
+        btn.setAttribute("aria-pressed", String(active));
+        btn.textContent = active ? "✓" : "";
+      });
+    };
+    const populate = () => {
+      nameInput.disabled = deleting || !selected;
+      deleteButton.disabled = deleting || !selected;
+      nameInput.value = selected?.name || "";
+      status.textContent = selected?.error || (selected ? "" : "Тегов пока нет");
+      paintList();
+      paintPalette();
+    };
+    const flush = async () => {
+      clearTimeout(timer);
+      if (saving) { await saving; return flush(); }
+      const entry = entries.find(e => e.dirty && !e.error && !e.removing);
+      if (!entry) return true;
+      const name = entry.name.trim();
+      if (!CARD_TAG_NAME_RE.test(name)) {
+        entry.error = "Используйте латинские буквы, цифры, дефис или подчёркивание.";
+        if (entry === selected) status.textContent = entry.error;
+        return flush();
+      }
+      const oldName = entry.savedName, oldKey = oldName.toLowerCase();
+      const color = entry.color || defaultColor(oldName);
+      const draftName = entry.name, draftColor = entry.color;
+      if (entry === selected) status.textContent = "Сохранение…";
+      saving = (async () => {
+        try {
+          await KoiApi.updateCardTag(projectId, oldName, {name, color});
+          entry.savedName = name;
+          entry.dirty = entry.name !== draftName || entry.color !== draftColor;
+          if (!entry.dirty) { entry.name = name; entry.color = color; }
+          state.kanbanDisabledTagFilters = (state.kanbanDisabledTagFilters || []).map(t => t === oldKey ? name.toLowerCase() : t);
+          saveKanbanDisabledTagFilters(state.project.id, board.id, state.kanbanDisabledTagFilters);
+          state.project = await reloadProjectView();
+          syncLabProject(state.project);
+          rerenderKanbanAfterFilters(state.project.boards?.[board.id] || board);
+          if (entry === selected) status.textContent = entry.dirty ? "Сохранение…" : "Сохранено";
+          paintList();
+          paintPalette();
+          return true;
+        } catch (err) {
+          // A failed draft must not block edits to other tags. A new edit retries it.
+          if (entry.name === draftName && entry.color === draftColor) entry.error = err.message;
+          if (entry === selected) status.textContent = err.message;
+          return false;
+        }
+      })();
+      await saving;
+      saving = null;
+      return flush();
+    };
+    deleteButton.onclick = async () => {
+      if (deleting || !selected) return;
+      const entry = selected;
+      if (!await confirmTagDeletion(entry.name)) return;
+      deleting = true;
+      entry.removing = true;
+      populate();
+      clearTimeout(timer);
+      // Finish an in-flight rename before deleting its persisted name.
+      entry.dirty = false;
+      try {
+        if (saving) await saving;
+        entry.dirty = false;
+        await KoiApi.deleteCardTag(projectId, entry.savedName);
+        const index = entries.indexOf(entry);
+        entries.splice(index, 1);
+        selected = entries[Math.min(index, entries.length - 1)];
+        list.innerHTML = "";
+        state.kanbanDisabledTagFilters = (state.kanbanDisabledTagFilters || []).filter(t => t !== entry.savedName.toLowerCase());
+        saveKanbanDisabledTagFilters(state.project.id, board.id, state.kanbanDisabledTagFilters);
+        state.project = await reloadProjectView();
+        syncLabProject(state.project);
+        rerenderKanbanAfterFilters(state.project.boards?.[board.id] || board);
+      } catch (err) {
+        if (selected) selected.error = err.message;
+      } finally {
+        deleting = false;
+        entry.removing = false;
+        populate();
+        if (selected) nameInput.focus();
+        else document.getElementById("tag-settings-cancel").focus();
+      }
+    };
+    populate();
+    nameInput.oninput = () => {
+      if (deleting || !selected) return;
+      selected.name = nameInput.value;
+      selected.dirty = true;
+      selected.error = null;
+      paintList();
+      clearTimeout(timer);
+      timer = setTimeout(() => void flush(), 450);
+    };
+    nameInput.onblur = () => void flush();
+    form.onsubmit = event => { event.preventDefault(); void flush(); };
+    const close = async () => { if (deleting) return; if (await flush()) dialog.close(); };
+    document.getElementById("tag-settings-cancel").onclick = close;
+    dialog.oncancel = event => { event.preventDefault(); void close(); };
+  } catch (err) { status.textContent = err.message; }
+}

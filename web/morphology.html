@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260821f" />
+  <link rel="stylesheet" href="styles.css?v=20260928b" />
   <script>
     (function () {
       var t = localStorage.getItem("koi-theme");
@@ -100,6 +100,10 @@
             <pre class="morph-prompt" id="morph-presentation-prompt"></pre>
           </div>
           <div class="morph-graph-pane">
+            <div class="morph-explain-note hidden" id="morph-explain-note">
+              <p id="morph-explain-note-text"></p>
+              <button type="button" id="morph-explain-note-close" aria-label="Скрыть заметку">×</button>
+            </div>
             <div class="morph-legend" id="morph-legend"></div>
             <svg class="morph-canvas" id="morph-canvas" role="img" aria-label="Граф логических переходов"></svg>
           </div>
@@ -236,6 +240,6 @@
     </section>
   </div>
 
-  <script type="module" src="morphology.js?v=20260821h"></script>
+  <script type="module" src="morphology.js?v=20260928b"></script>
 </body>
 </html>

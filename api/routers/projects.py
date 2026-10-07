@@ -9,9 +9,8 @@ from api.schemas import (
     CreateCardBody,
     CreateNodeBody,
     CreateProjectBody,
-    DagSuggestBody,
-    DagLayoutBody,
     UpdateCardBody,
+    UpdateTagBody,
     UpdateNodeBody,
 )
 from koi.laboratory.programs import list_project_summaries
@@ -186,45 +185,6 @@ def patch_card(
     return project_to_client(project)
 
 
-@router.post("/projects/{project_id}/boards/{board_id}/dag/suggest")
-def post_board_dag_suggest(
-    project_id: str, board_id: str, body: DagSuggestBody
-) -> dict:
-    try:
-        result = project_commands.suggest_board_dependencies(
-            project_id,
-            board_id,
-            apply=body.apply,
-        )
-    except project_commands.EntityNotFoundError as error:
-        raise HTTPException(404, str(error)) from error
-    if result.applied is not None:
-        return {
-            "suggestions": result.suggestions,
-            "applied": result.applied,
-            "project": project_to_client(result.project),
-        }
-    return {"suggestions": result.suggestions}
-
-
-@router.get("/projects/{project_id}/boards/{board_id}/dag-layout")
-def get_board_dag_layout(project_id: str, board_id: str) -> dict:
-    try:
-        return project_commands.load_board_layout(project_id, board_id)
-    except project_commands.EntityNotFoundError as error:
-        raise HTTPException(404, str(error)) from error
-
-
-@router.put("/projects/{project_id}/boards/{board_id}/dag-layout")
-def put_board_dag_layout(
-    project_id: str, board_id: str, body: DagLayoutBody
-) -> dict:
-    try:
-        return project_commands.save_board_layout(project_id, board_id, body.cards)
-    except project_commands.EntityNotFoundError as error:
-        raise HTTPException(404, str(error)) from error
-
-
 @router.delete("/projects/{project_id}/boards/{board_id}/cards/{card_id}")
 def delete_card(project_id: str, board_id: str, card_id: str) -> dict:
     try:
@@ -349,3 +309,21 @@ def get_report_asset(
     except FileNotFoundError as error:
         raise HTTPException(404, "Asset not found") from error
     return FileResponse(path)
+
+
+@router.patch("/projects/{project_id}/card-tags/{tag}")
+def patch_card_tag(project_id: str, tag: str, body: UpdateTagBody) -> dict:
+    try:
+        return project_to_client(project_commands.update_card_tag(project_id, tag, body.name, body.color))
+    except project_commands.EntityNotFoundError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+
+@router.delete("/projects/{project_id}/card-tags/{tag}")
+def delete_card_tag(project_id: str, tag: str) -> dict:
+    try:
+        return project_to_client(project_commands.delete_card_tag(project_id, tag))
+    except project_commands.EntityNotFoundError as error:
+        raise HTTPException(404, str(error)) from error

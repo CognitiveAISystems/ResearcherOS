@@ -860,6 +860,7 @@ function toggleLibraryAddMenu() {
 
 function setLibraryPapers(papers, { selectAll = true } = {}) {
   literatureResults = (papers || []).map(normalizePaperRecord).filter((p) => p.title && p.arxiv_url);
+  try { sessionStorage.setItem("koi-mortal-library", JSON.stringify(literatureResults)); } catch { /* private mode */ }
   if (selectAll) {
     selectedPaperUrls = new Set(literatureResults.map((p) => p.arxiv_url));
   } else {
@@ -1011,6 +1012,19 @@ function selectedLiteratureLimit() {
 
 function selectedProjectId() {
   return document.getElementById("literature-project-select")?.value || "";
+}
+
+function updateMortalCombatLink() {
+  const link = document.getElementById("mortal-combat-launch");
+  if (!link) return;
+  const papers = selectedPapers();
+  const currentProject = selectedProjectId() || new URLSearchParams(location.search).get("project") || "";
+  const params = new URLSearchParams({ project: currentProject });
+  if (currentProject) { try { sessionStorage.setItem("koi-mortal-project", currentProject); } catch { /* private mode */ } }
+  if (papers[0]) params.set("primary", encodeURIComponent(JSON.stringify(papers[0])));
+  if (papers[1]) params.set("reviewer", encodeURIComponent(JSON.stringify(papers[1])));
+  link.href = `mortal.html?${params.toString()}`;
+  link.classList.toggle("is-ready", papers.length >= 2);
 }
 
 function shouldOverwritePaperAnswers() {
@@ -1246,6 +1260,8 @@ async function loadProjectOptions() {
   const preferred =
     (requested && list.find((p) => p.id === requested)?.id) || list[0]?.id || "";
   if (preferred) select.value = preferred;
+  if (preferred) { try { sessionStorage.setItem("koi-mortal-project", preferred); } catch { /* private mode */ } }
+  updateMortalCombatLink();
   const active = list.find((p) => p.id === preferred);
   updateProjectBanner(active?.title, preferred);
 }
@@ -2593,9 +2609,11 @@ function renderLiteratureResults(results = [], _query = "") {
       const item = event.currentTarget.closest(".rw-library-item");
       item?.classList.toggle("is-selected", event.currentTarget.checked);
       updateActionButtons();
+      updateMortalCombatLink();
     });
   });
   updateActionButtons();
+  updateMortalCombatLink();
 }
 
 async function loadLibraryIntoSidebar({ silent = false } = {}) {

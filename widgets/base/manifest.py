@@ -40,6 +40,15 @@ class WidgetManifest:
             return self.id
         return f"{self.project_id}/{self.id}"
 
+    def _web_url(self, prefix: str) -> str | None:
+        if not self.entry_web or "web" not in self.surfaces or not self.project_id:
+            return None
+        url = f"{prefix}/{self.entry_web}"
+        path = self.root / self.entry_web
+        if path.is_file():
+            url += f"?v={int(path.stat().st_mtime)}"
+        return url
+
     def to_public_dict(self, *, enabled: bool) -> dict[str, Any]:
         prefix = f"/widgets/{self.project_id}/{self.id}" if self.project_id else f"/widgets/{self.id}"
         return {
@@ -57,11 +66,7 @@ class WidgetManifest:
                 "web": self.entry_web,
                 "desktop": self.entry_desktop,
             },
-            "web_url": (
-                f"{prefix}/{self.entry_web}"
-                if self.entry_web and "web" in self.surfaces and self.project_id
-                else None
-            ),
+            "web_url": self._web_url(prefix),
         }
 
 

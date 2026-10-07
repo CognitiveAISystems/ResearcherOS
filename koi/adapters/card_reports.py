@@ -444,33 +444,8 @@ def _board_chain(project: Project, board_id: str):
 
 
 def report_scaffold(project: Project, board_id: str, card_id: str, card_title: str) -> str:
-    """Шаблон отчёта с уже подставленной привязкой (§0, §5.1, §5.2)."""
-    cause, method = _board_chain(project, board_id)
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    try:
-        text = TEMPLATE_PATH.read_text(encoding="utf-8")
-    except OSError:
-        cause_id = cause.id if cause else "<id-причины>"
-        method_id = method.id if method else "<id-метода>"
-        return (
-            f"# Отчёт: {card_title}\n\n## 0. Привязка\n\n"
-            "| Поле | Значение |\n|------|----------|\n"
-            f"| Гипотеза (cause) | `{cause_id}` |\n"
-            f"| Метод / карточка | `{method_id}` / `{card_id}` |\n"
-            f"| Дата прогона | {today} |\n"
-        )
-    text = text.replace(
-        "# Отчёт о прогоне эксперимента (рабочий)", f"# Отчёт: {card_title}", 1
-    )
-    if cause is not None:
-        text = text.replace("`c-…` — короткое имя", f"`{cause.id}` — {cause.title}", 1)
-        text = text.replace("- `c-…` →", f"- `{cause.id}` →", 1)
-    if method is not None:
-        text = text.replace("`m-…` / `…`", f"`{method.id}` / `{card_id}`", 1)
-        text = text.replace('"method_id": "m-…"', f'"method_id": "{method.id}"', 1)
-        text = text.replace('"card_id": "…"', f'"card_id": "{card_id}"', 1)
-    text = text.replace("| YYYY-MM-DD |", f"| {today} |", 1)
-    return text
+    """Human-facing empty research document; agent instructions stay in skills."""
+    return "## Цель\n\n## Постановка эксперимента\n\n## Задачи\n\n## Эксперименты\n\n## Результаты\n"
 
 
 def read_report_indexed(project_id: str, card_id: str) -> dict[str, str] | None:

@@ -32,6 +32,7 @@ LIVE_ACTIVITY_MAX_AGE_SEC = 30 * 60
 # Dual-host A-1 10k order: jobs main → ns2 main → ns2 sysmon.
 METRICS_IMAGE_PRIORITY = (
     "dashboard.png",
+    "dashboard_sr_slices.png",
     "dashboard_scores.png",
     "dashboard_speed.png",
     "dashboard_losses.png",

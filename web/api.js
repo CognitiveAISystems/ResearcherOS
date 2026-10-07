@@ -8,6 +8,9 @@ export function apiBase() {
   if (typeof window !== "undefined" && window.__HUB__) {
     return window.location.origin;
   }
+  if (typeof window !== "undefined" && window.researchOSDesktop) {
+    return `${window.location.origin}/api`;
+  }
   if (typeof window === "undefined" || !window.location?.hostname) {
     return "http://127.0.0.1:8010";
   }
@@ -190,6 +193,24 @@ export const KoiApi = {
       method: "POST",
       body: JSON.stringify({ paper }),
     }),
+  explainMorphologyInTerminal: (projectId, prompt, { runId, nodeId } = {}) =>
+    api(`/projects/${encodeURIComponent(projectId)}/morphology/explain-terminal`, {
+      method: "POST",
+      body: JSON.stringify({ prompt, run_id: runId, node_id: nodeId }),
+    }),
+  getMorphologyExplainNote: (projectId, runId, nodeId) =>
+    api(
+      `/projects/${encodeURIComponent(projectId)}/morphology/${encodeURIComponent(
+        runId
+      )}/explain-note?node_id=${encodeURIComponent(nodeId)}`
+  ),
+  stageMortalCombat: (projectId, primary, reviewer, question = "") =>
+    api(`/projects/${encodeURIComponent(projectId)}/mortal-combat/stage`, {
+      method: "POST",
+      body: JSON.stringify({ primary, reviewer, question }),
+    }),
+  getMortalCombat: (projectId, runId) =>
+    api(`/projects/${encodeURIComponent(projectId)}/mortal-combat/${encodeURIComponent(runId)}`),
   listMorphologyRuns: (projectId, paperKey = "") =>
     api(
       `/projects/${encodeURIComponent(projectId)}/morphology${
@@ -297,28 +318,17 @@ export const KoiApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  deleteCardTag: (projectId, tag) =>
+    api(`/projects/${encodeURIComponent(projectId)}/card-tags/${encodeURIComponent(tag)}`, { method: "DELETE" }),
+  updateCardTag: (projectId, tag, body) =>
+    api(`/projects/${encodeURIComponent(projectId)}/card-tags/${encodeURIComponent(tag)}`, {
+      method: "PATCH", body: JSON.stringify(body),
+    }),
   patchCard: (projectId, boardId, cardId, body) =>
     api(`/projects/${projectId}/boards/${boardId}/cards/${cardId}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  suggestBoardDag: (projectId, boardId, body = {}) =>
-    api(`/projects/${projectId}/boards/${boardId}/dag/suggest`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  getBoardDagLayout: (projectId, boardId) =>
-    api(
-      `/projects/${encodeURIComponent(projectId)}/boards/${encodeURIComponent(boardId)}/dag-layout`
-    ),
-  saveBoardDagLayout: (projectId, boardId, body) =>
-    api(
-      `/projects/${encodeURIComponent(projectId)}/boards/${encodeURIComponent(boardId)}/dag-layout`,
-      {
-        method: "PUT",
-        body: JSON.stringify(body),
-      }
-    ),
   deleteCard: (projectId, boardId, cardId) =>
     api(`/projects/${projectId}/boards/${boardId}/cards/${cardId}`, {
       method: "DELETE",
@@ -548,13 +558,21 @@ export const KoiApi = {
     ),
   sendAgentQuestion: (body) =>
     api("/agent-chat", { method: "POST", body: JSON.stringify(body) }),
-  listAgentChat: (projectId) =>
-    api(`/agent-chat?project_id=${encodeURIComponent(projectId)}`),
+  listAgentChat: (projectId, boardId = null, cardId = null) =>
+    api(`/agent-chat?project_id=${encodeURIComponent(projectId)}${cardId ? `&board_id=${encodeURIComponent(boardId)}&card_id=${encodeURIComponent(cardId)}` : ""}`),
+  listAgentChatActivity: (projectId, boardId = null, cardId = null) =>
+    api(`/agent-chat/activity?project_id=${encodeURIComponent(projectId)}${cardId ? `&board_id=${encodeURIComponent(boardId)}&card_id=${encodeURIComponent(cardId)}` : ""}`),
   listAgentChatPending: () => api("/agent-chat/pending"),
   deleteAgentChatItem: (itemId) =>
     api(`/agent-chat/${encodeURIComponent(itemId)}`, { method: "DELETE" }),
-  getSyncStatus: () => api("/sync/status"),
-  pullSync: () => api("/sync/pull", { method: "POST" }),
+  getSyncStatus: (fetch = true) =>
+    api(`/sync/status?fetch=${fetch ? "true" : "false"}`),
+  pullSync: (projectId) => {
+    const q = projectId
+      ? `?project_id=${encodeURIComponent(projectId)}`
+      : "";
+    return api(`/sync/pull${q}`, { method: "POST" });
+  },
   getProjectDiscovery: (since = 0) =>
     api(`/sync/project-discovery?since=${encodeURIComponent(since)}`),
   getRqDiscoveries: () => api("/sync/rq-discoveries"),
@@ -578,20 +596,14 @@ export const KoiApi = {
       body: JSON.stringify(body),
     }),
   getCursorUsage: () => api("/cursor/usage"),
-  getMilestones: (projectId, nodeId) =>
-    api(`/projects/${projectId}/nodes/${encodeURIComponent(nodeId)}/milestones`),
-  createMilestones: (projectId, nodeId) =>
-    api(`/projects/${projectId}/nodes/${encodeURIComponent(nodeId)}/milestones`, {
-      method: "POST",
-    }),
-  saveMilestones: (projectId, nodeId, milestones) =>
-    api(`/projects/${projectId}/nodes/${encodeURIComponent(nodeId)}/milestones`, {
-      method: "PUT",
-      body: JSON.stringify({ milestones }),
-    }),
   listWidgets: () => api("/widgets"),
   getWidgetData: (projectId, widgetId) =>
     api(`/widgets/${encodeURIComponent(projectId)}/${encodeURIComponent(widgetId)}/data`),
+  postWidgetData: (projectId, widgetId, body) =>
+    api(`/widgets/${encodeURIComponent(projectId)}/${encodeURIComponent(widgetId)}/data`, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    }),
   setWidgetEnabled: (projectId, widgetId, enabled) =>
     api(`/widgets/${encodeURIComponent(projectId)}/${encodeURIComponent(widgetId)}`, {
       method: "PUT",

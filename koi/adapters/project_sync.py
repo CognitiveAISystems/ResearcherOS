@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tarfile
 import io
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -28,16 +29,29 @@ from koi.adapters.project_sync_queue import (
 )
 
 KOI_STRUCTURE_PREFIX = "koi-structure/"
+GIT_COMMAND_TIMEOUT_SEC = 30
 RefChangeDiscovery = Callable[[str, str, Path], list[dict]]
 
 
 def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=GIT_COMMAND_TIMEOUT_SEC,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            ["git", *args],
+            124,
+            stdout=exc.stdout or "",
+            stderr=(exc.stderr or "")
+            + f"git command timed out after {GIT_COMMAND_TIMEOUT_SEC}s",
+        )
 
 
 def _git_error(result: subprocess.CompletedProcess[str]) -> str:
@@ -99,13 +113,19 @@ def _fetch_branch(repo: Path, branch: str) -> subprocess.CompletedProcess[str]:
     return _run_git(repo, "fetch", "--quiet", "origin", branch)
 
 
-def _remote_sync_ref(repo: Path, branch: str) -> str | None:
-    _fetch_branch(repo, branch)
+def _resolve_sync_ref(repo: Path, branch: str, *, fetch: bool = True) -> str | None:
+    """Return tip SHA for origin/<branch> (preferred) or local <branch>."""
+    if fetch:
+        _fetch_branch(repo, branch)
     for ref in (f"origin/{branch}", branch):
         r = _run_git(repo, "rev-parse", "--verify", ref)
         if r.returncode == 0:
             return r.stdout.strip()
     return None
+
+
+def _remote_sync_ref(repo: Path, branch: str) -> str | None:
+    return _resolve_sync_ref(repo, branch, fetch=True)
 
 
 def _local_worktree_ref(repo: Path, branch: str) -> str | None:
@@ -115,11 +135,7 @@ def _local_worktree_ref(repo: Path, branch: str) -> str | None:
     return None
 
 
-def _sync_branch_counts(repo: Path, branch: str) -> tuple[int, int]:
-    """Return (ahead, behind) for local worktree branch vs origin."""
-    _fetch_branch(repo, branch)
-    local = _local_worktree_ref(repo, branch)
-    remote = _remote_sync_ref(repo, branch)
+def _ahead_behind(repo: Path, local: str | None, remote: str | None) -> tuple[int, int]:
     if not local or not remote:
         return 0, 0
     counts = _run_git(repo, "rev-list", "--left-right", "--count", f"{local}...{remote}")
@@ -129,6 +145,15 @@ def _sync_branch_counts(repo: Path, branch: str) -> tuple[int, int]:
     if len(parts) != 2:
         return 0, 0
     return int(parts[0]), int(parts[1])
+
+
+def _sync_branch_counts(
+    repo: Path, branch: str, *, fetch: bool = True
+) -> tuple[int, int]:
+    """Return (ahead, behind) for local worktree branch vs origin."""
+    local = _local_worktree_ref(repo, branch)
+    remote = _resolve_sync_ref(repo, branch, fetch=fetch)
+    return _ahead_behind(repo, local, remote)
 
 
 def _dirty_koi_paths(mount: ProjectMount) -> list[str]:
@@ -164,13 +189,15 @@ def project_dirty_paths() -> list[str]:
     return paths
 
 
-def _mount_summary(mount: ProjectMount) -> dict:
+def _mount_summary(mount: ProjectMount, *, fetch: bool = True) -> dict:
     repo = mount.repo_root
     branch = mount.git_sync_branch or DEFAULT_SYNC_BRANCH
+    if fetch:
+        _fetch_branch(repo, branch)
     code_branch = _run_git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    remote_ref = _remote_sync_ref(repo, branch)
     local_ref = _local_worktree_ref(repo, branch)
-    ahead, behind = _sync_branch_counts(repo, branch)
+    remote_ref = _resolve_sync_ref(repo, branch, fetch=False)
+    ahead, behind = _ahead_behind(repo, local_ref, remote_ref)
     dirty = _dirty_koi_paths(mount)
     return {
         "project_id": mount.project_id,
@@ -186,17 +213,28 @@ def _mount_summary(mount: ProjectMount) -> dict:
     }
 
 
-def git_summary(*, project_id: str | None = None) -> dict:
+def git_summary(*, project_id: str | None = None, fetch: bool = True) -> dict:
     mounts = sync_mounts()
     if project_id:
         mounts = [m for m in mounts if m.project_id == project_id]
     if not mounts:
         return {"ok": False, "error": "no git-sync projects discovered"}
 
-    projects = [_mount_summary(m) for m in mounts]
+    if len(mounts) == 1:
+        projects = [_mount_summary(mounts[0], fetch=fetch)]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+
+        workers = min(8, len(mounts))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            projects = list(
+                pool.map(lambda m: _mount_summary(m, fetch=fetch), mounts)
+            )
     first = projects[0]
     pending = list_pending_push()
     state = load_state()
+    total_ahead = sum(int(p.get("ahead") or 0) for p in projects)
+    total_behind = sum(int(p.get("behind") or 0) for p in projects)
 
     return {
         "ok": True,
@@ -204,8 +242,8 @@ def git_summary(*, project_id: str | None = None) -> dict:
         "branch": first["sync_branch"],
         "code_branch": first["code_branch"],
         "upstream": f"origin/{first['sync_branch']}",
-        "ahead": first["ahead"],
-        "behind": first["behind"],
+        "ahead": total_ahead,
+        "behind": total_behind,
         "dirty_project_paths": project_dirty_paths(),
         "pending_push": pending,
         "last_pull_at": state.get("last_pull_at"),

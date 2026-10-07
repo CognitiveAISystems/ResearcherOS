@@ -15,17 +15,17 @@
       document.write('<link rel="stylesheet" href="/static/hub-overrides.css?v=17">');
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260916c" />
-  <link rel="stylesheet" href="desktop-onboarding.css" />
   <script>
     (function () {
       var t = localStorage.getItem("koi-theme");
-      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      if (t !== "dark") document.documentElement.setAttribute("data-theme", "light");
     })();
   </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20261007report-path-full" />
+  <link rel="stylesheet" href="desktop-onboarding.css" />
 </head>
 <body>
   <header class="topbar">
@@ -34,9 +34,6 @@
         <div class="brand">
           <span class="logo">ResearchOS</span>
           <span class="tagline" id="brand-tagline" aria-live="polite"></span>
-        </div>
-        <div class="topbar-nav">
-          <a href="tour.html" class="btn btn-tour" title="Интерактивная презентация о платформе">О платформе</a>
         </div>
       </div>
       <div class="toolbar">
@@ -62,13 +59,12 @@
             <p id="rq-bell-empty" class="rq-bell-empty">Пока нет открытий — они появятся, когда в research.json появятся новые ответы (локально или после sync).</p>
           </div>
         </div>
-        <button type="button" id="btn-sync" class="btn btn-sync" title="Синхронизировать с git" aria-label="Синхронизировать с git">
-          <svg class="sync-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-          <svg class="sync-error-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12l-4.9 4.89a1 1 0 1 0 1.41 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.42L13.41 12l4.9-4.89a1 1 0 0 0-.01-1.4z"/></svg>
-          <span id="sync-behind-badge" class="sync-behind-badge hidden" aria-hidden="true"></span>
+        <button type="button" id="btn-theme" class="btn btn-theme" title="Включить тёмную тему" aria-label="Включить тёмную тему">
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.3 15.4A8.5 8.5 0 0 1 8.6 3.7 8.5 8.5 0 1 0 20.3 15.4Z"/></svg>
         </button>
-        <button type="button" id="btn-settings" class="btn btn-settings" title="Настройки" aria-label="Настройки">
-          <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.63.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.04.71 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6z"/></svg>
+        <button type="button" id="btn-agent-chat" class="btn btn-chat-toggle" aria-label="Открыть чат" title="Открыть чат" aria-expanded="false" aria-controls="agent-chat-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg>
         </button>
         <span id="save-status" class="sr-only" aria-live="polite"></span>
       </div>
@@ -162,7 +158,7 @@
           <p id="canvas-hint" class="sr-only" aria-live="polite"></p>
         </div>
         <div class="mindmap-corner-tr">
-          <button type="button" id="btn-agent-chat" class="agent-chat-trigger" title="Ask the agent in Cursor">
+          <button type="button" id="btn-agent-chat-welcome" class="agent-chat-trigger" title="Спросить агента" aria-controls="agent-chat-panel">
             <span class="agent-chat-trigger__label">Press to ask the questions</span>
           </button>
         </div>
@@ -185,72 +181,49 @@
             <svg class="workspace-dock__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2.5L18.5 10H13V4.5zM8 13h8v2H8v-2zm0 4h8v2H8v-2z"/><path fill="currentColor" d="M17.5 3.5 19 5l-5.5 5.5-2-2L17.5 3.5z"/></svg>
             <span class="workspace-dock__label">PaperDraft</span>
           </button>
+          <button type="button" id="btn-widgets" class="workspace-dock__item" title="Настроить виджеты" aria-haspopup="dialog" aria-controls="widgets-dialog">
+            <svg class="workspace-dock__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3L2.9 9.6l6.3-.9L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <span class="workspace-dock__label">Виджеты</span>
+          </button>
         </nav>
       </div>
     </main>
 
-    <aside id="agent-chat-panel" class="agent-chat-panel hidden" aria-label="Спросить агента">
+    <aside id="agent-chat-panel" class="agent-chat-panel hidden" aria-labelledby="agent-chat-title">
       <div class="agent-chat-header">
-        <h2 class="agent-chat-title">Спросить агента</h2>
-        <button type="button" id="btn-agent-chat-close" class="modal-close" aria-label="Закрыть">×</button>
-      </div>
-      <p class="agent-chat-hint">
-        Ответ появится здесь после обработки агентом (по базе выводов
-        <code>research.json</code>, отчёт — только при нехватке деталей).
-      </p>
-      <p id="agent-chat-inbox-show-hint" class="agent-chat-inbox-show-hint hidden">
-        <button type="button" class="agent-chat-key-link" id="btn-show-inbox-hint">Показать инструкцию Inbox</button>
-      </p>
-      <div id="agent-chat-inbox-notice" class="agent-chat-inbox-notice hidden" role="region" aria-label="Настройка Inbox-чата">
-        <div class="agent-chat-inbox-header">
-          <p class="agent-chat-inbox-title">ResearchOS Chat Inbox в Cursor</p>
-          <button
-            type="button"
-            id="btn-dismiss-inbox-hint"
-            class="agent-chat-inbox-close"
-            aria-label="Закрыть подсказку"
-            title="Закрыть"
-          >×</button>
+        <div class="agent-chat-heading">
+          <h2 id="agent-chat-title" class="agent-chat-title">Спросить агента</h2>
+          <div class="agent-chat-project-picker">
+            <button type="button" id="agent-chat-project" class="agent-chat-project" aria-expanded="false" aria-controls="agent-chat-project-menu"><span class="agent-chat-project-caption">Проект</span><span id="agent-chat-project-name"></span><span aria-hidden="true">⌄</span></button>
+            <div id="agent-chat-project-menu" class="agent-chat-project-menu" hidden>
+              <input type="search" id="agent-chat-project-search" placeholder="Найти проект…" aria-label="Найти проект" />
+              <div id="agent-chat-project-options" class="agent-chat-project-options"></div>
+            </div>
+          </div>
         </div>
-        <ol class="agent-chat-inbox-steps">
-          <li>Чат <strong>ResearchOS Chat Inbox</strong> в Cursor.</li>
-          <li><strong>Скопировать сообщение</strong> → вставить в чат → отправить.</li>
-          <li>Нажать <strong>Inbox готов</strong> ниже.</li>
-        </ol>
-        <div class="agent-chat-inbox-actions">
-          <button type="button" class="btn btn-primary btn-small" id="btn-copy-inbox-bootstrap">
-            Скопировать сообщение
-          </button>
-          <button type="button" class="btn btn-small" id="btn-mark-inbox-configured">
-            Inbox готов
-          </button>
-          <span id="agent-chat-inbox-copy-status" class="agent-chat-inbox-copy-status" aria-live="polite"></span>
-        </div>
-        <p id="agent-chat-inbox-watcher-status" class="agent-chat-inbox-watcher-status" aria-live="polite"></p>
       </div>
-      <p id="agent-chat-key-notice" class="agent-chat-key-notice hidden" role="status"></p>
       <p id="agent-chat-scope" class="agent-chat-scope" hidden></p>
-      <div id="agent-chat-inbox-prompt" class="agent-chat-inbox-prompt hidden" role="region" aria-label="Запуск агента">
-        <p class="agent-chat-inbox-prompt-label">Inbox ещё не настроен</p>
-        <p class="agent-chat-inbox-prompt-hint">Скопируйте сообщение и вставьте в чат <strong>ResearchOS Chat Inbox</strong> в Cursor, затем нажмите «Inbox готов» в настройках.</p>
-        <div class="agent-chat-inbox-prompt-actions">
-          <button type="button" class="btn btn-primary btn-small" id="agent-chat-inbox-prompt-copy">Скопировать сообщение</button>
-          <span id="agent-chat-inbox-prompt-status" class="agent-chat-inbox-copy-status" aria-live="polite"></span>
-        </div>
+      <div class="agent-chat-tabs" role="tablist" aria-label="Чат и работа агента">
+        <button type="button" id="agent-chat-tab-chat" role="tab" aria-selected="true" class="is-active">Чат</button>
+        <button type="button" id="agent-chat-tab-activity" role="tab" aria-selected="false">Работа агента</button>
       </div>
-      <div id="agent-chat-log" class="agent-chat-log" aria-live="polite"></div>
+      <div id="agent-chat-log" class="agent-chat-log" role="tabpanel" aria-live="polite"></div>
+      <div id="agent-chat-activity" class="agent-chat-activity hidden" role="tabpanel" aria-live="polite"></div>
       <form id="agent-chat-form" class="agent-chat-form">
+        <div class="agent-chat-composer">
         <label class="sr-only" for="agent-chat-input">Ваш вопрос</label>
         <textarea
           id="agent-chat-input"
           class="agent-chat-input"
-          rows="3"
-          placeholder="Например: помогает ли diversity bonus при обучении на примерах?"
-          required
+          rows="2"
+          placeholder="Спросите о проекте…"
+          aria-describedby="agent-chat-form-status"
         ></textarea>
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary" id="btn-agent-chat-send">Отправить</button>
+        <button type="submit" class="btn btn-primary agent-chat-send" id="btn-agent-chat-send" aria-label="Отправить вопрос" title="Отправить вопрос">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+        </button>
         </div>
+        <p id="agent-chat-form-status" class="agent-chat-form-status" role="status" aria-live="polite" hidden></p>
       </form>
     </aside>
   </div>
@@ -324,85 +297,6 @@
         <div class="form-actions">
           <button type="button" class="btn" data-close="create-project-modal">Отмена</button>
           <button type="submit" class="btn btn-primary" id="create-project-submit">Создать</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="settings-modal" class="modal hidden" role="dialog" aria-labelledby="settings-title">
-    <div class="modal-backdrop" data-close="settings-modal"></div>
-    <div class="modal-panel modal-panel--narrow settings-panel">
-      <button type="button" class="modal-close" data-close="settings-modal" aria-label="Закрыть">×</button>
-      <p class="modal-type">Настройки</p>
-      <h2 id="settings-title" class="inline-edit-title">Агент в чате</h2>
-      <p class="settings-lead">
-        Выберите, как отвечать на вопросы из панели «Спросить агента». Мгновенные ответы по
-        <code>research.json</code> работают в любом режиме.
-      </p>
-      <form id="settings-form" class="form settings-form">
-        <label class="settings-field settings-theme-field">
-          <span class="settings-label">Тема интерфейса</span>
-          <select id="settings-theme-select" aria-label="Тема интерфейса">
-            <option value="dark">Тёмная</option>
-            <option value="light">Светлая</option>
-          </select>
-        </label>
-        <fieldset class="settings-mode-fieldset">
-          <legend class="settings-label">Режим ответов</legend>
-          <label class="settings-mode-option">
-            <input type="radio" name="agent_chat_mode" value="cursor_inbox" />
-            <span class="settings-mode-text">
-              <strong>Inbox-чат</strong> (рекомендуется) — отдельные чаты в Cursor для вопросов и для Related Work;
-              без API.
-            </span>
-          </label>
-          <label class="settings-mode-option">
-            <input type="radio" name="agent_chat_mode" value="cursor_ide" />
-            <span class="settings-mode-text">
-              <strong>Hooks</strong> — без API; вопросы подхватывает любой чат агента при старте/stop.
-            </span>
-          </label>
-          <label class="settings-mode-option">
-            <input type="radio" name="agent_chat_mode" value="api" />
-            <span class="settings-mode-text">
-              <strong>Фоновый агент (API)</strong> — ответы в фоне, нужен ключ Cursor API.
-            </span>
-          </label>
-        </fieldset>
-        <div id="settings-inbox-block" class="settings-inbox-block hidden">
-          <p class="settings-inbox-lead">
-            Откройте панель «Спросить агента» — там пошаговая инструкция и кнопка копирования
-            сообщения для Inbox-чата.
-          </p>
-          <button type="button" class="btn btn-small" id="btn-settings-copy-inbox">Скопировать сообщение для Cursor</button>
-          <p id="settings-inbox-copy-status" class="settings-inbox-copy-status" aria-live="polite"></p>
-        </div>
-        <div id="settings-api-block" class="settings-api-block hidden">
-          <label class="settings-field">
-            <span class="settings-label">Cursor API ключ</span>
-            <input
-              type="password"
-              id="settings-cursor-key"
-              name="cursor_api_key"
-              autocomplete="off"
-              placeholder="crsr_…"
-              spellcheck="false"
-            />
-          </label>
-          <p id="settings-key-status" class="settings-key-status" aria-live="polite"></p>
-          <p class="settings-help">
-            Получить ключ:
-            <a id="settings-key-link" href="https://cursor.com/dashboard/integrations" target="_blank" rel="noopener noreferrer">Cursor Dashboard → Integrations</a>
-          </p>
-          <p id="settings-sdk-hint" class="settings-sdk-hint hidden"></p>
-        </div>
-        <p id="settings-save-notice" class="settings-save-notice hidden" role="status" aria-live="polite"></p>
-        <div class="form-actions form-actions--split">
-          <button type="button" id="btn-settings-clear-key" class="btn btn-danger hidden">Удалить ключ</button>
-          <div class="form-actions">
-            <button type="button" class="btn" data-close="settings-modal">Отмена</button>
-            <button type="submit" class="btn btn-primary" id="btn-settings-save">Сохранить</button>
-          </div>
         </div>
       </form>
     </div>
@@ -493,52 +387,80 @@
   <div id="kanban-modal" class="modal hidden" role="dialog" aria-labelledby="kanban-node-title-display">
     <div class="modal-backdrop" data-close="kanban-modal"></div>
     <div class="modal-panel modal-panel--kanban">
-      <button type="button" class="modal-close" data-close="kanban-modal" aria-label="Закрыть">×</button>
+      <div class="kanban-modal-actions">
+        <button type="button" id="kanban-focus-toggle" class="kanban-hint-btn kanban-focus-btn" aria-pressed="false" aria-label="Фокус: в работе, очередь и изменённые сегодня" title="Фокус: в работе, очередь и изменённые сегодня">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="2.25"/></svg>
+        </button>
+        <button type="button" class="modal-close" data-close="kanban-modal" aria-label="Закрыть">×</button>
+      </div>
       <header class="kanban-modal-header">
         <div class="kanban-modal-headline">
           <div class="kanban-modal-headline__text">
-            <p class="modal-type kanban-modal-eyebrow" id="kanban-modal-type"></p>
+            <p class="modal-type kanban-modal-eyebrow hidden" id="kanban-modal-type"></p>
             <h2 id="kanban-node-title-display" class="inline-edit-text inline-edit-title kanban-modal-title" title="Двойной клик — редактировать"></h2>
             <input type="text" id="kanban-node-title-input" class="inline-edit-field hidden" />
           </div>
-          <button type="button" id="kanban-hint-toggle" class="kanban-hint-btn" aria-label="Показать подсказки" title="Подсказки по канбану">?</button>
         </div>
-        <div class="kanban-node-meta kanban-node-meta--compact">
-          <p id="kanban-node-desc-display" class="inline-edit-text inline-edit-desc kanban-node-desc is-clamped" data-placeholder="Описание (двойной клик)"></p>
-          <textarea id="kanban-node-desc-input" class="inline-edit-field hidden" rows="3"></textarea>
-          <button type="button" id="kanban-desc-toggle" class="kanban-desc-toggle hidden" aria-expanded="false">развернуть</button>
-        </div>
-        <section id="kanban-pages-block" class="node-pages-block node-pages-block--kanban" aria-label="Мастер-отчёты">
-          <div class="node-pages-head">
-            <h3 class="node-pages-title">Мастер-отчёты</h3>
-            <button type="button" id="btn-kanban-add-master-page" class="btn btn-primary btn-small">+ Добавить</button>
+        <details id="kanban-method-details" class="kanban-method-details">
+          <summary>Описание и мастер-отчёты</summary>
+          <div class="kanban-node-meta kanban-node-meta--compact">
+            <p id="kanban-node-desc-display" class="inline-edit-text inline-edit-desc kanban-node-desc is-clamped" data-placeholder="Описание (двойной клик)"></p>
+            <textarea id="kanban-node-desc-input" class="inline-edit-field hidden" rows="3"></textarea>
+            <button type="button" id="kanban-desc-toggle" class="kanban-desc-toggle hidden" aria-expanded="false">развернуть</button>
           </div>
-          <div id="kanban-pages-table" class="node-pages-table"></div>
-        </section>
+          <section id="kanban-pages-block" class="node-pages-block node-pages-block--kanban" aria-label="Мастер-отчёты">
+            <div class="node-pages-head">
+              <h3 class="node-pages-title">Мастер-отчёты</h3>
+              <button type="button" id="btn-kanban-add-master-page" class="btn btn-primary btn-small">+ Добавить</button>
+            </div>
+            <div id="kanban-pages-table" class="node-pages-table"></div>
+          </section>
+        </details>
         <p class="modal-desc kanban-modal-hint hidden" id="kanban-modal-hint">⠿ — перетащить · булавка — закрепить сверху · + в колонке — новая карточка · двойной клик — правка · в Done под заголовком — краткий вывод · ↗ — отчёт</p>
         <div class="kanban-modal-toolbar">
-          <div id="kanban-view-tabs" class="kanban-view-tabs" role="tablist" aria-label="Режим доски">
-            <button type="button" id="kanban-tab-board" class="kanban-view-tab is-active" role="tab" aria-selected="true" aria-controls="kanban-pane-board">Kanban</button>
-            <button type="button" id="kanban-tab-dag" class="kanban-view-tab" role="tab" aria-selected="false" aria-controls="kanban-pane-dag">DAG view</button>
-          </div>
           <div id="kanban-board-filters" class="kanban-board-filters" aria-label="Фильтры доски">
             <div id="kanban-date-filter" class="kanban-date-filter" role="group" aria-label="Период изменения"></div>
             <div id="kanban-tag-filter" class="kanban-tag-filter kanban-tag-filter--inline hidden" aria-label="Фильтр по тегам"></div>
+            <button type="button" id="kanban-tags-settings" class="kanban-hint-btn" aria-label="Настройки тегов" title="Настройки тегов">⚙</button>
             <button type="button" id="kanban-filters-clear" class="kanban-filters-clear hidden" title="Сбросить все фильтры" aria-label="Сбросить все фильтры">Сбросить</button>
           </div>
         </div>
       </header>
       <div class="kanban-modal-body">
-        <div id="kanban-pane-board" class="kanban-pane is-active" role="tabpanel">
+        <div id="kanban-pane-board" class="kanban-pane is-active">
           <div id="kanban-board" class="kanban-board"></div>
-          <section id="kanban-milestones" class="kanban-milestones hidden" aria-label="Milestones"></section>
-        </div>
-        <div id="kanban-pane-dag" class="kanban-pane" role="tabpanel" hidden>
-          <div id="kanban-dag-view" class="kanban-dag-view"></div>
         </div>
       </div>
     </div>
   </div>
+
+  <dialog id="tag-delete-confirm" class="tag-settings-dialog tag-delete-confirm" aria-labelledby="tag-delete-title" aria-describedby="tag-delete-description">
+    <h2 id="tag-delete-title"></h2>
+    <p id="tag-delete-description">Тег будет снят со всех карточек проекта. Сами карточки останутся.</p>
+    <div class="tag-delete-actions">
+      <button type="button" class="btn" id="tag-delete-cancel">Отмена</button>
+      <button type="button" class="btn" id="tag-delete-accept">Удалить</button>
+    </div>
+  </dialog>
+  <dialog id="tag-settings-dialog" class="tag-settings-dialog" aria-labelledby="tag-settings-title">
+    <header class="tag-settings-header">
+      <h2 id="tag-settings-title">Настройки тегов</h2>
+      <button type="button" id="tag-settings-cancel" class="btn" aria-label="Закрыть">×</button>
+    </header>
+    <div class="tag-settings-layout">
+      <nav id="tag-settings-list" aria-label="Теги"></nav>
+      <form id="tag-settings-form">
+        <label>Название <input id="tag-settings-name" required pattern="[a-zA-Z0-9_-]+" /></label>
+        <small>Используйте латинские буквы, цифры, дефис или подчёркивание.</small>
+        <fieldset class="tag-settings-colors">
+          <legend>Цвет</legend>
+          <div id="tag-settings-palette" class="tag-settings-palette"></div>
+        </fieldset>
+        <p id="tag-settings-error" role="status"></p>
+        <button type="button" id="tag-settings-delete" class="btn" title="Удалить тег со всех карточек проекта">Удалить тег</button>
+      </form>
+    </div>
+  </dialog>
 
   <!-- Выводы по экспериментам метода (отдельно от канбана) -->
   <div id="method-questions-modal" class="modal hidden" role="dialog" aria-labelledby="method-questions-title">
@@ -571,31 +493,53 @@
       <button type="button" class="modal-close" data-close="card-report-modal" aria-label="Закрыть">×</button>
       <div id="card-report-compute-cost" class="compute-cost-badge-slot" hidden></div>
       <p class="modal-type">Отчёт</p>
-      <h2 id="card-report-card-title" class="inline-edit-title"></h2>
-      <div id="card-report-tags" class="card-tags"></div>
       <p id="card-report-filename" class="card-report-filename"></p>
-      <div class="card-report-mode" role="tablist" aria-label="Режим отчёта">
-        <button type="button" id="card-report-mode-write" class="card-report-mode-btn is-active" role="tab" aria-selected="true" aria-controls="card-report-pane-write">
-          <svg class="card-report-mode-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-          <span>Write</span>
-        </button>
-        <button type="button" id="card-report-mode-view" class="card-report-mode-btn" role="tab" aria-selected="false" aria-controls="card-report-pane-view">
-          <svg class="card-report-mode-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-          <span>View</span>
-        </button>
-      </div>
-      <div class="card-report-body">
-        <div id="card-report-pane-write" class="card-report-pane is-active" role="tabpanel">
-          <textarea id="card-report-editor" class="card-report-editor" spellcheck="false" placeholder="# Отчёт по эксперименту&#10;&#10;Пишите в Markdown…"></textarea>
+      <div class="report-workspace">
+        <div class="report-document">
+          <h2 id="card-report-card-title" class="inline-edit-title"></h2>
+          <div id="card-report-tags" class="card-tags"></div>
+          <div class="report-toolbar">
+            <button type="button" id="report-agent-open" class="btn">Сформулировать постановку</button>
+          </div>
+          <textarea id="card-report-editor" hidden></textarea>
+          <div id="card-report-preview" class="markdown-preview report-blocks"></div>
         </div>
-        <div id="card-report-pane-view" class="card-report-pane" role="tabpanel" hidden>
-          <div id="card-report-preview" class="markdown-preview"></div>
+        <aside id="report-interview" class="report-interview" hidden aria-label="Подготовка постановки">
+          <header>
+            <h3>Чат по задаче</h3>
+            <button type="button" id="report-agent-close" class="agent-chat-close" aria-label="Скрыть интервью">×</button>
+          </header>
+          <div class="agent-chat-tabs" role="tablist" aria-label="Чат и работа агента">
+            <button type="button" id="report-interview-tab-chat" role="tab" aria-selected="true" class="is-active">Чат</button>
+            <button type="button" id="report-interview-tab-activity" role="tab" aria-selected="false">Работа агента</button>
+          </div>
+          <div id="report-interview-log" class="agent-chat-log" role="tabpanel" aria-live="polite"></div>
+          <div id="report-interview-activity" class="agent-chat-activity hidden" role="tabpanel" aria-live="polite"></div>
+          <form id="report-interview-form" class="agent-chat-form">
+            <div class="agent-chat-composer">
+              <label class="sr-only" for="report-interview-input">Ответ агенту или идея эксперимента</label>
+              <textarea id="report-interview-input" class="agent-chat-input" rows="2" placeholder="Сообщение, /grill_me или /make_report" required></textarea>
+              <button type="submit" class="btn btn-primary agent-chat-send" aria-label="Отправить вопрос">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+              </button>
+            </div>
+            <p id="report-interview-status" class="agent-chat-form-status" role="status" hidden></p>
+          </form>
+        </aside>
+      </div>
+      <button type="button" id="report-agent-fab" class="agent-chat-trigger report-agent-fab" aria-label="Спросить агента">
+        <svg class="report-agent-fab__mark" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+          <circle cx="12" cy="12" r="7.2" fill="none" stroke="currentColor" stroke-width="1.4"></circle>
+        </svg>
+      </button>
+      <footer class="report-footer">
+        <p class="card-report-hint">Клик по блоку — редактировать · Enter — следующий абзац · Shift+Enter — перенос · ⌘/Ctrl+Enter — завершить блок · \agent — подготовить постановку</p>
+        <div class="card-report-actions">
+          <span id="report-save-status" role="status">Сохранено</span>
+          <button type="button" id="card-report-save" class="btn btn-primary">Сохранить</button>
         </div>
-      </div>
-      <div class="card-report-actions">
-        <button type="button" id="card-report-save" class="btn btn-primary">Сохранить</button>
-      </div>
-      <p class="card-report-hint">Файл в <code>reports/</code> · опционально <code>compute_cost:</code> в шапке · Ctrl+V — картинка в <code>assets/</code> · Write / View · секции <code>##</code> сворачиваются · при закрытии сохраняется</p>
+      </footer>
     </div>
   </div>
 
@@ -850,9 +794,22 @@
     aria-relevant="additions"
   ></div>
 
+  <dialog id="widgets-dialog" class="widgets-dialog" aria-labelledby="widgets-title" aria-describedby="widgets-description">
+    <button type="button" class="modal-close" data-widgets-close aria-label="Закрыть">×</button>
+    <h2 id="widgets-title">☆ Виджеты</h2>
+    <p id="widgets-description">Выберите, что показывать в рабочем пространстве.</p>
+    <input type="search" class="widgets-search" placeholder="Поиск виджета…" aria-label="Поиск виджета" />
+    <div class="widgets-list"></div>
+    <p class="widgets-status" role="status"></p>
+    <div class="widgets-actions">
+      <button type="button" class="btn widgets-reload">Обновить</button>
+      <button type="button" class="btn widgets-hide-all">Скрыть все</button>
+      <button type="button" class="btn btn-primary" data-widgets-close>Готово</button>
+    </div>
+  </dialog>
   <div id="koi-widgets-root" aria-live="polite"></div>
 
-  <script type="module" src="app.js?v=20260916b"></script>
+  <script type="module" src="app.js?v=20261007grill-sticky"></script>
   <script type="module" src="desktop-onboarding.js"></script>
 </body>
 </html>

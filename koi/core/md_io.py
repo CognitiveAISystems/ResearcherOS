@@ -349,6 +349,9 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
         description=str(meta.get("description") or ""),
         literature_keywords=_parse_literature_keywords(meta.get("literature_keywords")),
         card_tags=_parse_card_tag_vocabulary(meta.get("card_tags")),
+        card_tag_colors={str(k).lower(): v for k, v in (meta.get("card_tag_colors") or {}).items()
+                         if isinstance(v, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", v)}
+        if isinstance(meta.get("card_tag_colors"), dict) else {},
     )
 
     lines = body.splitlines()
@@ -508,8 +511,8 @@ def serialize_project_md(project: Project) -> str:
         "updated": updated,
         "format": "koi/1",
     }
-    if project.card_tags:
-        meta["card_tags"] = list(project.card_tags)
+    meta["card_tags"] = list(project.card_tags)
+    meta["card_tag_colors"] = dict(project.card_tag_colors)
     boards_by_owner = {b.owner_node_id: b for b in project.boards}
     out: list[str] = [
         "---",

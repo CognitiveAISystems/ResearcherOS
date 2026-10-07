@@ -13,7 +13,7 @@ from koi.adapters.workspace import get_workspace
 _ws = get_workspace()
 
 from koi.agent_chat.formatting import ANSWER_FORMAT_INSTRUCTIONS
-from koi.adapters.agent_chat_queue import find_item, list_pending, mark_processing, submit_answer
+from koi.adapters.agent_chat_queue import list_for_project, find_item, list_pending, mark_processing, submit_answer
 from koi.adapters.card_reports import read_report
 from koi.core.models import NodeType
 from koi.adapters.repository import load_project
@@ -119,7 +119,33 @@ def build_context(item_id: str) -> dict:
                 "node_type": node.node_type.value,
             }
 
+    interview = {}
+    purpose = item.get("purpose") or "question"
+    skills = {
+        "report_grill": "koi-grill-experiment/SKILL.md",
+        "grill_me": "koi-grill-experiment/SKILL.md",
+        "make_report": "koi-execute-card/SKILL.md",
+    }
+    if item.get("card_id"):
+        history = list_for_project(project.id, limit=10000, board_id=item.get("board_id"), card_id=item.get("card_id"))
+        interview = {
+            "purpose": purpose,
+            "card": _card_meta(project, item.get("board_id"), item.get("card_id")),
+            "current_document": item.get("report_markdown", ""),
+            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal")} for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"]],
+        }
+        skill = skills.get(purpose)
+        if skill:
+            interview["skill"] = str(_ws.engine_root / "agents/skills" / skill)
+        if purpose in ("report_grill", "grill_me"):
+            from koi.agent_chat.report_grill import UI_POLICY
+            interview["research_root"] = str(koi_root(project.id))
+            interview["project_document_path"] = str(koi_root(project.id) / "project.md")
+            interview["interview_policy"] = UI_POLICY
+        elif purpose == "make_report":
+            interview["task"] = "Собери отчёт по этой задаче, следуя скиллу koi-execute-card."
     return {
+        **interview,
         "queue_id": item["id"],
         "enqueued_at": item["enqueued_at"],
         "user_question": item["question"],
@@ -131,7 +157,7 @@ def build_context(item_id: str) -> dict:
             research_path(project.id).relative_to(koi_root(project.id))
         ),
         "research_database": research_db,
-        "answer_policy": ANSWER_FORMAT_INSTRUCTIONS,
+        "answer_policy": interview.get("interview_policy", ANSWER_FORMAT_INSTRUCTIONS),
     }
 
 

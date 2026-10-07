@@ -344,6 +344,10 @@ def composite_to_client(composite: CompositeProject) -> dict[str, Any]:
     ]
     # Composite id is virtual — page HTML lives in member koi-structure/pages/.
     payload["page_pins"] = merge_page_pins(member_ids)
+    payload["card_tag_colors_by_project"] = {
+        pid: dict(member.card_tag_colors) for pid in member_ids
+        if (member := load_project(pid, sync_reports=False)) is not None
+    }
     for node in payload["nodes"]:
         node["source_project_id"] = node.get("project_id")
     for board in payload["boards"].values():

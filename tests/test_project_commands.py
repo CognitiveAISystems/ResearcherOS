@@ -260,89 +260,6 @@ def test_update_card_rejects_dependency_cycle(
     assert command_context["saved_projects"] == []
 
 
-def test_suggest_board_dependencies_applies_persists_and_enqueues_sync(
-    project: Project,
-    command_context: dict[str, list],
-    monkeypatch,
-) -> None:
-    suggestions = [
-        {
-            "from_card_id": "card-a",
-            "to_card_id": "card-b",
-            "confidence": 0.8,
-        }
-    ]
-    monkeypatch.setattr(
-        project_commands,
-        "suggest_board_dag",
-        lambda loaded, board: suggestions,
-    )
-    monkeypatch.setattr(
-        project_commands,
-        "apply_dag_suggestions",
-        lambda board, items: 1,
-    )
-
-    result = project_commands.suggest_board_dependencies(
-        "demo",
-        "board-method",
-        apply=True,
-    )
-
-    assert result.project is project
-    assert result.suggestions == suggestions
-    assert result.applied == 1
-    assert command_context["updated_boards"] == [(project, project.boards[0])]
-    assert command_context["sync"] == [
-        ("demo", "kanban_updated", "применены предложения DAG")
-    ]
-
-
-def test_load_and_save_board_layout_delegate_with_valid_card_ids(
-    project: Project,
-    command_context: dict[str, list],
-    monkeypatch,
-) -> None:
-    loaded_layout = {
-        "version": 1,
-        "board_id": "board-method",
-        "updated_at": None,
-        "cards": {},
-    }
-    saved_layout = {
-        **loaded_layout,
-        "updated_at": "2026-07-15T00:00:00+00:00",
-        "cards": {"card-a": {"x": 12.0, "y": 34.0}},
-    }
-    load_calls = []
-    save_calls = []
-    monkeypatch.setattr(
-        project_commands.dag_layout,
-        "load_dag_layout",
-        lambda *args: load_calls.append(args) or loaded_layout,
-    )
-    monkeypatch.setattr(
-        project_commands.dag_layout,
-        "save_dag_layout",
-        lambda *args, **kwargs: save_calls.append((args, kwargs)) or saved_layout,
-    )
-
-    assert project_commands.load_board_layout("demo", "board-method") == loaded_layout
-    assert project_commands.save_board_layout(
-        "demo",
-        "board-method",
-        {"card-a": {"x": 12, "y": 34}},
-    ) == saved_layout
-
-    assert load_calls == [("demo", "board-method")]
-    assert save_calls == [
-        (
-            ("demo", "board-method", {"card-a": {"x": 12, "y": 34}}),
-            {"valid_card_ids": {"card-a", "card-b"}},
-        )
-    ]
-
-
 def test_update_card_renames_report_and_enqueues_edit(
     project: Project,
     command_context: dict[str, list],
@@ -448,3 +365,59 @@ def test_missing_project_and_board_have_application_errors(
         project_commands.delete_node("missing", "node")
     with pytest.raises(project_commands.EntityNotFoundError, match="Board"):
         project_commands.delete_card("demo", "missing", "card")
+
+
+def test_tag_settings_rename_across_boards_and_roundtrip(project, command_context):
+    from koi.core.md_io import parse_project_md, serialize_project_md
+    project.card_tags = ['eval', 'train']
+    project.boards[0].cards[0].tags = ['Eval', 'train']
+    project.boards.append(KanbanBoard(id='other', owner_node_id='other', cards=[
+        ExperimentCard(id='other-card', board_id='other', column_id='backlog', title='Other', tags=['eval'])
+    ]))
+    updated = project_commands.update_card_tag('demo', 'eval', 'evaluation', '#12AbCd')
+    assert updated.boards[0].cards[0].tags == ['evaluation', 'train']
+    assert updated.boards[1].cards[0].tags == ['evaluation']
+    assert updated.card_tags == ['evaluation', 'train']
+    restored = parse_project_md(serialize_project_md(updated))
+    assert restored.card_tag_colors == {'evaluation': '#12abcd'}
+    assert len(command_context['saved_projects']) == 1
+
+
+@pytest.mark.parametrize('name,color', [('train', '#112233'), ('bad name', '#112233'), ('eval', 'red')])
+def test_tag_settings_reject_invalid_changes_without_save(project, command_context, name, color):
+    project.card_tags = ['eval', 'train']
+    project.boards[0].cards[0].tags = ['eval']
+    with pytest.raises(ValueError):
+        project_commands.update_card_tag('demo', 'eval', name, color)
+    assert project.card_tags == ['eval', 'train']
+    assert project.boards[0].cards[0].tags == ['eval']
+    assert not command_context['saved_projects']
+
+
+def test_delete_tag_preserves_cards_and_removes_all_references(project, command_context):
+    project.card_tags = ['eval', 'train']
+    project.card_tag_colors = {'eval': '#123456', 'train': '#abcdef'}
+    project.boards[0].cards[0].tags = ['Eval', 'train']
+    project.boards[0].cards[1].tags = ['eval']
+    before = [c.id for c in project.boards[0].cards]
+    result = project_commands.delete_card_tag('demo', 'EVAL')
+    assert result.card_tags == ['train']
+    assert result.card_tag_colors == {'train': '#abcdef'}
+    assert [c.tags for c in result.boards[0].cards] == [['train'], []]
+    assert [c.id for c in result.boards[0].cards] == before
+    assert not command_context['deletions']
+    assert len(command_context['saved_projects']) == 1
+
+
+def test_delete_last_tag_persists_empty_vocabulary(project, command_context):
+    from koi.core.md_io import parse_project_md, serialize_project_md
+    from koi.adapters.repository import merge_org_frontmatter
+    project.card_tags = ['eval']
+    project.card_tag_colors = {'eval': '#123456'}
+    old = serialize_project_md(project)
+    result = project_commands.delete_card_tag('demo', 'eval')
+    restored = parse_project_md(merge_org_frontmatter(old, serialize_project_md(result)))
+    assert restored.card_tags == []
+    assert restored.card_tag_colors == {}
+    with pytest.raises(project_commands.EntityNotFoundError):
+        project_commands.delete_card_tag('demo', 'eval')

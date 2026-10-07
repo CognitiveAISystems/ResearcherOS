@@ -15,8 +15,9 @@ MODE_KEY = "KOI_AGENT_CHAT_MODE"
 AGENT_CHAT_MODE_API = "api"
 AGENT_CHAT_MODE_CURSOR_IDE = "cursor_ide"
 AGENT_CHAT_MODE_CURSOR_INBOX = "cursor_inbox"
+AGENT_CHAT_MODE_LOCAL = "local"
 AGENT_CHAT_MODES = frozenset(
-    {AGENT_CHAT_MODE_API, AGENT_CHAT_MODE_CURSOR_IDE, AGENT_CHAT_MODE_CURSOR_INBOX}
+    {AGENT_CHAT_MODE_API, AGENT_CHAT_MODE_CURSOR_IDE, AGENT_CHAT_MODE_CURSOR_INBOX, AGENT_CHAT_MODE_LOCAL}
 )
 CURSOR_API_KEY_URL = "https://cursor.com/dashboard/integrations"
 
@@ -80,7 +81,7 @@ def get_agent_chat_mode() -> str:
         return raw
     if has_cursor_api_key():
         return AGENT_CHAT_MODE_API
-    return AGENT_CHAT_MODE_CURSOR_INBOX
+    return AGENT_CHAT_MODE_LOCAL
 
 
 def is_api_agent_mode() -> bool:

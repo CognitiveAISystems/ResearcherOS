@@ -1,4 +1,4 @@
-import { KoiApi } from "./api.js?v=20260821e";
+import { KoiApi } from "./api.js?v=20260928b";
 import { renderMarkdown } from "./markdown.js";
 import { initPresentation } from "./morphology-presentation.js?v=20260821h";
 import { initFormulaLessons } from "./morphology-formula.js?v=20260821h";
@@ -604,10 +604,9 @@ ${nodeLines || "(пусто)"}
 ${edgeLines || "(нет рёбер внутри подграфа)"}
 
 ## Задача
-Дай сжатое пояснение связки **по содержанию статьи**, а не по меткам графа.
+Дай пояснение связки одним абзацем по содержанию статьи, а не по меткам графа.
 
-Форма ответа — 3–6 коротких предложений **или** одна цепочка «A → B → C» с глаголами
-переходов. Пиши в ритме:
+Форма — одно или два предложения в ритме:
 «Авторы утверждают, что (A); показывают это через (B); предлагают решение через (C).»
 
 Запрещено: пересказ всей статьи; утверждения вне узлов выше; списки цитат;
@@ -615,16 +614,93 @@ ${edgeLines || "(нет рёбер внутри подграфа)"}
 Если в графе есть цикл — одна фраза об этом в конце.`.trim();
 }
 
-async function copySubgraphExplainPrompt() {
+let explainNoteTimer = null;
+
+function showExplainNote(text) {
+  const note = document.getElementById("morph-explain-note");
+  const body = document.getElementById("morph-explain-note-text");
+  if (!note || !body) return;
+  body.textContent = text;
+  note.classList.remove("hidden");
+}
+
+function hideExplainNote() {
+  document.getElementById("morph-explain-note")?.classList.add("hidden");
+}
+
+function stopExplainNotePolling() {
+  if (explainNoteTimer) {
+    window.clearInterval(explainNoteTimer);
+    explainNoteTimer = null;
+  }
+}
+
+async function fetchExplainNote(nodeId) {
+  if (!projectId || !currentRun?.run_id || !nodeId) return null;
+  try {
+    return await KoiApi.getMorphologyExplainNote(projectId, currentRun.run_id, nodeId);
+  } catch {
+    return null;
+  }
+}
+
+async function syncExplainNote(nodeId) {
+  const note = await fetchExplainNote(nodeId);
+  if (selectedNodeId !== nodeId) return;
+  if (note?.text) {
+    showExplainNote(note.text);
+    return;
+  }
+  if (!explainNoteTimer) hideExplainNote();
+}
+
+function watchExplainNote(nodeId) {
+  stopExplainNotePolling();
+  let left = 90;
+  explainNoteTimer = window.setInterval(async () => {
+    left -= 1;
+    if (selectedNodeId !== nodeId) {
+      stopExplainNotePolling();
+      return;
+    }
+    const note = await fetchExplainNote(nodeId);
+    if (note?.text) {
+      showExplainNote(note.text);
+      stopExplainNotePolling();
+      setStatus("Заметка на графе.", "ok");
+    } else if (left <= 0) {
+      stopExplainNotePolling();
+    }
+  }, 2000);
+}
+
+async function explainSubgraphInTerminal() {
   const subgraph = currentSubgraph();
   if (!subgraph) {
     setStatus("Сначала выберите узел — подсветится подграф.", "warn");
     return;
   }
-  await copyPrompt(
-    composeSubgraphExplainPrompt(subgraph),
-    `Промпт по связке (${subgraph.nodes.length} узлов) в буфере.`
-  );
+  if (!projectId) {
+    setStatus("Не выбран проект.", "error");
+    return;
+  }
+  if (!currentRun?.run_id) {
+    setStatus("Нет сохранённой морфологии.", "error");
+    return;
+  }
+  setStatus("Открываю терминал с агентом…");
+  try {
+    await KoiApi.explainMorphologyInTerminal(
+      projectId,
+      composeSubgraphExplainPrompt(subgraph),
+      { runId: currentRun.run_id, nodeId: subgraph.focusId }
+    );
+    showExplainNote("Агент пишет пояснение…");
+    watchExplainNote(subgraph.focusId);
+    setStatus(`Агент открыт в терминале (${subgraph.nodes.length} узлов).`, "ok");
+  } catch (err) {
+    setStatus(err.message || "Не удалось открыть терминал.", "error");
+  }
 }
 
 function startPolling(runId) {
@@ -1169,7 +1245,7 @@ function renderLegend(nodes) {
     </div>
     <div class="morph-legend-row">
       ${groundingChips}
-      <button type="button" class="morph-legend-btn morph-legend-btn-accent hidden" id="morph-explain-subgraph" title="Скопировать промпт: пояснить выделенную связку">пояснить связку</button>
+      <button type="button" class="morph-legend-btn morph-legend-btn-accent hidden" id="morph-explain-subgraph" title="Открыть терминал и пояснить выделенную связку">пояснить связку</button>
       <button type="button" class="morph-legend-btn hidden" id="morph-clear-focus">сбросить фокус</button>
       <button type="button" class="morph-legend-btn" id="morph-reset-layout">раскладка ↺</button>
     </div>`;
@@ -1194,7 +1270,7 @@ function renderLegend(nodes) {
   });
   document
     .getElementById("morph-explain-subgraph")
-    ?.addEventListener("click", () => void copySubgraphExplainPrompt());
+    ?.addEventListener("click", () => void explainSubgraphInTerminal());
   updateHighlight();
 }
 
@@ -1202,6 +1278,8 @@ function renderLegend(nodes) {
 
 function clearInspector() {
   selectedNodeId = "";
+  stopExplainNotePolling();
+  hideExplainNote();
   formulaLessons?.showNode();
   document.getElementById("morph-inspector-empty")?.classList.remove("hidden");
   const body = document.getElementById("morph-inspector-body");
@@ -1220,6 +1298,7 @@ function selectNode(nodeId, { scrollArticle = true } = {}) {
   formulaLessons?.showNode();
   selectedNodeId = nodeId;
   updateHighlight();
+  void syncExplainNote(nodeId);
   if (scrollArticle) syncArticleSelection();
 
   const section = nodeSection(node);
@@ -1294,13 +1373,13 @@ function selectNode(nodeId, { scrollArticle = true } = {}) {
         : ""
     }
     <button type="button" class="btn btn-small morph-explain-btn" id="morph-explain-inspector">
-      Пояснить связку — скопировать промпт
+      Пояснить связку в терминале
     </button>`;
   body.classList.remove("hidden");
   document.getElementById("morph-inspector-empty")?.classList.add("hidden");
   document
     .getElementById("morph-explain-inspector")
-    ?.addEventListener("click", () => void copySubgraphExplainPrompt());
+    ?.addEventListener("click", () => void explainSubgraphInTerminal());
 }
 
 /* ------------------------------------------------------------------- shape */
@@ -1568,6 +1647,9 @@ async function init() {
   });
   document.getElementById("morph-article-close")?.addEventListener("click", () => {
     setArticleSplit(false);
+  });
+  document.getElementById("morph-explain-note-close")?.addEventListener("click", () => {
+    hideExplainNote();
   });
 
   await loadRuns();

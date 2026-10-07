@@ -18,6 +18,7 @@ from koi.adapters.agent_chat_queue import (
     submit_answer,
 )
 from koi.agent_chat.auto import try_auto_answer
+from koi.agent_chat.activity import delete as delete_agent_chat_activity, read as read_agent_chat_activity, record as record_agent_activity
 from koi.agent_chat.runner import process_item
 from koi.agent_chat.settings import settings_snapshot
 from koi.adapters.settings_store import is_cursor_inbox_agent_mode
@@ -57,8 +58,10 @@ def _sync_agent_worker() -> bool:
 
 
 def _auto_answer_pending(project_id: str) -> None:
+    if get_agent_chat_mode() == "local":
+        return
     for item in list_for_project(project_id, limit=10):
-        if item.get("status") == "answered":
+        if item.get("status") == "answered" or item.get("card_id"):
             continue
         auto = try_auto_answer(project_id, item["question"])
         if auto:
@@ -77,23 +80,40 @@ def get_agent_backends():
 def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> dict:
     if load_project(body.project_id, sync_reports=False) is None:
         raise HTTPException(404, "Project not found")
+    if getattr(body, "card_id", None):
+        project = load_project(body.project_id, sync_reports=False)
+        board = next((b for b in project.boards if b.id == body.board_id), None)
+        if board is None or not any(c.id == body.card_id for c in board.cards):
+            raise HTTPException(404, "Card not found")
+        history = list_for_project(body.project_id, limit=10000, board_id=body.board_id, card_id=body.card_id)
+        if any(i.get("status") != "answered" for i in history):
+            raise HTTPException(409, "Дождитесь ответа агента на предыдущий вопрос")
     try:
         item = enqueue_question(
             body.project_id,
             body.question,
             method_id=body.method_id,
             node_id=body.node_id,
+            purpose=getattr(body, "purpose", "question"),
+            board_id=getattr(body, "board_id", None),
+            card_id=getattr(body, "card_id", None),
+            report_markdown=getattr(body, "report_markdown", ""),
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
-    answered = process_item(item["id"])
+    auto = try_auto_answer(item["project_id"], item["question"]) if get_agent_chat_mode() != "local" and item.get("purpose") not in ("report_grill", "grill_me", "make_report") else None
+    if auto:
+        submit_answer(item["id"], auto)
+    answered = bool(auto)
     item = find_item(item["id"]) or item
 
     if not answered:
-        background_tasks.add_task(_run_agent_chat_item, item["id"])
-        if is_cursor_inbox_agent_mode() and item.get("status") != "answered":
+        if is_cursor_inbox_agent_mode():
             notify_chat_inbox_wake(agent_chat_id=item["id"])
+            record_agent_activity(item["id"], "Вопрос отправлен в ResearchOS Chat Inbox.")
+        elif get_agent_chat_mode() in ("local", "api"):
+            background_tasks.add_task(_run_agent_chat_item, item["id"])
 
     return {
         "ok": True,
@@ -112,12 +132,25 @@ def get_agent_chat_pending() -> dict:
     return {"items": list_pending()}
 
 
+@router.get("/agent-chat/activity")
+def get_agent_chat_activity(project_id: str, board_id: str | None = None, card_id: str | None = None) -> dict:
+    if load_project(project_id, sync_reports=False) is None:
+        raise HTTPException(404, "Project not found")
+    return {"items": [
+        {"id": item["id"], "question": item["question"], "events": read_agent_chat_activity(item["id"])}
+        for item in list_for_project(project_id, limit=10000 if card_id else 30, board_id=board_id, card_id=card_id)
+    ]}
+
+
 @router.get("/agent-chat")
-def get_agent_chat(project_id: str) -> dict:
+def get_agent_chat(project_id: str, board_id: str | None = None, card_id: str | None = None) -> dict:
     if load_project(project_id, sync_reports=False) is None:
         raise HTTPException(404, "Project not found")
     _auto_answer_pending(project_id)
-    return {"items": list_for_project(project_id)}
+    items = list_for_project(project_id, limit=10000, board_id=board_id, card_id=card_id)
+    if card_id is None:
+        items = [i for i in items if not i.get("card_id")][:30]
+    return {"items": items}
 
 
 @router.patch("/agent-chat/{item_id}")
@@ -135,6 +168,7 @@ def patch_agent_chat_answer(item_id: str, body: AgentChatAnswerBody) -> dict:
 def delete_agent_chat_item(item_id: str) -> dict:
     if not dequeue_agent_chat_item(item_id):
         raise HTTPException(404, f"Queue item not found: {item_id}")
+    delete_agent_chat_activity(item_id)
     return {"ok": True}
 
 

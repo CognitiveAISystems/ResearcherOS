@@ -30,6 +30,11 @@ class AgentChatItem(TypedDict, total=False):
     processing_at: Optional[str]
     answered_at: Optional[str]
     answer_kind: Optional[AnswerKind]
+    purpose: str
+    board_id: Optional[str]
+    card_id: Optional[str]
+    report_markdown: str
+    proposal: Optional[dict[str, str]]
 
 
 def _load() -> list[AgentChatItem]:
@@ -65,6 +70,11 @@ def _normalize(item: dict) -> AgentChatItem:
         "processing_at": item.get("processing_at") or None,
         "answered_at": item.get("answered_at") or None,
         "answer_kind": item.get("answer_kind") or None,
+        "purpose": item.get("purpose", "question"),
+        "board_id": item.get("board_id"),
+        "card_id": item.get("card_id"),
+        "report_markdown": item.get("report_markdown", ""),
+        "proposal": item.get("proposal"),
     }
     if out["status"] == "answered" and not out.get("answer"):
         out["status"] = "pending"
@@ -82,12 +92,14 @@ def _valid_item(item: object) -> bool:
 
 
 def _prune_project(items: list[AgentChatItem], project_id: str) -> list[AgentChatItem]:
-    project_items = [i for i in items if i["project_id"] == project_id]
+    # Interviews are durable card history, not disposable Q&A entries.
+    card_items = [i for i in items if i["project_id"] == project_id and i.get("card_id")]
+    project_items = [i for i in items if i["project_id"] == project_id and not i.get("card_id")]
     other = [i for i in items if i["project_id"] != project_id]
     if len(project_items) <= MAX_ITEMS_PER_PROJECT:
-        return other + project_items
+        return other + card_items + project_items
     project_items.sort(key=lambda i: i.get("answered_at") or i["enqueued_at"])
-    return other + project_items[-MAX_ITEMS_PER_PROJECT:]
+    return other + card_items + project_items[-MAX_ITEMS_PER_PROJECT:]
 
 
 def enqueue_question(
@@ -96,6 +108,10 @@ def enqueue_question(
     *,
     method_id: Optional[str] = None,
     node_id: Optional[str] = None,
+    purpose: str = "question",
+    board_id: Optional[str] = None,
+    card_id: Optional[str] = None,
+    report_markdown: str = "",
 ) -> AgentChatItem:
     text = question.strip()
     if not text:
@@ -105,6 +121,10 @@ def enqueue_question(
         "id": f"aq-{uuid4().hex[:10]}",
         "project_id": project_id,
         "question": text,
+        "purpose": purpose,
+        "board_id": board_id,
+        "card_id": card_id,
+        "report_markdown": report_markdown,
         "enqueued_at": datetime.now(timezone.utc).isoformat(),
         "method_id": method_id or None,
         "node_id": node_id or None,
@@ -124,8 +144,10 @@ def list_pending() -> list[AgentChatItem]:
     return [i for i in _load() if i.get("status", "pending") == "pending"]
 
 
-def list_for_project(project_id: str, *, limit: int = 30) -> list[AgentChatItem]:
+def list_for_project(project_id: str, *, limit: int = 30, board_id: str | None = None, card_id: str | None = None) -> list[AgentChatItem]:
     items = [i for i in _load() if i["project_id"] == project_id]
+    if card_id is not None:
+        items = [i for i in items if i.get("board_id") == board_id and i.get("card_id") == card_id]
     items.sort(key=lambda i: i["enqueued_at"], reverse=True)
     return items[:limit]
 
@@ -146,6 +168,7 @@ def mark_processing(item_id: str) -> AgentChatItem:
             item["status"] = "processing"
             item["processing_at"] = datetime.now(timezone.utc).isoformat()
             _save(items)
+            _note_inbox(item_id, "Агент взял вопрос в работу.")
         return item
     raise KeyError(f"Queue item not found: {item_id}")
 
@@ -164,12 +187,25 @@ def submit_answer(
         if item["id"] != item_id:
             continue
         item["status"] = "answered"
+        if item.get("purpose") in ("report_grill", "grill_me"):
+            from koi.adapters.report_grill_reply import parse_reply
+            text, proposal = parse_reply(text)
+            item["proposal"] = proposal
         item["answer"] = text
         item["answer_kind"] = answer_kind
         item["answered_at"] = datetime.now(timezone.utc).isoformat()
         _save(items)
+        _note_inbox(item_id, "Ответ опубликован в чате.")
         return item
     raise KeyError(f"Queue item not found: {item_id}")
+
+
+def _note_inbox(item_id: str, message: str) -> None:
+    from koi.adapters.settings_store import get_agent_chat_mode
+    if get_agent_chat_mode() != "cursor_inbox":
+        return
+    from koi.adapters.agent_chat_activity import record
+    record(item_id, message)
 
 
 def dequeue(item_id: str) -> bool:

@@ -72,11 +72,3 @@ def paper_answers_dir(project_id: str) -> Path:
 
 def agent_bundles_dir(project_id: str) -> Path:
     return koi_root(project_id) / "agent_bundles"
-
-
-def dag_layouts_dir(project_id: str) -> Path:
-    return koi_root(project_id) / "dag-layouts"
-
-
-def dag_layout_path(project_id: str, board_id: str) -> Path:
-    return dag_layouts_dir(project_id) / f"{board_id}.json"

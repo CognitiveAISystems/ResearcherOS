@@ -20,8 +20,9 @@ router = APIRouter(tags=["sync"])
 
 
 @router.get("/sync/status")
-def get_sync_status() -> dict:
-    return git_summary()
+def get_sync_status(fetch: bool = Query(True)) -> dict:
+    """Per-mount ahead/behind. ``fetch=false`` uses cached refs (faster UI poll)."""
+    return git_summary(fetch=fetch)
 
 
 @router.get("/sync/project-discovery")

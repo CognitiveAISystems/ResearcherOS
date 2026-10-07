@@ -38,14 +38,47 @@ export function bindFloatingDrag(root, { storageKey, handle, onTap } = {}) {
     }
   };
 
-  const defaultTopRight = (margin = 18) => {
-    const size = root.offsetWidth || 76;
-    root.style.top = `${margin}px`;
-    root.style.left = `${window.innerWidth - size - margin}px`;
+  const margin = 12;
+  const header = document.querySelector(".topbar");
+
+  const bounds = () => {
+    const style = getComputedStyle(root);
+    // Widgets may be hidden until their first API response or stylesheet load.
+    const width = root.offsetWidth || parseFloat(style.width) || 76;
+    const height = root.offsetHeight || parseFloat(style.height) || 76;
+    const minY = Math.max(margin, (header?.getBoundingClientRect().bottom || 0) + margin);
+    return {
+      minX: margin,
+      minY,
+      maxX: Math.max(margin, window.innerWidth - width - margin),
+      // Keep the drag handle below the header even for a very tall widget.
+      maxY: Math.max(minY, window.innerHeight - height - margin),
+    };
+  };
+
+  const place = (x, y) => {
+    const { minX, minY, maxX, maxY } = bounds();
+    root.style.left = `${Math.min(maxX, Math.max(minX, x))}px`;
+    root.style.top = `${Math.min(maxY, Math.max(minY, y))}px`;
     root.style.right = "auto";
   };
 
-  if (!load()) defaultTopRight();
+  const keepVisible = () => {
+    const rect = root.getBoundingClientRect();
+    const x = parseFloat(root.style.left);
+    const y = parseFloat(root.style.top);
+    place(Number.isFinite(x) ? x : rect.left, Number.isFinite(y) ? y : rect.top);
+    // A hidden widget has a zero rect; do not replace its saved position with it.
+    if (root.getClientRects().length) save();
+  };
+
+  if (!load()) {
+    const x = parseFloat(root.style.left);
+    const y = parseFloat(root.style.top);
+    // Respect each package's horizontal starting position.
+    place(Number.isFinite(x) ? x : bounds().maxX, Number.isFinite(y) ? y : bounds().minY);
+  }
+  keepVisible();
 
   dragHandle.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -66,11 +99,7 @@ export function bindFloatingDrag(root, { storageKey, handle, onTap } = {}) {
     if (Math.abs(x - root.offsetLeft) > 2 || Math.abs(y - root.offsetTop) > 2) {
       moved = true;
     }
-    const maxX = Math.max(0, window.innerWidth - root.offsetWidth);
-    const maxY = Math.max(0, window.innerHeight - root.offsetHeight);
-    root.style.left = `${Math.min(maxX, Math.max(0, x))}px`;
-    root.style.top = `${Math.min(maxY, Math.max(0, y))}px`;
-    root.style.right = "auto";
+    place(x, y);
   });
 
   const endDrag = (event) => {
@@ -87,19 +116,26 @@ export function bindFloatingDrag(root, { storageKey, handle, onTap } = {}) {
   dragHandle.addEventListener("pointerup", endDrag);
   dragHandle.addEventListener("pointercancel", endDrag);
 
-  window.addEventListener("resize", () => {
-    const rect = root.getBoundingClientRect();
-    const maxX = Math.max(0, window.innerWidth - root.offsetWidth);
-    const maxY = Math.max(0, window.innerHeight - root.offsetHeight);
-    if (rect.left > maxX || rect.top > maxY) {
-      root.style.left = `${Math.min(rect.left, maxX)}px`;
-      root.style.top = `${Math.min(rect.top, maxY)}px`;
-      save();
-    }
+  window.addEventListener("resize", keepVisible);
+  // Re-clamp after header wrapping, widget expansion, or delayed stylesheet load.
+  const sizes = new ResizeObserver(keepVisible);
+  sizes.observe(root);
+  if (header) sizes.observe(header);
+
+  const destroy = () => {
+    sizes.disconnect();
+    removals.disconnect();
+    window.removeEventListener("resize", keepVisible);
+  };
+  // Existing packages need no changes to their unmount callbacks.
+  const removals = new MutationObserver(() => {
+    if (!root.isConnected) destroy();
   });
+  removals.observe(document.body, { childList: true, subtree: true });
 
   return {
     endDrag,
+    destroy,
     wasMoved: () => moved,
     save,
   };

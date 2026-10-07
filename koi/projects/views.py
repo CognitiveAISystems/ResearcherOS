@@ -115,6 +115,7 @@ def project_to_client(
         "description": project.description,
         "literature_keywords": list(project.literature_keywords),
         "card_tags": list(project.card_tags),
+        "card_tag_colors": dict(project.card_tag_colors),
         "nodes": nodes_out,
         "boards": boards_out,
         "page_pins": _page_pins(project.id),

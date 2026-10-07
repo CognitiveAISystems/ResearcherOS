@@ -100,6 +100,7 @@ class Project(BaseModel):
     description: str = ""
     literature_keywords: list[str] = Field(default_factory=list)
     card_tags: list[str] = Field(default_factory=list)
+    card_tag_colors: dict[str, str] = Field(default_factory=dict)
     nodes: list[Node] = Field(default_factory=list)
     boards: list[KanbanBoard] = Field(default_factory=list)
 

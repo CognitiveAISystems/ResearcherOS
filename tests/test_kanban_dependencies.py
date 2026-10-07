@@ -1,4 +1,4 @@
-"""Tests for kanban DAG suggestion helpers."""
+"""Tests for kanban dependency validation."""
 
 from __future__ import annotations
 
@@ -6,9 +6,7 @@ from koi.core.models import ExperimentCard, KanbanBoard, Node, NodeType, Project
 from koi.projects.kanban.dependencies import (
     _normalize_dep_ids,
     _would_create_cycle,
-    apply_dag_suggestions,
     normalize_dependency_ids,
-    suggest_board_dag,
 )
 
 
@@ -47,15 +45,6 @@ def _sample_board() -> tuple[Project, KanbanBoard]:
     return project, board
 
 
-def test_suggest_links_done_to_backlog_by_overlap() -> None:
-    project, board = _sample_board()
-    suggestions = suggest_board_dag(project, board, include_reports=False)
-    assert any(
-        s["from_card_id"] == "c-done" and s["to_card_id"] == "c-open"
-        for s in suggestions
-    )
-
-
 def test_normalize_rejects_cycles() -> None:
     _, board = _sample_board()
     card = board.cards[0]
@@ -83,22 +72,3 @@ def test_normalize_dependencies_preserves_order_and_removes_invalid_ids() -> Non
     )
 
     assert normalized == ["c-open"]
-
-
-def test_apply_dag_suggestions_updates_each_card_once() -> None:
-    _, board = _sample_board()
-    suggestions = [
-        {
-            "from_card_id": "c-done",
-            "to_card_id": "c-open",
-            "confidence": 0.9,
-        },
-        {
-            "from_card_id": "c-done",
-            "to_card_id": "c-open",
-            "confidence": 0.8,
-        },
-    ]
-
-    assert apply_dag_suggestions(board, suggestions) == 1
-    assert board.cards[1].depends_on == ["c-done"]

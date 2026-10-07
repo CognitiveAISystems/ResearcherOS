@@ -491,38 +491,6 @@ def get_node_pages_readonly(
     return {"attachments": [], "readonly": True}
 
 
-@router.get("/projects/{project_id}/boards/{board_id}/dag-layout")
-def get_board_dag_layout(request: Request, project_id: str, board_id: str) -> dict[str, Any]:
-    config: HubConfig = request.app.state.hub_config
-    store: HubStore = request.app.state.hub_store
-
-    slug = project_id
-    hub_project = store.get_project(slug)
-    if hub_project is None:
-        slug = _find_slug_by_project_id(store, project_id) or ""
-        hub_project = store.get_project(slug) if slug else None
-    if hub_project is None:
-        raise HTTPException(404, "Project not found")
-
-    if not _can_view(request, hub_project, config, store):
-        raise HTTPException(403, "Not allowed to view this project")
-
-    snap = store.get_snapshot(hub_project.slug)
-    if not snap:
-        raise HTTPException(404, "Snapshot missing")
-    layouts = snap.get("dag_layouts") or {}
-    if isinstance(layouts, dict) and board_id in layouts:
-        layout = layouts[board_id]
-        if isinstance(layout, dict):
-            return layout
-    return {
-        "version": 1,
-        "board_id": board_id,
-        "updated_at": None,
-        "cards": {},
-    }
-
-
 @router.get("/projects/{project_id}/boards/{board_id}/cards/{card_id}/report")
 def card_report(
     request: Request, project_id: str, board_id: str, card_id: str

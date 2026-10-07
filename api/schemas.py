@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +49,11 @@ class UpdateNodeBody(BaseModel):
     research_questions: Optional[list[ResearchQuestionBody]] = None
 
 
+class UpdateTagBody(BaseModel):
+    name: str
+    color: str
+
+
 class UpdateCardBody(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -64,20 +69,6 @@ class CreateCardBody(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
-
-
-class DagSuggestBody(BaseModel):
-    apply: bool = False
-
-
-class DagLayoutBody(BaseModel):
-    cards: dict[str, dict[str, float]] = Field(default_factory=dict)
-
-
-class DagEdgeBody(BaseModel):
-    from_card_id: str = Field(min_length=1)
-    to_card_id: str = Field(min_length=1)
-    reason: str = ""
 
 
 class CardReportBody(BaseModel):
@@ -140,6 +131,18 @@ class MorphologyStageBody(BaseModel):
     paper: dict = Field(default_factory=dict)
 
 
+class MorphologyExplainBody(BaseModel):
+    prompt: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    node_id: str = Field(min_length=1)
+
+
+class MortalCombatStageBody(BaseModel):
+    primary: dict = Field(default_factory=dict)
+    reviewer: dict = Field(default_factory=dict)
+    question: str = ""
+
+
 class RelatedWorksAnswerBody(BaseModel):
     markdown: str = Field(min_length=1)
 
@@ -175,6 +178,10 @@ class AgentChatBody(BaseModel):
     question: str = Field(min_length=1)
     method_id: Optional[str] = None
     node_id: Optional[str] = None
+    purpose: Literal["question", "report_grill", "grill_me", "make_report"] = "question"
+    board_id: Optional[str] = None
+    card_id: Optional[str] = None
+    report_markdown: str = Field(default="", max_length=200000)
 
 
 class AgentChatAnswerBody(BaseModel):

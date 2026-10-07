@@ -11,27 +11,26 @@ description: >-
 
 Пользователь задаёт вопрос в панели **«Спросить агента»** на localhost:8080. Вопрос попадает в очередь `.run/agent-chat-queue.json`.
 
-**Автоответ:** если вопрос хорошо совпадает с `research.json`, API отвечает сразу.
-
-**Режим в настройках UI** (`Настройки → Агент в чате`):
-
-| Режим | Поведение |
-|-------|-----------|
-| **Inbox-чат** (`cursor_inbox`, рекомендуется) | Watcher → `AGENT_CHAT_WAKE` в `.run/logs/agent-chat-watch.log` (~1–3 с) |
-| **Hooks** (`cursor_ide`) | Очередь при старте/stop любого чата агента |
-| **Фоновый API** (`api`) | Воркер + `CURSOR_API_KEY` |
-
-Инструкция: `docs/agent-chat-inbox.md`. Bootstrap: `python -m koi.agent_chat.inbox_cli bootstrap`.
+Вопрос автоматически запускает локальный Cursor CLI в фоновом режиме. Если он недоступен, приложение пробует Codex CLI или Claude Code CLI. Ход работы виден во вкладке «Работа агента»; настройка Inbox, hooks и API-ключ для чата не нужна.
 
 ## Когда запускать
 
 1. В очереди есть необработанные вопросы (проверь при старте сессии с KOI).
-2. Hook `stop` прислал follow-up про agent-chat.
-3. Пользователь явно ссылается на вопрос из ResearchOS UI.
+2. Пользователь явно ссылается на вопрос из ResearchOS UI.
 
 ```bash
 KOI/.venv/bin/python -m koi.agent_chat.cli pending
 ```
+
+## Интервью по постановке из отчёта
+
+Если context содержит `purpose: report_grill`, используй
+[**koi-grill-experiment**](../koi-grill-experiment/SKILL.md), `interview_policy`,
+`current_document`, `card` и всю `history`. Это интервью по всей постановке:
+один вопрос с рекомендацией за ход. Не отвечай на него как на поиск готового
+вывода в базе. После интервью и ревью предложи три раздела в формате
+`report-setup`, указанном в `interview_policy`. UI применяет предложение только
+по кнопке человека. Не записывай отчёт и не меняй статус карточки из интервью.
 
 ## Главное правило ответа
 
@@ -117,37 +116,16 @@ curl -s -X PATCH "http://127.0.0.1:8010/agent-chat/<queue_id>" \
 
 Без этого шага вопрос остаётся «в очереди» в интерфейсе. Не вызывай `answer`, если ждёшь уточнения от пользователя.
 
-## Очередь и hooks
+## Автоматический запуск и API
 
-Скрипты: `agents/skills/koi-agent-chat/hooks/`. IDE: `.cursor/hooks.json` ← `agents/cursor-hooks.json`.
-
-| Hook | Скрипт | Поведение |
-|------|--------|-----------|
-| `sessionStart` | `koi-agent-chat-session.sh` | `additional_context` со списком вопросов |
-| `stop` | `koi-agent-chat-stop.sh` | `followup_message` — обработать следующий (приоритет над done-research) |
+При `POST /agent-chat` сервер ставит вопрос в очередь и запускает локальный CLI в фоне. Агент получает контекст вопроса, проверяет базу выводов и возвращает ответ в ту же панель. `GET /agent-chat/activity?project_id=` показывает события работы агента. Для ручной обработки остаются команды `pending`, `claim`, `context` и `answer` из `koi.agent_chat.cli`.
 
 | API | Назначение |
 |-----|------------|
-| `POST /agent-chat` | вопрос из UI |
-| `GET /agent-chat?project_id=` | история + статусы для UI |
+| `POST /agent-chat` | вопрос из UI и запуск агента |
+| `GET /agent-chat?project_id=` | история и статусы для UI |
+| `GET /agent-chat/activity?project_id=` | журнал работы агента |
 | `PATCH /agent-chat/{id}` | ответ агента → показ в UI |
-
-## Автозапуск агента (без открытого чата в IDE)
-
-1. Создайте `KOI/.env`:
-   ```
-   CURSOR_API_KEY=ваш_ключ
-   # опционально: KOI_AGENT_CHAT_MODEL=composer-2.5
-   ```
-2. `KOI/.venv/bin/pip install cursor-sdk`
-3. `KOI/scripts/koi-serve.sh restart` — поднимет воркер, если ключ есть.
-
-Вручную обработать очередь:
-```bash
-KOI/.venv/bin/python -m koi.agent_chat.worker --once
-```
-
-Без ключа в режиме `cursor_ide`: мгновенный ответ из `research.json`; остальное — hooks в IDE.
 
 ## Связанные скиллы
 

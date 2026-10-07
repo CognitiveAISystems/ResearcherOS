@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Optional
 from uuid import uuid4
@@ -22,12 +23,9 @@ from koi.core.models import (
     Verdict,
 )
 from koi.projects.kanban.dependencies import (
-    apply_dag_suggestions,
     normalize_dependency_ids,
-    suggest_board_dag,
     would_create_cycle,
 )
-from koi.projects.kanban import layout as dag_layout
 from koi.laboratory import programs as program_service
 
 
@@ -89,13 +87,6 @@ class UpdateCardCommand:
     pinned: Optional[bool] = None
 
 
-@dataclass(frozen=True)
-class DagSuggestionResult:
-    project: Project
-    suggestions: list[dict[str, object]]
-    applied: Optional[int] = None
-
-
 def _require_project(project_id: str) -> Project:
     project = repository.load_project(project_id, sync_reports=False)
     if project is None:
@@ -127,50 +118,6 @@ def _enqueue_sync(project_id: str, reason: str, detail: str) -> None:
         pass
 
 
-def suggest_board_dependencies(
-    project_id: str,
-    board_id: str,
-    *,
-    apply: bool = False,
-) -> DagSuggestionResult:
-    project = _require_project(project_id)
-    board = _require_board(project, board_id)
-    suggestions = suggest_board_dag(project, board)
-    if not apply:
-        return DagSuggestionResult(project=project, suggestions=suggestions)
-
-    updated = apply_dag_suggestions(board, suggestions)
-    if updated:
-        repository.update_board(project, board)
-        _enqueue_sync(project_id, "kanban_updated", "применены предложения DAG")
-    return DagSuggestionResult(
-        project=project,
-        suggestions=suggestions,
-        applied=updated,
-    )
-
-
-def load_board_layout(project_id: str, board_id: str) -> dict:
-    project = _require_project(project_id)
-    _require_board(project, board_id)
-    return dag_layout.load_dag_layout(project_id, board_id)
-
-
-def save_board_layout(
-    project_id: str,
-    board_id: str,
-    cards: dict,
-) -> dict:
-    project = _require_project(project_id)
-    board = _require_board(project, board_id)
-    return dag_layout.save_dag_layout(
-        project_id,
-        board_id,
-        cards,
-        valid_card_ids={card.id for card in board.cards},
-    )
-
-
 def create_project(command: CreateProjectCommand) -> Project:
     if command.program_id and command.program_title:
         raise ValueError("Specify either program_id or program_title, not both")
@@ -197,6 +144,9 @@ def replace_project(project_id: str, snapshot: dict) -> Project:
         title=snapshot.get("title", existing.title),
         description=snapshot.get("description", existing.description),
     )
+
+    project.card_tags = list(existing.card_tags)
+    project.card_tag_colors = dict(existing.card_tag_colors)
 
     project.nodes = [
         Node(
@@ -420,7 +370,7 @@ def update_card(
                 f"карточка {card.title}: {old_column} → {command.column_id}",
             )
     elif dependencies_changed:
-        _enqueue_sync(project_id, "kanban_updated", f"связи DAG карточки {card.title}")
+        _enqueue_sync(project_id, "kanban_updated", f"зависимости карточки {card.title}")
     elif command.title is not None or command.description is not None or command.tags is not None:
         _enqueue_sync(project_id, "kanban_updated", f"правка карточки {card.title}")
     elif pin_changed:
@@ -445,4 +395,49 @@ def delete_card(project_id: str, board_id: str, card_id: str) -> Project:
             ]
     repository.save_project(project)
     card_reports.delete_report(project_id, card_id)
+    return project
+
+
+def update_card_tag(project_id: str, tag: str, name: str, color: str) -> Project:
+    project = _require_project(project_id)
+    name = name.strip()
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", name):
+        raise ValueError("Используйте латинские буквы, цифры, дефис или подчёркивание.")
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        raise ValueError("Некорректный цвет тега.")
+    key = tag.lower()
+    vocabulary = normalize_card_tags(project.card_tags + [
+        t for board in project.boards for card in board.cards for t in card.tags
+    ])
+    if key not in {t.lower() for t in vocabulary}:
+        raise EntityNotFoundError("Тег не найден.")
+    if name.lower() != key and name.lower() in {t.lower() for t in vocabulary}:
+        raise ValueError("Тег с таким названием уже существует.")
+    project.card_tags = [name if t.lower() == key else t for t in vocabulary]
+    project.card_tag_colors.pop(key, None)
+    project.card_tag_colors[name.lower()] = color.lower()
+    for board in project.boards:
+        for card in board.cards:
+            if key in {t.lower() for t in card.tags}:
+                card.tags = [name if t.lower() == key else t for t in card.tags]
+    repository.save_project(project)
+    _enqueue_sync(project_id, "kanban_updated", f"настройки тега {name}")
+    return project
+
+
+def delete_card_tag(project_id: str, tag: str) -> Project:
+    project = _require_project(project_id)
+    key = tag.lower()
+    vocabulary = normalize_card_tags(project.card_tags + [
+        t for board in project.boards for card in board.cards for t in card.tags
+    ])
+    if key not in {t.lower() for t in vocabulary}:
+        raise EntityNotFoundError("Тег не найден.")
+    project.card_tags = [t for t in vocabulary if t.lower() != key]
+    project.card_tag_colors.pop(key, None)
+    for board in project.boards:
+        for card in board.cards:
+            card.tags = [t for t in card.tags if t.lower() != key]
+    repository.save_project(project)
+    _enqueue_sync(project_id, "kanban_updated", f"удалён тег {tag}")
     return project

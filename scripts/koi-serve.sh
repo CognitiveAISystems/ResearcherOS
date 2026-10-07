@@ -164,10 +164,10 @@ start_agent_worker() {
     mode="api"
   fi
   if [[ -z "$mode" ]]; then
-    mode="cursor_inbox"
+    mode="local"
   fi
   if [[ "$mode" != "api" ]]; then
-    echo "agent worker: skipped (KOI_AGENT_CHAT_MODE=$mode, use Inbox or hooks)" >&2
+    echo "agent worker: skipped (KOI_AGENT_CHAT_MODE=$mode; local mode runs per question)" >&2
     return 0
   fi
   if [[ -z "${CURSOR_API_KEY:-}" ]]; then
@@ -193,7 +193,7 @@ agent_chat_mode() {
     mode="api"
   fi
   if [[ -z "$mode" ]]; then
-    mode="cursor_inbox"
+    mode="local"
   fi
   echo "$mode"
 }
