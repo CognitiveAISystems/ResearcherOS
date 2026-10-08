@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from koi.adapters.paths import koi_root, research_json
+from koi.adapters.paths import koi_root, code_root, research_json
 from koi.adapters.workspace import get_workspace
 
 _ws = get_workspace()
@@ -151,6 +151,13 @@ def build_context(item_id: str) -> dict:
         "user_question": item["question"],
         "project_id": project.id,
         "project_title": project.title,
+        "research_root": str(koi_root(project.id)),
+        "code_root": str(code_root(project.id)),
+        "history": interview.get("history", [
+            {"user": h["question"], "assistant": h.get("answer")}
+            for h in reversed(list_for_project(project.id, limit=20))
+            if not h.get("card_id") and h["enqueued_at"] < item["enqueued_at"]
+        ]),
         "scope_method": scope_method,
         "scope_node": scope_node,
         "research_database_path": str(

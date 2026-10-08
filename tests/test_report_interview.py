@@ -25,6 +25,7 @@ def test_interview_persists_history_proposal_and_card_scope(isolated_queue, monk
     monkeypatch.setattr(cli, "load_project", lambda *a, **kw: project)
     monkeypatch.setattr(cli, "research_path", lambda pid: queue.QUEUE_PATH.parent / "research.json")
     monkeypatch.setattr(cli, "koi_root", lambda pid: queue.QUEUE_PATH.parent)
+    monkeypatch.setattr(cli, "code_root", lambda pid: queue.QUEUE_PATH.parent)
     ctx = cli.build_context(second["id"])
     assert ctx["purpose"] == "report_grill"
     assert ctx["history"] == [{"user": "Идея", "assistant": "Как измеряем? Рекомендация: SR.", "proposal": None}]
@@ -89,6 +90,7 @@ def test_two_turn_interview_returns_question_then_applicable_setup(isolated_queu
     monkeypatch.setattr(cli, "_card_meta", lambda *a: {"card_id":"c", "title":"Experiment"})
     monkeypatch.setattr(cli, "research_path", lambda pid: queue.QUEUE_PATH.parent / "research.json")
     monkeypatch.setattr(cli, "koi_root", lambda pid: queue.QUEUE_PATH.parent)
+    monkeypatch.setattr(cli, "code_root", lambda pid: queue.QUEUE_PATH.parent)
     monkeypatch.setattr(agents, "get_agent_chat_mode", lambda: "local")
     monkeypatch.setattr(agents, "is_cursor_inbox_agent_mode", lambda: False)
     monkeypatch.setattr(runner, "is_cursor_manual_agent_mode", lambda: False)

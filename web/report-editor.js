@@ -39,6 +39,21 @@ export function applySetup(source, proposal) {
   return sections.map(s => s.raw).join("");
 }
 
+export function setupWouldShrink(source, proposal) {
+  let inSetup = false;
+  let existing = "";
+  for (const block of reportBlocks(source)) {
+    const heading = block.type === "heading" && block.raw.match(/^##\s+(.+?)\s*\n/);
+    if (heading) {
+      inSetup = heading[1] === "Постановка эксперимента";
+    } else if (inSetup) {
+      existing += block.raw;
+    }
+  }
+  const length = value => value.replace(/\s+/g, " ").trim().length;
+  return length(existing) > 200 && length(proposal.setup) < length(existing) * 0.75;
+}
+
 export class ReportEditor {
   constructor(host, { render, onChange, onAgent, onPaste, hookLinks, readOnly = false }) {
     Object.assign(this, { host, render, onChange, onAgent, onPaste, hookLinks, readOnly });

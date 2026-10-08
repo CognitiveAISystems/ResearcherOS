@@ -1,4 +1,4 @@
-import { ReportEditor, EMPTY_REPORT, applySetup } from "./report-editor.js";
+import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
 import {
   bindCardLiveModal,
   bindLiveInspectButtons,
@@ -3167,6 +3167,7 @@ function renderReportInterview() {
         const editor = document.getElementById("card-report-editor");
         const before = editor.value;
         if (before !== item.report_markdown && !window.confirm("Документ изменился после отправки сообщения. Заменить разделы «Цель», «Постановка эксперимента» и «Задачи» предложением агента? Остальные разделы сохранятся.")) return;
+        if (setupWouldShrink(before, item.proposal) && !window.confirm("Предложение агента заметно короче текущей постановки эксперимента. При применении подробности текущего протокола будут удалены. Всё равно заменить раздел?")) return;
         const after = applySetup(before, item.proposal);
         editor.value = after;
         getReportBlockEditor().setValue(after);

@@ -37,13 +37,15 @@ def _sdk_prompt(item_id: str) -> str:
             f"Контекст:\n{json.dumps(ctx, ensure_ascii=False, indent=2)}"
         )
     return (
-        "Ты отвечаешь на вопрос исследователя в ResearchOS (скилл koi-agent-chat).\n"
-        "Правила содержания:\n"
-        "1. Сначала research_database в JSON (narrative, answer).\n"
-        "2. Отчёт (report_path) — только если в базе не хватает деталей.\n"
-        "3. Если в базе нет ответа — честно скажи, что эксперименты пока не покрывают вопрос.\n\n"
-        f"{ANSWER_FORMAT_INSTRUCTIONS}\n\n"
-        "Верни ТОЛЬКО готовый текст ответа для панели UI.\n\n"
+        "Ты агент исследовательского проекта в ResearcherOS. Выполни запрос человека: "
+        "это может быть вопрос, анализ, правка файла или другая работа в проекте. "
+        "Не своди любой запрос к поиску готового вывода. Изучи нужные файлы и "
+        "действуй в пределах выбранного проекта; учитывай его AGENTS.md и правила репозитория. "
+        "Для вопроса об уже полученных результатах начни с research_database, "
+        "затем при необходимости открой связанный отчёт. Для изменения проекта "
+        "выполни работу и назови изменённые файлы и проверку. Если запрос неясен, "
+        "задай один уточняющий вопрос в ответе. Не заявляй о правках, которых не сделал. "
+        "Верни итог или вопрос для панели чата на русском языке.\n\n"
         f"Контекст:\n{json.dumps(ctx, ensure_ascii=False, indent=2)}"
     )
 
@@ -150,11 +152,6 @@ def process_item(item_id: str) -> bool:
 
     load_env_file()  # ключи из KOI/.env (настройки UI) — не перетирает уже заданные
     local_mode = not is_api_agent_mode() and not is_cursor_manual_agent_mode()
-    if not local_mode and item.get("purpose") not in ("report_grill", "grill_me", "make_report"):
-        auto = try_auto_answer(item["project_id"], item["question"])
-        if auto:
-            submit_answer(item_id, auto)
-            return True
     if is_cursor_manual_agent_mode():
         return False
 
@@ -162,9 +159,13 @@ def process_item(item_id: str) -> bool:
         mark_processing(item_id)
         record(item_id, "Вопрос принят. Ищу доступного локального агента.")
 
+    general_chat = item.get("purpose", "question") == "question"
     available = (
         bool(find_agent_bin() or any(backend_status()[name]["available"] for name in ("codex", "claude")))
-        if local_mode else _any_backend_available()
+        if local_mode else (
+            any(backend_status().get(name, {}).get("available") for name in ("codex", "claude", "cursor"))
+            if general_chat else _any_backend_available()
+        )
     )
     if not available:
         if local_mode:
@@ -177,9 +178,11 @@ def process_item(item_id: str) -> bool:
     if local_mode:
         record(item_id, "Агент обрабатывает вопрос и проверяет базу выводов проекта.")
     try:
+        prompt = _sdk_prompt(item_id)
         text, backend = (
-            _run_local_agent(_sdk_prompt(item_id), item_id) if local_mode
-            else run_agent(_sdk_prompt(item_id), cwd=_ws.agent_cwd())
+            (_run_local_agent(prompt, item_id, mode=None, force=True) if general_chat
+             else _run_local_agent(prompt, item_id)) if local_mode
+            else run_agent(prompt, cwd=_ws.agent_cwd(), allow_edits=general_chat)
         )
     except Exception as exc:
         if local_mode:

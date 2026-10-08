@@ -70,7 +70,7 @@ def test_local_process_records_progress_and_answer(monkeypatch) -> None:
     monkeypatch.setattr(runner, "mark_processing", lambda _id: events.append("processing"))
     monkeypatch.setattr(runner, "record", lambda _id, message: events.append(message))
     monkeypatch.setattr(runner, "_sdk_prompt", lambda _id: "prompt")
-    monkeypatch.setattr(runner, "_run_local_agent", lambda _prompt, _id: ("Ответ", "Cursor CLI"))
+    monkeypatch.setattr(runner, "_run_local_agent", lambda _prompt, _id, **kwargs: ("Ответ", "Cursor CLI") if kwargs == {"mode": None, "force": True} else None)
     monkeypatch.setattr(runner, "submit_answer", lambda _id, answer, **_kw: answers.append(answer))
 
     assert runner.process_item(item["id"])
@@ -98,3 +98,27 @@ def test_post_question_schedules_local_agent_without_waiting(monkeypatch) -> Non
     assert response["item"] == item
     assert response["answered"] is False
     assert len(tasks.tasks) == 1
+
+
+def test_general_chat_prompt_accepts_work_and_includes_project_paths(monkeypatch) -> None:
+    monkeypatch.setattr(runner, "build_context", lambda _id: {
+        "purpose": "question", "user_question": "Исправь описание",
+        "research_root": "/tmp/tree/demo/koi-structure", "code_root": "/tmp/demo",
+    })
+    prompt = runner._sdk_prompt("aq-work")
+    assert "правка файла" in prompt
+    assert "/tmp/tree/demo/koi-structure" in prompt
+    assert "скилл koi-agent-chat" not in prompt
+
+
+def test_api_chat_does_not_short_circuit_work_as_a_knowledge_answer(monkeypatch) -> None:
+    from api.routers import agents
+
+    item = {"id": "aq-work", "project_id": "demo", "question": "Исправь описание", "status": "pending"}
+    monkeypatch.setattr(agents, "load_project", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(agents, "enqueue_question", lambda *_args, **_kwargs: item)
+    monkeypatch.setattr(agents, "find_item", lambda _id: item)
+    monkeypatch.setattr(agents, "get_agent_chat_mode", lambda: "api")
+    monkeypatch.setattr(agents, "try_auto_answer", lambda *_args: (_ for _ in ()).throw(AssertionError("unexpected summary answer")))
+    result = agents.post_agent_chat(SimpleNamespace(project_id="demo", question="Исправь описание", method_id=None, node_id=None), BackgroundTasks())
+    assert result["answered"] is False

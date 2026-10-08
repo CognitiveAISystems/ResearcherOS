@@ -102,10 +102,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
-    auto = try_auto_answer(item["project_id"], item["question"]) if get_agent_chat_mode() != "local" and item.get("purpose") not in ("report_grill", "grill_me", "make_report") else None
-    if auto:
-        submit_answer(item["id"], auto)
-    answered = bool(auto)
+    answered = False
     item = find_item(item["id"]) or item
 
     if not answered:
@@ -146,7 +143,6 @@ def get_agent_chat_activity(project_id: str, board_id: str | None = None, card_i
 def get_agent_chat(project_id: str, board_id: str | None = None, card_id: str | None = None) -> dict:
     if load_project(project_id, sync_reports=False) is None:
         raise HTTPException(404, "Project not found")
-    _auto_answer_pending(project_id)
     items = list_for_project(project_id, limit=10000, board_id=board_id, card_id=card_id)
     if card_id is None:
         items = [i for i in items if not i.get("card_id")][:30]

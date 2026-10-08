@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reportBlocks, applySetup, EMPTY_REPORT } from '../web/report-editor.js';
+import { reportBlocks, applySetup, setupWouldShrink, EMPTY_REPORT } from '../web/report-editor.js';
 
 test('Markdown survives block splitting without changing code, tables or references', () => {
   const source = '# Title\n\n## Цель\n\nText [link][id].\n\n```md\n## Результаты\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n[id]: https://example.org\n';
@@ -20,4 +20,11 @@ test('empty document gets the five sections and setup does not invent results', 
   const result = applySetup(EMPTY_REPORT, {goal:'Claim',setup:'Control',tasks:'- [ ] Test'});
   assert.equal((result.match(/^## /gm)||[]).length, 5);
   assert.ok(result.endsWith('## Эксперименты\n\n## Результаты\n'));
+});
+test('warns when a detailed setup would be replaced by a short summary', () => {
+  const detail = 'Control and protocol details. '.repeat(12);
+  const source = `## Постановка эксперимента\n\n${detail}\n\n## Задачи\n\n- [ ] Test\n`;
+  assert.equal(setupWouldShrink(source, {setup: 'Brief summary'}), true);
+  assert.equal(setupWouldShrink(source, {setup: detail}), false);
+  assert.equal(setupWouldShrink(EMPTY_REPORT, {setup: 'Brief summary'}), false);
 });

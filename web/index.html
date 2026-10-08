@@ -195,7 +195,7 @@
     <aside id="agent-chat-panel" class="agent-chat-panel hidden" aria-labelledby="agent-chat-title">
       <div class="agent-chat-header">
         <div class="agent-chat-heading">
-          <h2 id="agent-chat-title" class="agent-chat-title">Спросить агента</h2>
+          <h2 id="agent-chat-title" class="agent-chat-title">Агент проекта</h2>
           <div class="agent-chat-project-picker">
             <button type="button" id="agent-chat-project" class="agent-chat-project" aria-expanded="false" aria-controls="agent-chat-project-menu"><span class="agent-chat-project-caption">Проект</span><span id="agent-chat-project-name"></span><span aria-hidden="true">⌄</span></button>
             <div id="agent-chat-project-menu" class="agent-chat-project-menu" hidden>
@@ -214,15 +214,15 @@
       <div id="agent-chat-activity" class="agent-chat-activity hidden" role="tabpanel" aria-live="polite"></div>
       <form id="agent-chat-form" class="agent-chat-form">
         <div class="agent-chat-composer">
-        <label class="sr-only" for="agent-chat-input">Ваш вопрос</label>
+        <label class="sr-only" for="agent-chat-input">Вопрос или поручение</label>
         <textarea
           id="agent-chat-input"
           class="agent-chat-input"
           rows="2"
-          placeholder="Спросите о проекте…"
+          placeholder="Спросите или поручите работу по проекту…"
           aria-describedby="agent-chat-form-status"
         ></textarea>
-        <button type="submit" class="btn btn-primary agent-chat-send" id="btn-agent-chat-send" aria-label="Отправить вопрос" title="Отправить вопрос">
+        <button type="submit" class="btn btn-primary agent-chat-send" id="btn-agent-chat-send" aria-label="Отправить сообщение" title="Отправить сообщение">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
         </button>
         </div>

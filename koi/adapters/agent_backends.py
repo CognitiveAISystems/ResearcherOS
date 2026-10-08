@@ -357,6 +357,8 @@ def run_agent(
     cwd = _resolve_cwd(cwd)
     order = [backend] if backend else backend_order()
     for name in order:
+        if allow_edits and name == "openrouter":
+            continue  # Text-only backend cannot carry out project changes.
         runner = _RUNNERS.get(name)
         if runner is None:
             continue
