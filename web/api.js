@@ -8,6 +8,9 @@ export function apiBase() {
   if (typeof window !== "undefined" && window.__HUB__) {
     return window.location.origin;
   }
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("desktop") === "1") {
+    return `${window.location.origin}/api`;
+  }
   if (typeof window !== "undefined" && window.researchOSDesktop) {
     return `${window.location.origin}/api`;
   }

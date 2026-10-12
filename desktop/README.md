@@ -1,4 +1,4 @@
-# ResearcherOS for macOS
+# ResearcherOS desktop
 
 This first desktop build opens the existing ResearcherOS web UI in its own
 window. It starts a bundled Python server on free loopback ports and shuts the
@@ -48,3 +48,21 @@ and checks on a separate clean Mac. The current build is for local testing.
 
 The desktop renderer has no Node.js access. External links open in the system
 browser; they can later become isolated ResearcherOS browser tabs.
+
+## Windows and Linux builds
+
+The desktop UI and local Python server are shared across platforms. Windows and
+Linux packages must be built on their respective operating systems because
+PyInstaller does not cross-compile. The `Desktop Windows and Linux` GitHub
+Actions workflow builds a Windows NSIS installer and a Linux AppImage, verifies
+the bundled API and UI, then launches the packaged application in a clean runner.
+Download the installers from that workflow's artifacts. This is an automated
+smoke check; installation, onboarding, Git integration, and updates still need
+manual checks on a user desktop before release.
+
+For a local build on Windows or Linux, install Python 3.12, Node.js 22, and Git.
+From the repository root, install `requirements.txt` and `pyinstaller==6.16.0`,
+then run `python desktop/build_server.py`. In `desktop/`, run `npm ci` and either
+`npm run pack:win` or `npm run pack:linux`. The packages appear in
+`desktop/dist/`. The installer does not supply Git, which is required to attach
+research repositories.

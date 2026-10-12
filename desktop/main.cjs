@@ -10,19 +10,20 @@ let quitting = false;
 
 function serverCommand() {
   if (app.isPackaged) {
-    const executable = path.join(process.resourcesPath, 'server', 'researchos-server');
+    const executable = path.join(process.resourcesPath, 'server', process.platform === 'win32' ? 'researchos-server.exe' : 'researchos-server');
     if (!fs.existsSync(executable)) throw new Error(`Bundled server missing: ${executable}`);
     const cwd = app.getPath('userData');
     fs.mkdirSync(cwd, { recursive: true });
     return { executable, args: [], cwd };
   }
   const root = path.resolve(__dirname, '..');
-  const venvPython = path.join(root, '.venv', 'bin', 'python');
-  const executable = process.env.RESEARCHOS_PYTHON || (fs.existsSync(venvPython) ? venvPython : 'python3');
+  const venvPython = path.join(root, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+  const executable = process.env.RESEARCHOS_PYTHON || (fs.existsSync(venvPython) ? venvPython : process.platform === 'win32' ? 'python' : 'python3');
   return { executable, args: ['-m', 'api.desktop_server', '--port', '0'], cwd: root };
 }
 
 function guiPath() {
+  if (process.platform !== 'darwin') return process.env.PATH || '';
   // Finder does not run path_helper, so MacTeX in /etc/paths.d is invisible.
   const parts = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
   const files = ['/etc/paths'];
@@ -114,9 +115,18 @@ function createWindow(url) {
   const showOnboarding = fs.existsSync(onboardingFlag);
   if (showOnboarding) fs.rmSync(onboardingFlag, { force: true });
   const initialUrl = showOnboarding
-    ? `${serverUrl}/?onboarding=1`
-    : serverUrl;
+    ? `${serverUrl}/?desktop=1&onboarding=1`
+    : `${serverUrl}/?desktop=1`;
   mainWindow.loadURL(initialUrl);
+  if (process.env.RESEARCHOS_SMOKE_TEST === '1') {
+    const smokeTimeout = setTimeout(() => app.exit(1), 60000);
+    mainWindow.webContents.once('did-finish-load', async () => {
+      clearTimeout(smokeTimeout);
+      const title = await mainWindow.webContents.getTitle();
+      app.exit(title && /Research(?:er)?OS/i.test(title) ? 0 : 1);
+    });
+    mainWindow.webContents.once('did-fail-load', () => { clearTimeout(smokeTimeout); app.exit(1); });
+  }
 }
 
 ipcMain.handle('researchos:choose-directory', async (_event, purpose) => {
