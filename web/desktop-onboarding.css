@@ -198,12 +198,15 @@
 .desktop-onboarding__button:focus-visible { outline: 3px solid #8460d8; outline-offset: 2px; }
 .desktop-onboarding__button:disabled { opacity: .5; cursor: not-allowed; }
 
-.desktop-onboarding__choice .desktop-onboarding__button--primary {
-  margin-top: 0;
+.desktop-onboarding__choice .desktop-onboarding__button--primary,
+.desktop-onboarding__body > .desktop-onboarding__button--primary {
   background: linear-gradient(100deg, #a73bb9, #7260df 58%, #168fb8);
   border-color: #8061d7;
   color: #fff;
 }
+
+.desktop-onboarding__choice .desktop-onboarding__button--primary { margin-top: 0; }
+.desktop-onboarding__body > .desktop-onboarding__button { margin-top: 8px; }
 
 .desktop-onboarding__button--primary:hover:not(:disabled) { filter: brightness(.94); }
 .desktop-onboarding__button--secondary { background: #e9eef0; border-color: #e9eef0; }
@@ -236,6 +239,33 @@
   margin: 0;
   color: #a52835;
   font-size: 14px;
+}
+
+.desktop-onboarding__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 18px;
+  color: #222537;
+  font-weight: 700;
+}
+
+.desktop-onboarding__field input,
+.desktop-onboarding__field select {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #cdd9df;
+  border-radius: 10px;
+  background: #fff;
+  color: #1b2430;
+  font: inherit;
+  font-weight: 500;
+}
+
+.desktop-onboarding__field input:focus,
+.desktop-onboarding__field select:focus {
+  border-color: #8561d8;
+  outline: 3px solid rgba(133, 97, 216, .25);
 }
 
 @media (max-width: 720px) {
