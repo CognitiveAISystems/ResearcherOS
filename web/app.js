@@ -13,6 +13,7 @@ import {
   mergeComputeCost,
 } from "./compute-cost.js";
 import { KoiApi } from "./api.js?v=20261007b";
+import { openNewProjectWizard } from "./desktop-onboarding.js";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
 import {
   refreshInlineLoaderHints,
@@ -2511,9 +2512,12 @@ function renderLabMindmap(options = {}) {
 
   const visibleIds = projectIdsInGrouped(getFilteredGrouped());
   labWorldLayout = fullLayout;
-  const visiblePlacements = fullLayout.placements.filter((p) =>
+  let visiblePlacements = fullLayout.placements.filter((p) =>
     visibleIds.has(p.project.id)
   );
+  if (!visiblePlacements.length && isTreeArchived(state.project?.id)) {
+    visiblePlacements = fullLayout.placements;
+  }
   const { width: worldW, height: worldH } = fullLayout.bbox;
 
   canvas.style.width = `${worldW}px`;
@@ -2616,6 +2620,11 @@ function applyViewCamera(layout, options = {}) {
   if (options.preserveCamera) return;
   const mode = getViewMode();
   const projectId = options.flyToProjectId || state.project?.id;
+
+  if (projectId && isTreeArchived(projectId) && !layout.projectRegions[projectId]) {
+    labCamera.fitWorld();
+    return;
+  }
 
   if (options.fitLab) {
     labCamera.fitWorld();
@@ -6481,7 +6490,10 @@ async function addCardToColumn(board, columnId, context = {}) {
 
 const PROJECTS_SIDEBAR_KEY = "koi-projects-sidebar";
 const LAB_HIDDEN_TREES_KEY = "koi-lab-hidden-trees";
+const ARCHIVED_TREES_KEY = "koi-archived-trees";
 const VIEW_MODE_KEY = "koi-view-mode";
+let projectsArchiveOpen = false;
+let archivedTreeIds = null;
 
 const VIEW_MODES = {
   chief: {
@@ -6522,6 +6534,38 @@ function saveHiddenLabTrees(ids) {
   localStorage.setItem(LAB_HIDDEN_TREES_KEY, JSON.stringify([...ids]));
 }
 
+function loadArchivedTrees() {
+  try {
+    const raw = localStorage.getItem(ARCHIVED_TREES_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveArchivedTrees(ids) {
+  localStorage.setItem(ARCHIVED_TREES_KEY, JSON.stringify([...ids]));
+}
+
+function ensureArchivedTrees() {
+  if (!archivedTreeIds) archivedTreeIds = loadArchivedTrees();
+  return archivedTreeIds;
+}
+
+function isTreeArchived(id) {
+  return Boolean(id) && ensureArchivedTrees().has(String(id));
+}
+
+function offMapTreeIds() {
+  const hidden = ensureHiddenLabTrees();
+  const archived = ensureArchivedTrees();
+  if (!archived.size) return hidden;
+  const ids = new Set(hidden);
+  for (const id of archived) ids.add(id);
+  return ids;
+}
+
 function ensureHiddenLabTrees() {
   if (!state.lab) return new Set();
   if (!(state.lab.hiddenTreeIds instanceof Set)) {
@@ -6535,17 +6579,23 @@ function isLabTreeHidden(id) {
 }
 
 function filterGroupedHiddenTrees(grouped) {
-  const hidden = ensureHiddenLabTrees();
+  const hidden = offMapTreeIds();
   if (!grouped || !hidden.size) return grouped;
-  return {
-    ...grouped,
-    groups: (grouped.groups || []).map((g) => ({
+  const memberIds = hiddenCompositeMemberIds(grouped);
+  const groups = (grouped.groups || [])
+    .map((g) => ({
       ...g,
       composites: (g.composites || []).filter(
         (c) => !hidden.has(compositeVirtualId(c.id))
       ),
-      projects: (g.projects || []).filter((p) => !hidden.has(p.id)),
-    })),
+      projects: (g.projects || []).filter(
+        (p) => !memberIds.has(p.id) && !hidden.has(p.id)
+      ),
+    }))
+    .filter((g) => (g.composites || []).length || (g.projects || []).length);
+  return {
+    ...grouped,
+    groups,
     ungrouped: (grouped.ungrouped || []).filter((p) => !hidden.has(p.id)),
   };
 }
@@ -6572,7 +6622,130 @@ function ensureLabTreeVisible(id) {
   return true;
 }
 
+const ARCHIVE_BOX_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23 19.15 3.55C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5 6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5h13.75l.83 1H4.29l.83-1z"/></svg>`;
+const ARCHIVE_IN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>`;
+const ARCHIVE_OUT_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m14 6 1.41 1.41L10.83 12l4.58 4.59L14 18l-6-6z"/></svg>`;
+
+function filterGroupForSidebar(group, archived, archiveOpen) {
+  const members = hiddenCompositeMemberIds({ groups: [group] });
+  const keep = (id) => (archiveOpen ? archived.has(id) : !archived.has(id));
+  return {
+    composites: (group.composites || []).filter((c) => keep(compositeVirtualId(c.id))),
+    projects: visibleProjectsForGroup(group, members).filter((p) => keep(p.id)),
+  };
+}
+
+function sidebarGroups(grouped) {
+  const groups = [...(grouped?.groups || [])];
+  if (grouped?.ungrouped?.length) {
+    groups.push({ composites: [], projects: grouped.ungrouped });
+  }
+  return groups;
+}
+
+function archivedTreeCount(grouped) {
+  const archived = ensureArchivedTrees();
+  if (!archived.size || !grouped) return 0;
+  let n = 0;
+  for (const g of sidebarGroups(grouped)) {
+    const shown = filterGroupForSidebar(g, archived, true);
+    n += shown.composites.length + shown.projects.length;
+  }
+  return n;
+}
+
+function nextOpenTreeId(excludeId) {
+  const grouped = state.lab?.grouped;
+  if (!grouped) return null;
+  const archived = ensureArchivedTrees();
+  const ids = [];
+  for (const g of sidebarGroups(grouped)) {
+    const shown = filterGroupForSidebar(g, archived, false);
+    for (const c of shown.composites) ids.push(compositeVirtualId(c.id));
+    for (const p of shown.projects) ids.push(p.id);
+  }
+  const open = ids.filter((id) => id !== excludeId);
+  return open.find((id) => !isLabTreeHidden(id)) || open[0] || null;
+}
+
+function selfCheckArchiveSidebar() {
+  const grouped = {
+    groups: [{
+      id: "p",
+      composites: [{ id: "c", member_ids: ["m"] }],
+      projects: [{ id: "m" }, { id: "a" }, { id: "b" }],
+    }],
+    ungrouped: [{ id: "u" }],
+  };
+  const archived = new Set(["a", "composite:c"]);
+  const main = filterGroupForSidebar(grouped.groups[0], archived, false);
+  const arch = filterGroupForSidebar(grouped.groups[0], archived, true);
+  const loose = filterGroupForSidebar(
+    { composites: [], projects: grouped.ungrouped },
+    archived,
+    false
+  );
+  const mainIds = [...main.composites.map((c) => c.id), ...main.projects.map((p) => p.id)].join(",");
+  const archIds = [...arch.composites.map((c) => c.id), ...arch.projects.map((p) => p.id)].join(",");
+  const looseIds = loose.projects.map((p) => p.id).join(",");
+  if (mainIds !== "b" || archIds !== "c,a" || looseIds !== "u") {
+    throw new Error(`archive sidebar filter: ${mainIds} | ${archIds} | ${looseIds}`);
+  }
+}
+selfCheckArchiveSidebar();
+
+async function setTreeArchived(id, on) {
+  if (!id) return;
+  const archived = ensureArchivedTrees();
+  const key = String(id);
+  if (on) archived.add(key);
+  else archived.delete(key);
+  saveArchivedTrees(archived);
+  if (!on && projectsArchiveOpen && archivedTreeCount(state.lab?.grouped) === 0) {
+    projectsArchiveOpen = false;
+  }
+  const leavingCurrent = on && state.project?.id === key;
+  const next = leavingCurrent ? nextOpenTreeId(key) : null;
+  if (next) {
+    await loadProjectList(next);
+    await focusLabProject(next);
+    return;
+  }
+  await loadProjectList(state.project?.id);
+  if (state.lab?.projectsById) {
+    renderLabMindmap({ preserveCamera: !leavingCurrent });
+  }
+}
+
+function renderProjectsArchiveBar(grouped) {
+  const bar = document.getElementById("projects-archive-bar");
+  if (!bar) return;
+  const count = archivedTreeCount(grouped);
+  if (!projectsArchiveOpen && !count) {
+    bar.hidden = true;
+    bar.innerHTML = "";
+    return;
+  }
+  bar.hidden = false;
+  if (projectsArchiveOpen) {
+    bar.innerHTML =
+      `<button type="button" class="projects-archive-bar__btn" data-archive-nav="close" title="К списку проектов" aria-label="К списку проектов">` +
+      `<span class="projects-archive-bar__chevron">${ARCHIVE_OUT_SVG}</span>` +
+      `<span class="projects-archive-bar__icon">${ARCHIVE_BOX_SVG}</span>` +
+      `<span class="projects-archive-bar__label">Архив</span>` +
+      `</button>`;
+    return;
+  }
+  bar.innerHTML =
+    `<button type="button" class="projects-archive-bar__btn" data-archive-nav="open" title="Архив">` +
+    `<span class="projects-archive-bar__icon">${ARCHIVE_BOX_SVG}</span>` +
+    `<span class="projects-archive-bar__label">Архив</span>` +
+    `<span class="projects-archive-bar__count">${count}</span>` +
+    `</button>`;
+}
+
 function renderProjectListEye(treeId) {
+  if (projectsArchiveOpen) return "";
   const hidden = isLabTreeHidden(treeId);
   const title = hidden ? "Показать дерево на карте" : "Скрыть дерево с карты";
   return (
@@ -6582,6 +6755,19 @@ function renderProjectListEye(treeId) {
     ` aria-label="${title}"` +
     ` aria-pressed="${hidden ? "false" : "true"}">` +
     `${hidden ? EYE_OFF_SVG : EYE_ON_SVG}` +
+    `</button>`
+  );
+}
+
+function renderProjectListArchive(treeId) {
+  const out = projectsArchiveOpen;
+  const title = out ? "Вернуть из архива" : "В архив";
+  return (
+    `<button type="button" class="project-list__archive"` +
+    ` data-tree-id="${escapeHtml(treeId)}"` +
+    ` data-archive-action="${out ? "out" : "in"}"` +
+    ` title="${title}" aria-label="${title}">` +
+    `${out ? ARCHIVE_OUT_SVG : ARCHIVE_IN_SVG}` +
     `</button>`
   );
 }
@@ -6662,6 +6848,7 @@ function renderProjectListButton(p, currentId) {
     `>${escapeHtml(p.title)}</button>` +
     renderProjectListPull(p.id) +
     renderProjectListEye(p.id) +
+    renderProjectListArchive(p.id) +
     `</div>` +
     `</li>`
   );
@@ -6719,6 +6906,7 @@ function renderCompositeListButton(c, currentId, selectedBranchId) {
     `><span class="project-list__composite-mark" aria-hidden="true">⎇</span> ${escapeHtml(c.title)}</button>` +
     headerPull +
     renderProjectListEye(virtualId) +
+    renderProjectListArchive(virtualId) +
     `</div>` +
     branches +
     `</li>`
@@ -6735,9 +6923,12 @@ function renderProgramGroupHeader(group) {
 }
 
 function renderProgramGroup(group, currentId, selectedBranchId = state.literatureBranchId) {
-  const hiddenMemberIds = state.lab?.hiddenMemberIds || hiddenCompositeMemberIds({ groups: [group] });
-  const projects = visibleProjectsForGroup(group, hiddenMemberIds);
-  const composites = group.composites || [];
+  const { composites, projects } = filterGroupForSidebar(
+    group,
+    ensureArchivedTrees(),
+    projectsArchiveOpen
+  );
+  if (!composites.length && !projects.length) return "";
   return (
     `<li class="program-group">` +
     renderProgramGroupHeader(group) +
@@ -6776,24 +6967,26 @@ function resolvePreferredProjectId(requestedId, grouped, projectsById) {
   // Member branch → keep the single merged composite tree in Laboratory.
   if (requestedId && memberToComposite.has(requestedId)) {
     const compositeId = memberToComposite.get(requestedId);
-    if (projectsById[compositeId]) return compositeId;
+    if (projectsById[compositeId] && !isTreeArchived(compositeId)) return compositeId;
   }
-  if (requestedId && projectsById[requestedId]) {
+  if (requestedId && projectsById[requestedId] && !isTreeArchived(requestedId)) {
     return requestedId;
   }
 
   for (const g of grouped?.groups || []) {
     for (const c of g.composites || []) {
       const virtualId = compositeVirtualId(c.id);
-      if (projectsById[virtualId]) return virtualId;
+      if (projectsById[virtualId] && !isTreeArchived(virtualId)) return virtualId;
     }
   }
 
-  if (projectsById["ai-agents-embodied"]) return "ai-agents-embodied";
+  if (projectsById["ai-agents-embodied"] && !isTreeArchived("ai-agents-embodied")) {
+    return "ai-agents-embodied";
+  }
 
   const hidden = hiddenCompositeMemberIds(grouped);
   for (const id of Object.keys(projectsById || {})) {
-    if (!hidden.has(id) && !isCompositeVirtualId(id)) return id;
+    if (!hidden.has(id) && !isCompositeVirtualId(id) && !isTreeArchived(id)) return id;
   }
   return Object.keys(projectsById || {})[0] || null;
 }
@@ -6981,15 +7174,23 @@ async function loadProjectList(activeId) {
 
   if (!grouped) {
     const flat = await KoiApi.listProjects();
+    const synthetic = { groups: [], ungrouped: flat };
+    renderProjectsArchiveBar(synthetic);
     if (ul) {
-      ul.innerHTML = renderProgramGroup(
+      let html = renderProgramGroup(
         { id: "", title: "Проекты", description: "", projects: flat },
         currentId
       );
+      if (!html && projectsArchiveOpen) {
+        html = `<li class="program-group__empty">В архиве пусто</li>`;
+      }
+      ul.innerHTML = html;
     }
     applyProjectListPullStatus();
     return flat;
   }
+
+  renderProjectsArchiveBar(grouped);
 
   if (titleEl && grouped.laboratory?.title) {
     titleEl.textContent = grouped.laboratory.title;
@@ -7022,7 +7223,11 @@ async function loadProjectList(activeId) {
       );
     }
 
-    ul.innerHTML = parts.join("");
+    const rendered = parts.filter(Boolean);
+    if (!rendered.length && projectsArchiveOpen) {
+      rendered.push(`<li class="program-group__empty">В архиве пусто</li>`);
+    }
+    ul.innerHTML = rendered.join("");
   }
   applyProjectListPullStatus();
   return list;
@@ -7167,6 +7372,7 @@ async function submitCreateProjectForm(event) {
       programTitle,
     });
     hideModal("create-project-modal");
+    projectsArchiveOpen = false;
     if (state.lab) {
       state.lab.projectsById[p.id] = p;
       state.lab.grouped = await KoiApi.listProjectsGrouped();
@@ -7188,7 +7394,12 @@ async function submitCreateProjectForm(event) {
 
 function initCreateProjectModal() {
   document.getElementById("btn-new-project")?.addEventListener("click", () => {
-    openCreateProjectModal();
+    const programs = (state.lab?.grouped?.groups || [])
+      .filter((group) => group?.id)
+      .map((group) => ({ id: group.id, title: group.title || group.id }));
+    void openNewProjectWizard(programs).then((opened) => {
+      if (!opened) openCreateProjectModal();
+    });
   });
   document.getElementById("create-project-form")?.addEventListener("submit", (e) => {
     void submitCreateProjectForm(e);
@@ -7227,7 +7438,22 @@ function initProjectsSidebar() {
     localStorage.setItem(PROJECTS_SIDEBAR_KEY, open ? "open" : "closed");
   });
 
+  document.getElementById("projects-archive-bar")?.addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-archive-nav]");
+    if (!nav) return;
+    projectsArchiveOpen = nav.dataset.archiveNav === "open";
+    void loadProjectList(state.project?.id);
+  });
+
   document.getElementById("project-list")?.addEventListener("click", (e) => {
+    const archiveBtn = e.target.closest(".project-list__archive");
+    if (archiveBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const treeId = archiveBtn.dataset.treeId;
+      if (treeId) void setTreeArchived(treeId, archiveBtn.dataset.archiveAction === "in");
+      return;
+    }
     const pullBtn = e.target.closest(".project-list__pull");
     if (pullBtn) {
       e.preventDefault();
