@@ -55,7 +55,23 @@ DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 def _codex_bin() -> Optional[str]:
-    return shutil.which(os.environ.get("KOI_CODEX_BIN", "codex"))
+    configured = os.environ.get("KOI_CODEX_BIN", "codex")
+    found = shutil.which(configured)
+    if found:
+        return found
+    if configured != "codex":
+        return None
+    # Finder starts the packaged app without the user's shell PATH. Codex may
+    # still be installed with ChatGPT or in the user's local bin directory.
+    candidates = (
+        Path.home() / ".local" / "bin" / "codex",
+        Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"),
+        Path.home() / "Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
 
 
 def _codex_ready() -> bool:

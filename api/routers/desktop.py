@@ -14,6 +14,14 @@ from koi.adapters.desktop_onboarding import (
     inspect_existing_tree,
     inspect_git_project,
 )
+from koi.adapters.onboarding_interview import (
+    InterviewError,
+    attach_program,
+    finish_interview,
+    reply_interview,
+    resolve_program,
+    start_interview,
+)
 from koi.adapters.desktop_workspace import selected_workspace_root, set_workspace_root
 from koi.adapters.project_mount import tree_dir_for
 from koi.adapters.workspace import reset_workspace_cache
@@ -30,6 +38,14 @@ class DesktopConnectBody(BaseModel):
     repo_path: str = Field(min_length=1)
     workspace_root: str = Field(min_length=1)
     require_existing: bool | None = None
+    program_id: str | None = None
+    program_title: str | None = None
+
+
+class DesktopInterviewReplyBody(BaseModel):
+    repo_path: str = Field(min_length=1)
+    answer: str = Field(default="", max_length=12000)
+    decision: str = "answer"
 
 
 @router.get("/desktop/onboarding/default-location")
@@ -90,7 +106,40 @@ def post_connect_project(body: DesktopConnectBody) -> dict:
         result = connect_git_project(
             body.repo_path, body.workspace_root, require_existing=body.require_existing
         )
+        program = resolve_program(body.program_id, body.program_title)
+        if program is not None:
+            attach_program(body.repo_path, program)
     except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    reset_workspace_cache()
+    return result
+
+
+@router.post("/desktop/onboarding/interview/start")
+def post_start_interview(body: DesktopConnectBody) -> dict:
+    try:
+        return start_interview(
+            body.repo_path,
+            body.workspace_root,
+            resolve_program(body.program_id, body.program_title),
+        )
+    except (ValueError, InterviewError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/desktop/onboarding/interview/reply")
+def post_interview_reply(body: DesktopInterviewReplyBody) -> dict:
+    try:
+        return reply_interview(body.repo_path, body.answer, body.decision)
+    except (ValueError, InterviewError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/desktop/onboarding/interview/finish")
+def post_finish_interview(body: DesktopFolderBody) -> dict:
+    try:
+        result = finish_interview(body.path)
+    except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
     reset_workspace_cache()
     return result

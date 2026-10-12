@@ -140,7 +140,7 @@ def create_program(title: str, description: str = "") -> dict[str, Any]:
     }
 
 
-def add_project_to_program(program_id: str, project_id: str) -> dict[str, Any]:
+def add_project_to_program(program_id: str, project_id: str, title: str | None = None) -> dict[str, Any]:
     path = project_md(project_id)
     if not path.exists():
         raise ValueError(f"Project not found: {project_id}")
@@ -148,7 +148,7 @@ def add_project_to_program(program_id: str, project_id: str) -> dict[str, Any]:
     meta, body = _split_frontmatter(text)
     entries = _parse_program_entries(meta.get("programs"))
     if not any(e["id"] == program_id for e in entries):
-        entries.append({"id": program_id, "title": program_id, "description": ""})
+        entries.append({"id": program_id, "title": (title or program_id).strip() or program_id, "description": ""})
     meta["programs"] = entries
     serialized = (
         "---\n"
