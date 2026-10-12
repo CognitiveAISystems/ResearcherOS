@@ -1,0 +1,83 @@
+name: Desktop Windows and Linux
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-cross-platform.yml"
+      - "desktop/**"
+      - "api/**"
+      - "koi/**"
+      - "web/**"
+      - "widgets/**"
+      - "agents/**"
+      - "requirements.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt pyinstaller==6.16.0
+      - name: Build bundled server
+        run: python desktop/build_server.py
+      - name: Install Electron dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+      - name: Check bundled server
+        run: node desktop/verify-server.cjs "${{ github.workspace }}/dist/researchos-server/researchos-server${{ runner.os == 'Windows' && '.exe' || '' }}"
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: npm run pack:win
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: npm run pack:linux
+      - name: Smoke test Windows installation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem desktop/dist/*.exe | Select-Object -First 1
+          if (-not $installer) { throw 'Installer missing' }
+          $destination = Join-Path $env:RUNNER_TEMP 'ResearcherOS'
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$destination") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer failed: $($install.ExitCode)" }
+          $exe = Join-Path $destination 'ResearcherOS.exe'
+          if (-not (Test-Path $exe)) { throw 'Installed application missing' }
+          $env:RESEARCHOS_SMOKE_TEST = '1'
+          $app = Start-Process -FilePath $exe -Wait -PassThru
+          if ($app.ExitCode -ne 0) { throw "Application smoke test failed: $($app.ExitCode)" }
+      - name: Smoke test Linux AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage="$(find desktop/dist -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          chmod +x "$appimage"
+          (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null)
+          RESEARCHOS_SMOKE_TEST=1 xvfb-run -a timeout 60 "$RUNNER_TEMP/squashfs-root/researchos" --no-sandbox
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ResearcherOS-${{ matrix.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+          if-no-files-found: error

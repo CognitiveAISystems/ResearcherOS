@@ -2,12 +2,15 @@
   "name": "researchos-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "ResearcherOS desktop application for macOS",
+  "description": "ResearcherOS desktop application",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
     "build:server": "bash ./build-server.sh",
-    "pack:mac": "npm run build:server && electron-builder --mac dir"
+    "build:server:portable": "python ../desktop/build_server.py",
+    "pack:mac": "npm run build:server && electron-builder --mac dir",
+    "pack:win": "electron-builder --win nsis",
+    "pack:linux": "electron-builder --linux AppImage"
   },
   "devDependencies": {
     "electron": "^38.0.0",
@@ -31,6 +34,19 @@
       "target": "dir",
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Science",
+      "icon": "assets/icon.png"
     }
   }
 }
