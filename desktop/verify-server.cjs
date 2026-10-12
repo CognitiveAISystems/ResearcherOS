@@ -1,8 +1,22 @@
 // Verify the packaged server without reading or changing the user's workspace.
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+
+function get(url) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(url, response => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      response.on('error', reject);
+    });
+    request.setTimeout(5000, () => request.destroy(new Error(`Timed out: ${url}`)));
+    request.on('error', reject);
+  });
+}
 
 async function verify(executable) {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'researchos-check-'));
@@ -35,9 +49,9 @@ async function verify(executable) {
     });
     clearTimeout(timer);
     for (const resource of ['', 'api/health', 'desktop-onboarding.js']) {
-      const response = await fetch(new URL(resource, url), { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) throw new Error(`Packaged resource ${resource}: HTTP ${response.status}`);
-      if (resource === 'api/health' && (await response.json()).status !== 'ok') throw new Error('API is unhealthy');
+      const response = await get(new URL(resource, url));
+      if (response.status !== 200) throw new Error(`Packaged resource ${resource}: HTTP ${response.status}\n${diagnostics}`);
+      if (resource === 'api/health' && JSON.parse(response.body).status !== 'ok') throw new Error('API is unhealthy');
     }
     console.log('Packaged server: UI, API and onboarding OK');
   } finally {

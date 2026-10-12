@@ -75,7 +75,7 @@ jobs:
           test -n "$appimage"
           chmod +x "$appimage"
           (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null)
-          RESEARCHOS_SMOKE_TEST=1 xvfb-run -a timeout 60 "$RUNNER_TEMP/squashfs-root/researchos" --no-sandbox
+          RESEARCHOS_SMOKE_TEST=1 xvfb-run -a timeout 60 "$RUNNER_TEMP/squashfs-root/AppRun" --no-sandbox
       - uses: actions/upload-artifact@v4
         with:
           name: ResearcherOS-${{ matrix.os }}
