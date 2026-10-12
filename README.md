@@ -16,7 +16,8 @@ ResearcherOS помогает вести исследование от проб�
 
 | 🍎 macOS | 🪟 Windows | 🐧 Linux |
 |:---:|:---:|:---:|
-| **Установить на Mac**<br><br>Клонируйте репозиторий и запустите `Установить ResearcherOS.command`.<br><br>[Пошаговая инструкция](#установка-на-mac) | **Установить на Windows**<br><br>Скачайте артефакт `ResearcherOS-windows-2022`, распакуйте ZIP и запустите `ResearcherOS Setup 0.1.0.exe`.<br><br>[Скачать тестовую сборку](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/38227118667) | **Установить на Linux**<br><br>Скачайте артефакт `ResearcherOS-ubuntu-24.04`, распакуйте ZIP, разрешите запуск файла `.AppImage` и откройте его.<br><br>[Скачать тестовую сборку](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/38227118667) |
+| Клонируйте репозиторий и запустите `Установить ResearcherOS.command`. | Скачайте артефакт `ResearcherOS-windows-2022`, распакуйте ZIP и запустите `ResearcherOS Setup 0.1.0.exe`. | Скачайте артефакт `ResearcherOS-ubuntu-24.04`, распакуйте ZIP, разрешите запуск файла `.AppImage` и откройте его. |
+| [Пошаговая инструкция](#установка-на-mac) | [Скачать тестовую сборку](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/38227118667) | [Скачать тестовую сборку](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/38227118667) |
 
 Сборки для Windows и Linux прошли автоматическую проверку установки и запуска. Для подключения исследовательских репозиториев нужен установленный Git. Первую настройку и обновление на пользовательских компьютерах ещё предстоит проверить.
 
