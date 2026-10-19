@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/researcher_os_logo.png" alt="ResearcherOS" width="480">
-</p>
-
 # ResearcherOS
 
 ## О проекте
