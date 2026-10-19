@@ -1,7 +1,7 @@
 #!/bin/bash
 # Finder opens executable .command files in Terminal.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$ROOT/.run/logs"
 LOG="$ROOT/.run/logs/mac-install-$(date +%Y%m%d-%H%M%S).log"
 echo "Установка ResearcherOS. Журнал: $LOG"

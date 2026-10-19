@@ -1,0 +1,2 @@
+installers/*.exe filter=lfs diff=lfs merge=lfs -text
+installers/*.AppImage filter=lfs diff=lfs merge=lfs -text

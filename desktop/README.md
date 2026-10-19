@@ -9,7 +9,7 @@ data should live. Its path and other application settings live under
 
 ## Install from a clone
 
-Double-click `Установить ResearcherOS.command` in the repository root in Finder.
+Double-click `installers/Установить ResearcherOS.command` in Finder.
 The installer downloads checksum-verified uv and Node.js archives, provisions a
 private Python 3.12 environment under `.tools/mac-installer/`, and builds the app.
 It installs into `~/Applications/ResearcherOS.app` and creates a Desktop symlink.
