@@ -95,6 +95,7 @@ const HUB_ICONS = {
   arrow:
     '<svg class="hub-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13.5 5.5a1 1 0 0 1 1.4 0l5.1 5.1a1 1 0 0 1 0 1.4l-5.1 5.1a1 1 0 1 1-1.4-1.4l3.4-3.4H4.5a1 1 0 0 1 0-2h12.4l-3.4-3.4a1 1 0 0 1 0-1.4z"/></svg>',
   sync: '<svg class="hub-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 7.5A6 6 0 0 1 18 9h-2.25a.75.75 0 0 0 0 1.5H19a.75.75 0 0 0 .75-.75V6.5a.75.75 0 0 0-1.5 0v1.3A7.5 7.5 0 0 0 6.2 6.2a.75.75 0 1 0 1.06 1.06zM16.5 16.5A6 6 0 0 1 6 15h2.25a.75.75 0 0 0 0-1.5H5a.75.75 0 0 0-.75.75v3.25a.75.75 0 0 0 1.5 0v-1.3a7.5 7.5 0 0 0 12.05 1.6.75.75 0 1 0-1.06-1.06z"/></svg>',
+  edit: '<svg class="hub-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.7 3.3a1.75 1.75 0 0 1 2.48 0l1.52 1.52a1.75 1.75 0 0 1 0 2.48L8.25 19.75 3 21l1.25-5.25L16.7 3.3zm1.24 1.06a.25.25 0 0 0-.18.07l-1.45 1.45 1.81 1.81 1.45-1.45a.25.25 0 0 0 0-.36l-1.52-1.52a.25.25 0 0 0-.11-.07zM15.25 6.94 5.62 16.56l-.55 2.37 2.37-.55 9.62-9.63-1.81-1.81z"/></svg>',
   trash:
     '<svg class="hub-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 4.75A1.75 1.75 0 0 1 10.75 3h2.5A1.75 1.75 0 0 1 15 4.75V6h3.25a.75.75 0 0 1 0 1.5H18v10.75A2.75 2.75 0 0 1 15.25 21h-6.5A2.75 2.75 0 0 1 6 18.25V7.5h-.25a.75.75 0 0 1 0-1.5H9zm1.5 0V6h3V4.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25zM7.5 7.5v10.75c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V7.5z"/></svg>',
   eye: '<svg class="hub-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5.5c4.4 0 7.95 2.95 9.35 5.9a1.1 1.1 0 0 1 0 1.2C19.95 15.55 16.4 18.5 12 18.5S4.05 15.55 2.65 12.6a1.1 1.1 0 0 1 0-1.2C4.05 8.45 7.6 5.5 12 5.5zm0 2A7.9 7.9 0 0 0 4.5 12 7.9 7.9 0 0 0 12 16.5 7.9 7.9 0 0 0 19.5 12 7.9 7.9 0 0 0 12 7.5zm0 2.25A2.25 2.25 0 1 1 9.75 12 2.25 2.25 0 0 1 12 9.75z"/></svg>',
@@ -369,6 +370,9 @@ function renderMineCard(p) {
         HUB_ICONS.link +
         "</button>"
       : "") +
+    '<button type="button" class="hub-project-card__icon-btn hub-edit-btn" data-action="edit" title="Редактировать" aria-label="Редактировать">' +
+    HUB_ICONS.edit +
+    "</button>" +
     '<button type="button" class="hub-project-card__icon-btn hub-enable-btn' +
     (on ? " is-on" : "") +
     '" data-action="enabled" data-enabled="' +
@@ -397,6 +401,12 @@ function renderMineCard(p) {
     (dup ? " hub-project-card--dup" : "") +
     '" data-slug="' +
     escapeHtml(p.slug) +
+    '" data-repo="' +
+    escapeHtml(p.repo_full_name || "") +
+    '" data-branch="' +
+    escapeHtml(p.branch || "") +
+    '" data-visibility="' +
+    escapeHtml(p.visibility || "public") +
     '">' +
     '<a class="hub-project-card__main" href="' +
     escapeHtml(href) +
@@ -656,6 +666,75 @@ function initLinkModal(onSuccess) {
   });
 }
 
+function initProjectEditModal(onSuccess) {
+  const modal = document.getElementById("hub-project-edit-modal");
+  const form = document.getElementById("hub-project-edit-form");
+  const repo = document.getElementById("hub-project-edit-repo");
+  const branch = document.getElementById("hub-project-edit-branch");
+  const visibility = document.getElementById("hub-project-edit-visibility");
+  const hint = document.getElementById("hub-project-edit-branch-hint");
+  const status = document.getElementById("hub-project-edit-status");
+  if (!modal || !form || !repo || !branch || !visibility) return function () {};
+
+  let slug = "";
+  let originalBranch = "";
+
+  function closeModal() {
+    modal.classList.add("hidden");
+  }
+
+  function updateHint() {
+    if (!hint) return;
+    hint.classList.toggle("hidden", branch.value.trim() === originalBranch);
+  }
+
+  document.addEventListener("click", function (e) {
+    if (
+      e.target.closest('[data-action="close-project-edit-modal"]') ||
+      e.target.dataset.close === "hub-project-edit-modal"
+    ) {
+      closeModal();
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
+  });
+  branch.addEventListener("input", updateHint);
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!slug) return;
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    if (status) status.textContent = "Проверка и сохранение…";
+    try {
+      const result = await HubApi.patch(
+        "/api/projects/" + encodeURIComponent(slug),
+        { branch: branch.value.trim(), visibility: visibility.value }
+      );
+      closeModal();
+      if (typeof onSuccess === "function") await onSuccess(result);
+    } catch (err) {
+      if (status) status.textContent = err.message;
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  });
+
+  return function openModal(card) {
+    if (!card) return;
+    slug = card.dataset.slug || "";
+    originalBranch = card.dataset.branch || "";
+    repo.value = card.dataset.repo || "";
+    branch.value = originalBranch;
+    visibility.value = card.dataset.visibility || "public";
+    if (status) status.textContent = "";
+    updateHint();
+    modal.classList.remove("hidden");
+    branch.focus();
+  };
+}
+
 function initIndexPage() {
   let activeTab = parseTabFromUrl();
   let authState = null;
@@ -667,6 +746,11 @@ function initIndexPage() {
     const el = document.getElementById("hub-status");
     if (el) el.textContent = msg || "";
   }
+
+  const openProjectEditModal = initProjectEditModal(async function () {
+    setStatus("Настройки проекта сохранены.");
+    await loadCatalog();
+  });
 
   async function refreshEnterWorldCta(projects) {
     const href = await resolveEnterWorldHref(projects, authState);
@@ -797,6 +881,12 @@ function initIndexPage() {
     manageBound = true;
 
     root.addEventListener("click", async function (e) {
+      const editBtn = e.target.closest('[data-action="edit"]');
+      if (editBtn) {
+        const card = editBtn.closest(".hub-project-card--mine");
+        openProjectEditModal(card);
+        return;
+      }
       const enableBtn = e.target.closest('[data-action="enabled"]');
       if (enableBtn) {
         const card = enableBtn.closest(".hub-project-card--mine");
