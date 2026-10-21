@@ -33,7 +33,7 @@ from koi.agent_chat.worker import (
     stop_agent_worker,
     worker_running,
 )
-from koi.adapters.agent_backends import backend_status
+from koi.adapters.agent_backends import backend_status, cli_agents
 from koi.adapters.repository import load_project
 from koi.adapters.settings_store import (
     AGENT_CHAT_MODES,
@@ -61,7 +61,7 @@ def _auto_answer_pending(project_id: str) -> None:
     if get_agent_chat_mode() == "local":
         return
     for item in list_for_project(project_id, limit=10):
-        if item.get("status") == "answered" or item.get("card_id"):
+        if item.get("status") == "answered" or item.get("card_id") or item.get("purpose") != "question":
             continue
         auto = try_auto_answer(project_id, item["question"])
         if auto:
@@ -80,6 +80,14 @@ def get_agent_backends():
 def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> dict:
     if load_project(body.project_id, sync_reports=False) is None:
         raise HTTPException(404, "Project not found")
+    if getattr(body, "purpose", "agent") in ("prose", "run") and not (getattr(body, "card_id", None) and getattr(body, "board_id", None)):
+        raise HTTPException(400, "Откройте карточку, чтобы выполнить эту команду.")
+    cli_agent = getattr(body, "cli_agent", None) or None
+    if cli_agent:
+        row = next((agent for agent in cli_agents() if agent["id"] == cli_agent), None)
+        if row is None or not row["available"]:
+            label = row["label"] if row else cli_agent
+            raise HTTPException(400, f"{label} сейчас недоступен. Проверьте, что CLI установлен.")
     if getattr(body, "card_id", None):
         project = load_project(body.project_id, sync_reports=False)
         board = next((b for b in project.boards if b.id == body.board_id), None)
@@ -94,10 +102,11 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
             body.question,
             method_id=body.method_id,
             node_id=body.node_id,
-            purpose=getattr(body, "purpose", "question"),
+            purpose=getattr(body, "purpose", "agent"),
             board_id=getattr(body, "board_id", None),
             card_id=getattr(body, "card_id", None),
             report_markdown=getattr(body, "report_markdown", ""),
+            cli_agent=cli_agent,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
@@ -108,7 +117,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
     if not answered:
         if is_cursor_inbox_agent_mode():
             notify_chat_inbox_wake(agent_chat_id=item["id"])
-            record_agent_activity(item["id"], "Вопрос отправлен в ResearchOS Chat Inbox.")
+            record_agent_activity(item["id"], "Вопрос отправлен в ResearcherOS Chat Inbox.")
         elif get_agent_chat_mode() in ("local", "api"):
             background_tasks.add_task(_run_agent_chat_item, item["id"])
 

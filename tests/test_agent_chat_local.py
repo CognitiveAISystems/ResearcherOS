@@ -4,7 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import json
 
-from fastapi import BackgroundTasks
+import pytest
+from fastapi import BackgroundTasks, HTTPException
 
 from koi.agent_chat import runner
 
@@ -102,7 +103,7 @@ def test_post_question_schedules_local_agent_without_waiting(monkeypatch) -> Non
 
 def test_general_chat_prompt_accepts_work_and_includes_project_paths(monkeypatch) -> None:
     monkeypatch.setattr(runner, "build_context", lambda _id: {
-        "purpose": "question", "user_question": "Исправь описание",
+        "purpose": "agent", "user_question": "Исправь описание",
         "research_root": "/tmp/tree/demo/koi-structure", "code_root": "/tmp/demo",
     })
     prompt = runner._sdk_prompt("aq-work")
@@ -122,3 +123,49 @@ def test_api_chat_does_not_short_circuit_work_as_a_knowledge_answer(monkeypatch)
     monkeypatch.setattr(agents, "try_auto_answer", lambda *_args: (_ for _ in ()).throw(AssertionError("unexpected summary answer")))
     result = agents.post_agent_chat(SimpleNamespace(project_id="demo", question="Исправь описание", method_id=None, node_id=None), BackgroundTasks())
     assert result["answered"] is False
+
+
+def test_cli_agents_report_only_installed_bins(monkeypatch) -> None:
+    from koi.adapters import agent_backends
+    from koi.literature import cursor_agent_terminal
+
+    monkeypatch.setattr(cursor_agent_terminal, "find_agent_bin", lambda: Path("/usr/bin/agent"))
+    monkeypatch.setattr(agent_backends, "_codex_ready", lambda: False)
+    monkeypatch.setattr(agent_backends, "_claude_bin", lambda: None)
+    listed = {row["id"]: row["available"] for row in agent_backends.cli_agents()}
+    assert listed == {"cursor": True, "codex": False, "claude": False}
+
+
+def test_chosen_cli_does_not_fall_back(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(runner, "find_agent_bin", lambda: Path("/usr/bin/agent"))
+    monkeypatch.setattr(runner, "_ws", SimpleNamespace(agent_cwd=lambda: tmp_path))
+    monkeypatch.setattr(runner.subprocess, "Popen", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("cursor")))
+    calls = []
+    monkeypatch.setattr(runner, "run_agent", lambda _prompt, **kwargs: calls.append(kwargs) or ("Готово", "codex"))
+    assert runner._run_local_agent("Вопрос", "aq-1", cli_agent="codex") == ("Готово", "codex")
+    assert calls[0]["backend"] == "codex"
+    monkeypatch.setattr(runner, "find_agent_bin", lambda: None)
+    monkeypatch.setattr(runner, "run_agent", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("fallback")))
+    assert runner._run_local_agent("Вопрос", "aq-1", cli_agent="cursor") == (None, None)
+
+
+def test_post_rejects_unavailable_cli(monkeypatch) -> None:
+    from api.routers import agents
+    from api.schemas import AgentChatBody
+
+    monkeypatch.setattr(agents, "load_project", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(agents, "cli_agents", lambda: [{"id": "codex", "label": "Codex", "available": False}])
+    with pytest.raises(HTTPException) as exc:
+        agents.post_agent_chat(
+            AgentChatBody(project_id="demo", question="Что известно?", cli_agent="codex"),
+            BackgroundTasks(),
+        )
+    assert exc.value.status_code == 400
+
+
+def test_queue_keeps_chosen_cli(monkeypatch, tmp_path: Path) -> None:
+    from koi.adapters import agent_chat_queue as queue
+
+    monkeypatch.setattr(queue, "QUEUE_PATH", tmp_path / "chat.json")
+    item = queue.enqueue_question("demo", "Что известно?", cli_agent="claude")
+    assert queue.find_item(item["id"])["cli_agent"] == "claude"

@@ -1,4 +1,4 @@
-"""ResearchOS Hub FastAPI application."""
+"""ResearcherOS Hub FastAPI application."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ CORE_WEB_ROOT = REPO_ROOT / "web"
 config = HubConfig.from_env()
 store = HubStore(config)
 
-app = FastAPI(title="ResearchOS Hub", version="0.1.0")
+app = FastAPI(title="ResearcherOS Hub", version="0.1.0")
 app.state.hub_config = config
 app.state.hub_store = store
 app.include_router(koi_readonly_router)

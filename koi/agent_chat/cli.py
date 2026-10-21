@@ -120,11 +120,13 @@ def build_context(item_id: str) -> dict:
             }
 
     interview = {}
-    purpose = item.get("purpose") or "question"
+    purpose = item.get("purpose") or "agent"
     skills = {
         "report_grill": "koi-grill-experiment/SKILL.md",
         "grill_me": "koi-grill-experiment/SKILL.md",
         "make_report": "koi-execute-card/SKILL.md",
+        "run": "koi-execute-card/SKILL.md",
+        "prose": "koi-prose-style/SKILL.md",
     }
     if item.get("card_id"):
         history = list_for_project(project.id, limit=10000, board_id=item.get("board_id"), card_id=item.get("card_id"))

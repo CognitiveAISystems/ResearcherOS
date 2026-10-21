@@ -77,7 +77,10 @@ async function api(path, options = {}) {
         "Cancel API is missing. Restart KOI (./scripts/koi-serve.sh restart) and hard-refresh the page."
       );
     }
-    throw new Error(typeof detail === "string" ? detail : res.statusText);
+    const message = Array.isArray(detail)
+      ? detail.map(item => `${(item.loc || []).filter(part => part !== "body").join(".")}: ${item.msg || "Invalid value"}`).join("; ")
+      : detail;
+    throw new Error(typeof message === "string" ? message : res.statusText);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -585,6 +588,7 @@ export const KoiApi = {
     ),
   sendAgentQuestion: (body) =>
     api("/agent-chat", { method: "POST", body: JSON.stringify(body) }),
+  getAgentBackends: () => api("/agent/backends"),
   listAgentChat: (projectId, boardId = null, cardId = null) =>
     api(`/agent-chat?project_id=${encodeURIComponent(projectId)}${cardId ? `&board_id=${encodeURIComponent(boardId)}&card_id=${encodeURIComponent(cardId)}` : ""}`),
   listAgentChatActivity: (projectId, boardId = null, cardId = null) =>
@@ -606,6 +610,10 @@ export const KoiApi = {
   getRqDiscoveriesFeed: (limit = 50) =>
     api(`/sync/rq-discoveries/feed?limit=${encodeURIComponent(limit)}`),
   ackRqDiscoveries: () => api("/sync/rq-discoveries/ack", { method: "POST" }),
+  getArchivedTrees: () => api("/desktop/archived-trees"),
+  saveArchivedTrees: (ids) => api("/desktop/archived-trees", {
+    method: "PUT", body: JSON.stringify({ ids }),
+  }),
   getSettings: () => api("/settings"),
   setInboxConfigured: (configured = true, inboxKind = "chat") =>
     api("/settings/inbox-configured", {

@@ -1,4 +1,6 @@
+import { attachReportChatResize } from "./report-chat-resize.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
+import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
 import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
 import {
   bindCardLiveModal,
@@ -663,19 +665,30 @@ function activityContextForProject(project) {
 
 const cardLiveUi = { showModal, hideModal };
 
+function isMonitorProjectAllowed(projectId) {
+  if (isTreeArchived(projectId)) return false;
+  return !(state.lab?.grouped?.groups || []).some((group) =>
+    (group.composites || []).some((composite) =>
+      isTreeArchived(compositeVirtualId(composite.id)) &&
+      (composite.member_ids || []).includes(projectId)
+    )
+  );
+}
+
 function syncRunningSeedProvider() {
   const byId = state.lab?.projectsById;
   if (byId && Object.keys(byId).length) {
-    setRunningSeedProvider(() => runningCardContextsFromProjects(state.lab.projectsById));
+    setRunningSeedProvider(() => runningCardContextsFromProjects(state.lab.projectsById), isMonitorProjectAllowed);
     return;
   }
   if (state.project?.id) {
     setRunningSeedProvider(() =>
-      runningCardContextsFromProjects({ [state.project.id]: state.project })
+      runningCardContextsFromProjects({ [state.project.id]: state.project }),
+      isMonitorProjectAllowed
     );
     return;
   }
-  setRunningSeedProvider(() => []);
+  setRunningSeedProvider(() => [], isMonitorProjectAllowed);
 }
 
 function bindMethodLiveInspect(root, node, board, project) {
@@ -1633,7 +1646,7 @@ async function createReviewSetFromResults() {
   }
 
   btn?.setAttribute("disabled", "disabled");
-  setLiteratureStatus("Creating a ResearchOS review set…");
+  setLiteratureStatus("Creating a ResearcherOS review set…");
   try {
     const data = await KoiApi.createReviewSet(query, limit);
     await loadProjectList(data.project?.id);
@@ -2350,6 +2363,7 @@ function ensureLabCamera() {
 }
 
 async function loadLab() {
+  await restoreArchivedTrees();
   const grouped = await KoiApi.listProjectsGrouped();
   const hiddenMemberIds = hiddenCompositeMemberIds(grouped);
   const ids = new Set();
@@ -3055,9 +3069,13 @@ let reportInterviewTimer;
 let reportInterviewItems = [];
 let reportInterviewSignature = "";
 let reportInterviewSending = false;
+let reportLastSyncedContent = null;
+let reportSyncBusy = false;
+let reportContentPollTimer = null;
 function reportIdentity() { return `${reportWriteProjectId()}/${state.reportBoardId}/${state.reportCardId}`; }
 function getReportBlockEditor() {
   if (!reportBlockEditor) reportBlockEditor = new ReportEditor(document.getElementById("card-report-preview"), {
+    toc: document.getElementById("report-toc"),
     render: source => renderMarkdown(source, { assetUrlFn: reportAssetUrlFn, collapsibleSections: false }),
     hookLinks: hookReportLinks,
     readOnly: isHubMode(),
@@ -3089,17 +3107,10 @@ function getReportBlockEditor() {
   });
   return reportBlockEditor;
 }
-function reportChatCommand(text) {
-  const grill = text.match(/^\/grill_me\b\s*([\s\S]*)$/i);
-  if (grill) return { purpose: "grill_me", question: grill[1].trim() || "Пройди постановку этой задачи." };
-  const report = text.match(/^\/make_report\b\s*([\s\S]*)$/i);
-  if (report) return { purpose: "make_report", question: report[1].trim() || "Собери отчёт по этой задаче." };
-  return { purpose: "question", question: text };
-}
 function reportGrillDraft(idea = "") {
   const seed = String(idea || "").trim();
-  if (/^\/(?:grill_me|make_report)\b/i.test(seed)) return seed;
-  return seed ? `/grill_me ${seed}` : "/grill_me ";
+  if (/^\/(?:grill-me|grill_me|prose|question|run|make_report)(?:\s|$)/i.test(seed)) return seed;
+  return seed ? `/grill-me ${seed}` : "";
 }
 function formatReportGrillAnswer(text) {
   const src = text || "";
@@ -3155,6 +3166,7 @@ async function openReportInterview(idea = "") {
   const identity = reportIdentity();
   const panel = document.getElementById("report-interview");
   panel.hidden = false;
+  void refreshCliAgents();
   await refreshReportInterview();
   if (identity !== reportIdentity() || !state.reportCardId) return;
   const input = document.getElementById("report-interview-input");
@@ -3186,6 +3198,25 @@ async function refreshReportInterview() {
   } catch (err) {
     if (identity === reportIdentity()) setReportInterviewStatus(`Не удалось загрузить интервью: ${err.message}`, "error");
   }
+}
+async function refreshOpenReportFromServer(identity) {
+  if (reportSyncBusy || identity !== reportIdentity() || reportLinkedReadOnly) return;
+  const editor = document.getElementById("card-report-editor");
+  if (!editor || state.reportDirty || reportSaving || document.querySelector("#card-report-preview .report-block-input")) return;
+  reportSyncBusy = true;
+  try {
+    const data = await KoiApi.getCardReport(reportWriteProjectId(), state.reportBoardId, state.reportCardId);
+    if (identity !== reportIdentity() || state.reportDirty || reportSaving || document.querySelector("#card-report-preview .report-block-input")) return;
+    const content = typeof data?.content === "string" ? data.content : "";
+    if (content && content !== editor.value && editor.value === reportLastSyncedContent) {
+      editor.value = content;
+      reportLastSyncedContent = content;
+      state.reportRelativePath = data.relative_path || state.reportRelativePath;
+      updateReportPreview();
+      document.getElementById("report-save-status").textContent = "Постановка обновлена агентом";
+    }
+  } catch { /* The next poll retries; keep the current editor contents. */ }
+  finally { reportSyncBusy = false; }
 }
 async function refreshReportInterviewActivity() {
   const host = document.getElementById("report-interview-activity");
@@ -3283,9 +3314,9 @@ async function sendReportInterview(event) {
     for (const item of reportInterviewItems.filter(reportInterviewStuck)) {
       await KoiApi.deleteAgentChatItem(item.id);
     }
-    await KoiApi.sendAgentQuestion({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value });
+    await KoiApi.sendAgentQuestion({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent() });
     if (identity !== reportIdentity()) return;
-    input.value = command.purpose === "grill_me" ? "/grill_me " : "";
+    input.value = command.purpose === "grill_me" ? "/grill-me " : "";
     input.setSelectionRange(input.value.length, input.value.length);
     setReportInterviewStatus("");
     await refreshReportInterview();
@@ -3485,12 +3516,15 @@ function closeCardReport() {
   closeCardTagPopover();
   clearTimeout(reportAutoSaveTimer);
   stopReportInterview();
+  clearInterval(reportContentPollTimer);
+  reportContentPollTimer = null;
   hideModal("card-report-modal");
   state.reportCardId = null;
   state.reportBoardId = null;
   state.reportProjectId = null;
   state.reportRelativePath = null;
   state.reportDirty = false;
+  reportLastSyncedContent = null;
 }
 
 let reportSaving = null;
@@ -3510,6 +3544,7 @@ async function saveCardReport(force = false) {
       if (identity === reportIdentity()) {
         document.getElementById("card-report-filename").textContent = data.relative_path;
         state.reportDirty = editor.value !== content;
+        reportLastSyncedContent = content;
         status.textContent = state.reportDirty ? "Есть изменения" : "Сохранено";
       }
       return true;
@@ -3529,6 +3564,8 @@ async function openCardReport(card, board) {
     return;
   }
   stopReportInterview();
+  clearInterval(reportContentPollTimer);
+  reportContentPollTimer = null;
   reportLinkedReadOnly = false;
   getReportBlockEditor().readOnly = isHubMode();
   document.getElementById("report-interview").hidden = true;
@@ -3572,6 +3609,7 @@ async function openCardReport(card, board) {
       setStatus("");
     }
     editor.value = content || EMPTY_REPORT;
+    reportLastSyncedContent = editor.value;
     state.reportRelativePath = data.relative_path || null;
     const fnameEl = document.getElementById("card-report-filename");
     if (data.source === "run") {
@@ -3587,6 +3625,7 @@ async function openCardReport(card, board) {
     document.getElementById("report-agent-open").disabled = false;
     document.getElementById("report-agent-fab").disabled = false;
     document.getElementById("report-save-status").textContent = data.source === "template" ? "Новый документ" : "Сохранено";
+    reportContentPollTimer = setInterval(() => void refreshOpenReportFromServer(identity), 2500);
   } catch (err) {
     const msg = String(err?.message || err || "Не удалось загрузить отчёт");
     editor.value = "";
@@ -6563,6 +6602,8 @@ const ARCHIVED_TREES_KEY = "koi-archived-trees";
 const VIEW_MODE_KEY = "koi-view-mode";
 let projectsArchiveOpen = false;
 let archivedTreeIds = null;
+let archivedTreesReady = null;
+let archiveSavePending = false;
 
 const VIEW_MODES = {
   chief: {
@@ -6613,8 +6654,24 @@ function loadArchivedTrees() {
   }
 }
 
-function saveArchivedTrees(ids) {
-  localStorage.setItem(ARCHIVED_TREES_KEY, JSON.stringify([...ids]));
+function restoreArchivedTrees() {
+  if (isHubMode()) return Promise.resolve(true);
+  if (!archivedTreesReady) {
+    archivedTreesReady = (async () => {
+      const saved = await KoiApi.getArchivedTrees();
+      const ids = saved.ids ?? [...loadArchivedTrees()];
+      if (saved.ids === null && ids.length) await KoiApi.saveArchivedTrees(ids);
+      archivedTreeIds = new Set(ids);
+      return true;
+    })().catch((error) => {
+      // Preferences must never prevent projects from loading (e.g. an older API).
+      console.warn("Archive settings unavailable:", error);
+      if (!archivedTreeIds) archivedTreeIds = loadArchivedTrees();
+      archivedTreesReady = null;
+      return false;
+    });
+  }
+  return archivedTreesReady;
 }
 
 function ensureArchivedTrees() {
@@ -6764,12 +6821,26 @@ function selfCheckArchiveSidebar() {
 selfCheckArchiveSidebar();
 
 async function setTreeArchived(id, on) {
-  if (!id) return;
-  const archived = ensureArchivedTrees();
+  if (!id || archiveSavePending) return;
+  archiveSavePending = true;
+  let archived;
   const key = String(id);
-  if (on) archived.add(key);
-  else archived.delete(key);
-  saveArchivedTrees(archived);
+  try {
+    if (!await restoreArchivedTrees()) {
+      throw new Error("Настройки архива недоступны. Перезапустите сервер приложения.");
+    }
+    archived = new Set(ensureArchivedTrees());
+    if (on) archived.add(key);
+    else archived.delete(key);
+    if (isHubMode()) localStorage.setItem(ARCHIVED_TREES_KEY, JSON.stringify([...archived]));
+    else await KoiApi.saveArchivedTrees([...archived]);
+  } catch (error) {
+    window.alert(`Не удалось сохранить архив: ${error.message}`);
+    return;
+  } finally {
+    archiveSavePending = false;
+  }
+  archivedTreeIds = archived;
   if (!on && projectsArchiveOpen && archivedTreeCount(state.lab?.grouped) === 0) {
     projectsArchiveOpen = false;
   }
@@ -7225,6 +7296,7 @@ async function reloadProjectView() {
 }
 
 async function loadProjectList(activeId) {
+  await restoreArchivedTrees();
   const ul = document.getElementById("project-list");
   const titleEl = document.getElementById("projects-sidebar-title");
   const currentId = activeId || state.project?.id;
@@ -7671,7 +7743,7 @@ async function copyInboxBootstrap(targetStatusEl) {
   try {
     await navigator.clipboard.writeText(text);
     if (targetStatusEl) {
-      targetStatusEl.textContent = "Скопировано — вставьте в новый чат «ResearchOS Chat Inbox» в Cursor.";
+      targetStatusEl.textContent = "Скопировано — вставьте в новый чат «ResearcherOS Chat Inbox» в Cursor.";
       setTimeout(() => {
         if (targetStatusEl.textContent.startsWith("Скопировано")) targetStatusEl.textContent = "";
       }, 5000);
@@ -7707,7 +7779,7 @@ async function copyAgentChatInboxPrompt(statusEl) {
   try {
     await navigator.clipboard.writeText(text);
     if (statusEl) {
-      statusEl.textContent = "Скопировано — вставьте в чат ResearchOS Chat Inbox.";
+      statusEl.textContent = "Скопировано — вставьте в чат ResearcherOS Chat Inbox.";
       setTimeout(() => {
         if (statusEl.textContent.startsWith("Скопировано")) statusEl.textContent = "";
       }, 5000);
@@ -7834,11 +7906,11 @@ function updateAgentChatInboxNotice() {
     watcherEl.classList.remove("is-ok", "is-warn");
     if (isInboxConfigured()) {
       watcherEl.textContent =
-        "Inbox отмечен, но watcher не запущен. Выполните ./scripts/koi-serve.sh start и loop в ResearchOS Chat Inbox.";
+        "Inbox отмечен, но watcher не запущен. Выполните ./scripts/koi-serve.sh start и loop в ResearcherOS Chat Inbox.";
       watcherEl.classList.add("is-warn");
     } else {
       watcherEl.textContent =
-        "Один раз: скопируйте сообщение → ResearchOS Chat Inbox → tail -f agent-chat-watch.log → «Inbox готов».";
+        "Один раз: скопируйте сообщение → ResearcherOS Chat Inbox → tail -f agent-chat-watch.log → «Inbox готов».";
     }
   }
 }
@@ -7850,7 +7922,7 @@ function agentChatPendingLabel(item) {
   if (isInboxAgentMode()) {
     if (!isInboxConfigured()) return "Отправлено — настройте Chat Inbox";
     if (!isChatInboxWatcherRunning()) return "Watcher не запущен — koi-serve.sh start";
-    return "В очереди — ждём ResearchOS Chat Inbox…";
+    return "В очереди — ждём ResearcherOS Chat Inbox…";
   }
   return "Ожидает агента в Cursor (hooks)…";
 }
@@ -8144,6 +8216,7 @@ function toggleAgentChatPanel(open) {
   if (show) {
     agentChatProjectOverrideId = primaryMemberProjectId() || null;
     void refreshAppSettings();
+    void refreshCliAgents();
     updateAgentChatScope();
     showAgentChatTab("chat");
     void refreshAgentChat({ scrollToBottom: true });
@@ -8162,6 +8235,148 @@ function setAgentChatFormStatus(message = "", kind = "") {
   status.classList.toggle("is-error", kind === "error");
 }
 
+let activeVoiceRecording = null;
+function voiceStatus(button, message, kind = "") {
+  const status = button.closest("form")?.querySelector(".agent-chat-form-status");
+  if (!status) return;
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle("is-error", kind === "error");
+}
+function finishVoiceRecording() {
+  if (activeVoiceRecording?.recorder.state === "recording") activeVoiceRecording.recorder.stop();
+}
+async function toggleVoiceRecording(button) {
+  if (activeVoiceRecording) {
+    if (activeVoiceRecording.button === button) finishVoiceRecording();
+    return;
+  }
+  const input = document.getElementById(button.dataset.voiceInput);
+  if (!input || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    voiceStatus(button, "Запись с микрофона недоступна в этом окружении.", "error");
+    return;
+  }
+  button.disabled = true;
+  try {
+    if (window.researchOSDesktop?.requestMicrophone && !(await window.researchOSDesktop.requestMicrophone())) {
+      throw new Error("Разрешите доступ к микрофону в настройках системы.");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+      .find(type => MediaRecorder.isTypeSupported(type));
+    if (!mimeType) {
+      stream.getTracks().forEach(track => track.stop());
+      throw new Error("Формат записи не поддерживается.");
+    }
+    const recorder = new MediaRecorder(stream, { mimeType });
+    const chunks = [];
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const samples = new Uint8Array(analyser.frequencyBinCount);
+    const started = Date.now();
+    const update = () => {
+      if (recorder.state !== "recording") return;
+      analyser.getByteFrequencyData(samples);
+      const level = samples.reduce((sum, value) => sum + value, 0) / samples.length / 255;
+      button.style.setProperty("--voice-level", String(Math.min(1, level * 4)));
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      voiceStatus(button, `Идёт запись · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} · нажмите микрофон для остановки`);
+      activeVoiceRecording.frame = requestAnimationFrame(update);
+    };
+    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+    recorder.onerror = () => voiceStatus(button, "Ошибка записи с микрофона.", "error");
+    recorder.onstop = async () => {
+      const recording = activeVoiceRecording;
+      activeVoiceRecording = null;
+      if (recording) {
+        cancelAnimationFrame(recording.frame);
+        clearTimeout(recording.limit);
+      }
+      stream.getTracks().forEach(track => track.stop());
+      await audioContext.close();
+      button.classList.remove("is-recording");
+      button.classList.add("is-working");
+      button.disabled = true;
+      button.setAttribute("aria-label", "Распознаётся речь");
+      voiceStatus(button, "Распознаём речь на этом компьютере… При первом использовании загружается модель.");
+      try {
+        const form = new FormData();
+        form.append("audio", new Blob(chunks, { type: mimeType.split(";")[0] }), `voice.${mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "mp4" : "webm"}`);
+        const response = await fetch("/api/voice/transcribe", { method: "POST", body: form });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Не удалось распознать речь.");
+        if (!result.text) throw new Error("Речь не распознана. Попробуйте ещё раз.");
+        const prefix = input.value && !/\s$/.test(input.value) ? " " : "";
+        input.value += prefix + result.text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus();
+        voiceStatus(button, "Текст добавлен. Проверьте его перед отправкой.");
+      } catch (error) {
+        voiceStatus(button, error.message || "Не удалось распознать речь.", "error");
+      } finally {
+        button.disabled = false;
+        button.classList.remove("is-working");
+        button.setAttribute("aria-label", "Начать запись речи");
+      }
+    };
+    activeVoiceRecording = { button, recorder, frame: 0, limit: setTimeout(finishVoiceRecording, 120000) };
+    button.classList.add("is-recording");
+    button.setAttribute("aria-label", "Остановить запись речи");
+    recorder.start();
+    update();
+  } catch (error) {
+    voiceStatus(button, error.message || "Нет доступа к микрофону.", "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+function initVoiceInput() {
+  if (!window.researchOSDesktop?.requestMicrophone) {
+    document.querySelectorAll("[data-voice-input]").forEach(button => { button.hidden = true; });
+    return;
+  }
+  document.querySelectorAll("[data-voice-input]").forEach(button => {
+    button.closest(".agent-chat-composer")?.classList.add("has-voice");
+    button.addEventListener("click", () => void toggleVoiceRecording(button));
+  });
+  window.addEventListener("beforeunload", finishVoiceRecording);
+}
+
+const CLI_AGENT_KEY = "koi-chat-cli-agent";
+
+function chatCliAgent() {
+  const value = document.querySelector("[data-cli-agent]:not(:disabled)")?.value || "";
+  return value || undefined;
+}
+
+async function refreshCliAgents() {
+  let agents = [];
+  try {
+    const data = await KoiApi.getAgentBackends();
+    agents = Array.isArray(data?.cli) ? data.cli : [];
+  } catch {
+    agents = [];
+  }
+  const available = agents.filter((agent) => agent.available && agent.id);
+  let saved = "";
+  try { saved = localStorage.getItem(CLI_AGENT_KEY) || ""; } catch { saved = ""; }
+  const chosen = available.some((agent) => agent.id === saved) ? saved : (available[0]?.id || "");
+  try {
+    if (chosen) localStorage.setItem(CLI_AGENT_KEY, chosen);
+    else localStorage.removeItem(CLI_AGENT_KEY);
+  } catch { /* private mode */ }
+  document.querySelectorAll("[data-cli-agent]").forEach((select) => {
+    select.innerHTML = available.length
+      ? available.map((agent) => `<option value="${escapeHtml(agent.id)}">${escapeHtml(agent.label)}</option>`).join("")
+      : `<option value="">Нет доступных</option>`;
+    select.value = chosen;
+    select.disabled = !available.length;
+  });
+}
+
 async function submitAgentQuestion(e) {
   e.preventDefault();
   const input = document.getElementById("agent-chat-input");
@@ -8178,17 +8393,24 @@ async function submitAgentQuestion(e) {
     return;
   }
 
+  if (/^\/(?:grill-me|grill_me|prose|run|make_report)(?:\s|$)/i.test(text)) {
+    setAgentChatFormStatus("Откройте карточку, чтобы выполнить эту команду.", "error");
+    return;
+  }
   const { method_id, node_id } = agentChatContext();
   const btn = document.getElementById("btn-agent-chat-send");
   if (btn) btn.disabled = true;
   setAgentChatFormStatus("Отправляем вопрос…");
 
   try {
+    const command = reportChatCommand(text);
     const res = await KoiApi.sendAgentQuestion({
       project_id: projectId,
-      question: text,
+      question: command.question,
+      purpose: command.purpose === "question" ? "question" : "agent",
       method_id: method_id || undefined,
       node_id: node_id || undefined,
+      cli_agent: chatCliAgent(),
     });
     if (!res?.item?.id) throw new Error("Сервер не подтвердил отправку. Попробуйте ещё раз.");
     if (projectId !== agentChatProjectId()) return;
@@ -8814,6 +9036,14 @@ function initSettings() {
 }
 
 function initAgentChat() {
+  attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
+  document.querySelectorAll("[data-cli-agent]").forEach((select) => {
+    select.addEventListener("change", () => {
+      try { localStorage.setItem(CLI_AGENT_KEY, select.value); } catch { /* private mode */ }
+      document.querySelectorAll("[data-cli-agent]").forEach((other) => { other.value = select.value; });
+    });
+  });
+  void refreshCliAgents();
   document.getElementById("btn-agent-chat-welcome")?.addEventListener("click", () => {
     toggleAgentChatPanel(true);
   });
@@ -9658,7 +9888,7 @@ async function copyPaperInboxBootstrap(statusEl) {
     updatePaperInboxNotice();
     if (statusEl) {
       statusEl.textContent =
-        "Скопировано — вставьте в чат «ResearchOS Paper Inbox» в Cursor.";
+        "Скопировано — вставьте в чат «ResearcherOS Paper Inbox» в Cursor.";
       setTimeout(() => {
         if (statusEl.textContent.startsWith("Скопировано")) statusEl.textContent = "";
       }, 5000);
@@ -12119,6 +12349,7 @@ async function init() {
     initProjectDiscoveryPoll();
     initSettings();
     initAgentChat();
+    initVoiceInput();
   } else {
     applyHubReadonlyChrome();
   }
@@ -12191,6 +12422,7 @@ async function init() {
   });
   document.getElementById("report-agent-open").onclick = () => openReportInterview("");
   document.getElementById("report-agent-fab").onclick = () => openReportInterview("");
+  attachReportChatResize(document.getElementById("report-interview"));
   document.getElementById("report-agent-close").onclick = () => { document.getElementById("report-interview").hidden = true; };
   document.getElementById("report-interview-form").onsubmit = sendReportInterview;
   document.getElementById("report-interview-tab-chat")?.addEventListener("click", () => showReportInterviewTab("chat"));
@@ -12299,7 +12531,7 @@ async function init() {
     void refreshAgentChat();
     maybeOpenPaperFromDeepLink();
   } catch (err) {
-    console.error("ResearchOS init failed:", err);
+    console.error("ResearcherOS init failed:", err);
     setStatus(
       hubMode
         ? `Hub: ${err.message}`

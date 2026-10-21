@@ -35,7 +35,7 @@ export const KOI_LOADER_POOLS = {
     "Агент скоро подключится…",
   ],
   agent: [
-    "Подключаюсь к ResearchOS Chat Inbox…",
+    "Подключаюсь к ResearcherOS Chat Inbox…",
     "Сверяю research.json…",
     "Ищу отчёты экспериментов…",
     "Проверяю гипотезы на карте…",

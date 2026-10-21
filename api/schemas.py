@@ -191,10 +191,11 @@ class AgentChatBody(BaseModel):
     question: str = Field(min_length=1)
     method_id: Optional[str] = None
     node_id: Optional[str] = None
-    purpose: Literal["question", "report_grill", "grill_me", "make_report"] = "question"
+    purpose: Literal["agent", "question", "report_grill", "grill_me", "make_report", "prose", "run"] = "agent"
     board_id: Optional[str] = None
     card_id: Optional[str] = None
-    report_markdown: str = Field(default="", max_length=200000)
+    report_markdown: str = ""
+    cli_agent: Optional[Literal["cursor", "codex", "claude"]] = None
 
 
 class AgentChatAnswerBody(BaseModel):

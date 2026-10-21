@@ -45,7 +45,7 @@ def _paper_script() -> str:
 def cursor_chat_message(item_id: str) -> str:
     py = _python_bin()
     script = _paper_script()
-    return f"""ResearchOS Paper Inbox — статья `{item_id}`.
+    return f"""ResearcherOS Paper Inbox — статья `{item_id}`.
 
 Скилл **koi-paper** (или выполни шаги ниже):
 

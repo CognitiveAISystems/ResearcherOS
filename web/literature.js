@@ -145,7 +145,7 @@ function updateLiteratureInboxSetupNotice() {
     if (label) label.textContent = "Literature Inbox не настроен";
     if (hint) {
       hint.innerHTML =
-        "Скопируйте bootstrap → чат <strong>ResearchOS Literature Inbox</strong> → дождитесь настройки мониторинга → «Inbox готов».";
+        "Скопируйте bootstrap → чат <strong>ResearcherOS Literature Inbox</strong> → дождитесь настройки мониторинга → «Inbox готов».";
     }
     resetBtn?.classList.add("hidden");
   }
@@ -1855,7 +1855,7 @@ function setRelatedWorkWaiting(isWaiting, phase = "pending") {
         } else {
           showRelatedWorkSetupText(
             "Настройте Literature Inbox один раз",
-            "Скопируйте сообщение кнопкой ниже → вставьте в чат ResearchOS Literature Inbox → tail -f related-work-watch.log → «Inbox готов»."
+            "Скопируйте сообщение кнопкой ниже → вставьте в чат ResearcherOS Literature Inbox → tail -f related-work-watch.log → «Inbox готов»."
           );
         }
         updateRelatedWorkInboxMessage(lastRelatedWorkInboxMessage);
@@ -1961,7 +1961,7 @@ function showRelatedInboxModal(cursorMessage) {
       watcherEl.classList.add("is-warn");
     } else {
       watcherEl.textContent =
-        "Literature Inbox ещё не настроен. Скопируйте bootstrap и вставьте в чат ResearchOS Literature Inbox.";
+        "Literature Inbox ещё не настроен. Скопируйте bootstrap и вставьте в чат ResearcherOS Literature Inbox.";
       watcherEl.classList.add("is-warn");
     }
   }
@@ -2246,7 +2246,7 @@ async function generateRelatedWorks() {
         showLiteratureInboxSetup();
         showRelatedInboxModal(bootstrap);
         setRelatedWorksStatus(
-          "Скопируйте сообщение в ResearchOS Literature Inbox, затем нажмите «Inbox готов».",
+          "Скопируйте сообщение в ResearcherOS Literature Inbox, затем нажмите «Inbox готов».",
           true
         );
       } else if (!isLiteratureInboxOperational()) {

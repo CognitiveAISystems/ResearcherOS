@@ -10,6 +10,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Final
 
 
@@ -93,3 +94,34 @@ def set_workspace_root(root: str | Path) -> Path:
         if temporary.exists():
             temporary.unlink(missing_ok=True)
     return resolved
+
+
+def archived_tree_ids() -> list[str] | None:
+    """None means no archive has been saved yet (allow legacy migration)."""
+    destination = application_support_dir() / "archived-trees.json"
+    try:
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if not isinstance(payload, list) or any(not isinstance(item, str) for item in payload):
+        raise ValueError("Invalid archived trees settings")
+    return payload
+
+
+def save_archived_tree_ids(ids: list[str]) -> list[str]:
+    """Replace the local archive atomically, independently of server port."""
+    destination = application_support_dir() / "archived-trees.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=destination.parent, delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(sorted(set(ids)), stream, ensure_ascii=False)
+            stream.write("\n")
+        temporary.replace(destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return sorted(set(ids))

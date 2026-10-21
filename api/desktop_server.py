@@ -1,4 +1,4 @@
-"""Electron-facing entry point for the bundled ResearchOS desktop server."""
+"""Electron-facing entry point for the bundled ResearcherOS desktop server."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from koi.desktop.server import DesktopServer
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="ResearchOS desktop server")
+    parser = argparse.ArgumentParser(description="ResearcherOS desktop server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--paper-edit-worker", action="store_true", help=argparse.SUPPRESS)
@@ -36,7 +36,7 @@ def main() -> int:
         stopped.wait()
         return 0
     except Exception as exc:
-        print(f"ResearchOS startup failed: {exc}", file=sys.stderr, flush=True)
+        print(f"ResearcherOS startup failed: {exc}", file=sys.stderr, flush=True)
         return 1
     finally:
         server.stop()

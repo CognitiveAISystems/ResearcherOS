@@ -35,6 +35,8 @@ class AgentChatItem(TypedDict, total=False):
     card_id: Optional[str]
     report_markdown: str
     proposal: Optional[dict[str, str]]
+    review_passed: bool
+    cli_agent: Optional[str]
 
 
 def _load() -> list[AgentChatItem]:
@@ -70,12 +72,16 @@ def _normalize(item: dict) -> AgentChatItem:
         "processing_at": item.get("processing_at") or None,
         "answered_at": item.get("answered_at") or None,
         "answer_kind": item.get("answer_kind") or None,
-        "purpose": item.get("purpose", "question"),
+        "purpose": item.get("purpose", "agent"),
         "board_id": item.get("board_id"),
         "card_id": item.get("card_id"),
         "report_markdown": item.get("report_markdown", ""),
         "proposal": item.get("proposal"),
+        "review_passed": bool(item.get("review_passed", False)),
     }
+    cli_agent = item.get("cli_agent") or None
+    if cli_agent:
+        out["cli_agent"] = str(cli_agent)
     if out["status"] == "answered" and not out.get("answer"):
         out["status"] = "pending"
         out["answered_at"] = None
@@ -108,10 +114,11 @@ def enqueue_question(
     *,
     method_id: Optional[str] = None,
     node_id: Optional[str] = None,
-    purpose: str = "question",
+    purpose: str = "agent",
     board_id: Optional[str] = None,
     card_id: Optional[str] = None,
     report_markdown: str = "",
+    cli_agent: Optional[str] = None,
 ) -> AgentChatItem:
     text = question.strip()
     if not text:
@@ -134,6 +141,8 @@ def enqueue_question(
         "answered_at": None,
         "answer_kind": None,
     }
+    if cli_agent:
+        item["cli_agent"] = cli_agent
     items.append(item)
     items = _prune_project(items, project_id)
     _save(items)
@@ -178,6 +187,7 @@ def submit_answer(
     answer: str,
     *,
     answer_kind: AnswerKind = "normal",
+    review_passed: bool = False,
 ) -> AgentChatItem:
     text = answer.strip()
     if not text:
@@ -189,8 +199,9 @@ def submit_answer(
         item["status"] = "answered"
         if item.get("purpose") in ("report_grill", "grill_me"):
             from koi.adapters.report_grill_reply import parse_reply
+            item["review_passed"] = review_passed
             text, proposal = parse_reply(text)
-            item["proposal"] = proposal
+            item["proposal"] = proposal if item["review_passed"] else None
         item["answer"] = text
         item["answer_kind"] = answer_kind
         item["answered_at"] = datetime.now(timezone.utc).isoformat()

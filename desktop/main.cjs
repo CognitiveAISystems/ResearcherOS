@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, session, systemPreferences } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -138,8 +138,22 @@ ipcMain.handle('researchos:choose-directory', async (_event, purpose) => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle('researchos:request-microphone', async () => {
+  if (process.platform !== 'darwin') return true;
+  return systemPreferences.askForMediaAccess('microphone');
+});
+
 app.whenReady().then(async () => {
   try {
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      const localPage = !!serverUrl && webContents.getURL().startsWith(serverUrl);
+      const audioOnly = details?.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio';
+      callback(permission === 'media' && localPage && audioOnly);
+    });
+    session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+      const localPage = !!serverUrl && webContents?.getURL().startsWith(serverUrl);
+      return permission === 'media' && localPage && requestingOrigin.startsWith(serverUrl) && details?.mediaType === 'audio';
+    });
     createWindow(await startServer());
   } catch (error) {
     dialog.showErrorBox('Не удалось запустить ResearcherOS', String(error.message || error));

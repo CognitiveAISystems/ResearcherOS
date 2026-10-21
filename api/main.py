@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agents, collaboration, composites, cursor, desktop, knowledge, library, meta, morphology, pages, paper, programs, projects, review, sync, widgets
+from api.routers import agents, collaboration, composites, cursor, desktop, knowledge, library, meta, morphology, pages, paper, programs, projects, review, sync, voice, widgets
 
 app = FastAPI(
     title="KOI API",
@@ -33,6 +33,7 @@ for router in (
     review.router,
     morphology.router,
     agents.router,
+    voice.router,
     cursor.router,
     desktop.router,
     sync.router,
@@ -51,6 +52,9 @@ def _startup() -> None:
     from koi.projects.done_research_auto import kick_recent
 
     kick_recent()
+    from koi.agent_chat.setup_pipeline import resume_pending
+
+    resume_pending()
 
 
 @app.on_event("shutdown")

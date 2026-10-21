@@ -1,4 +1,4 @@
-"""Cursor Inbox integration for the ResearchOS agent-chat capability."""
+"""Cursor Inbox integration for the ResearcherOS agent-chat capability."""
 
 from __future__ import annotations
 
@@ -157,7 +157,7 @@ def loop_prompt() -> str:
     watch = INBOX_SCRIPT
     pending_cmd = f"{py} {watch} pending"
     task = (
-        "ResearchOS Chat Inbox: проверь agent-chat pending "
+        "ResearcherOS Chat Inbox: проверь agent-chat pending "
         f"(`{pending_cmd}`) и обработай по скиллу koi-agent-chat "
         "(claim → context → answer)."
     )
@@ -169,13 +169,13 @@ def bootstrap_prompt() -> str:
     watch = INBOX_SCRIPT
     log_rel = ".run/logs/agent-chat-watch.log"
     loop_line = loop_prompt()
-    return f"""Ты **ResearchOS Chat Inbox** — фоновый агент для панели «Спросить агента» (localhost:8080).
+    return f"""Ты **ResearcherOS Chat Inbox** — фоновый агент для панели «Спросить агента» (localhost:8080).
 
 **Настройка один раз.** UI кладёт вопросы в JSON-очередь; watcher будит этот чат через `{WAKE_PREFIX}` (~1–3 с).
 
 ## Сделай сейчас
 
-1. Назови этот чат **ResearchOS Chat Inbox**.
+1. Назови этот чат **ResearcherOS Chat Inbox**.
 
 2. Убедись, что **watcher чата** запущен (`koi-serve.sh start` поднимает его автоматически):
    ```
@@ -258,7 +258,7 @@ def inbox_task_message(
     chat = "-m koi.agent_chat.cli"
     if agent_chat_id:
         return (
-            f"ResearchOS Chat Inbox — вопрос `{agent_chat_id}`.\n\n"
+            f"ResearcherOS Chat Inbox — вопрос `{agent_chat_id}`.\n\n"
             f"Проверь очередь:\n`{py} {inbox} pending`\n\n"
             f"Обработай по скиллу **koi-agent-chat**:\n"
             f"1. `{py} {chat} claim {agent_chat_id}`\n"

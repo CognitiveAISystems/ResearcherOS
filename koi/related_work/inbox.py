@@ -1,4 +1,4 @@
-"""ResearchOS Literature Inbox: watcher wake lines for Related Work (literature.html)."""
+"""ResearcherOS Literature Inbox: watcher wake lines for Related Work (literature.html)."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def _loop_task_prompt() -> str:
     py = _python_bin()
     pending_cmd = f"{py} {INBOX_SCRIPT} pending"
     return (
-        "ResearchOS Literature Inbox: проверь Related Work pending "
+        "ResearcherOS Literature Inbox: проверь Related Work pending "
         f"(`{pending_cmd}`) и обработай по скиллу koi-related-work "
         "(claim → context → answer -f draft.md)."
     )
@@ -143,13 +143,13 @@ def bootstrap_prompt() -> str:
     watch = INBOX_SCRIPT
     log_rel = ".run/logs/related-work-watch.log"
     loop_shell = agent_loop_shell_command()
-    return f"""Ты **ResearchOS Literature Inbox** — фоновый агент для Related Work (literature.html).
+    return f"""Ты **ResearcherOS Literature Inbox** — фоновый агент для Related Work (literature.html).
 
 **Настройка один раз.** Кнопка Related Work кладёт задачи в JSON-очередь; системный watcher пишет `{WAKE_PREFIX}` в лог (~1–3 с).
 
 ## Сделай сейчас (всё из этого сообщения)
 
-1. Назови этот чат **ResearchOS Literature Inbox**.
+1. Назови этот чат **ResearcherOS Literature Inbox**.
 
 2. Подними сервер и **watcher литературы**:
    ```
@@ -210,7 +210,7 @@ def inbox_task_message(*, related_work_id: str | None = None, setup: bool = Fals
     rw = "-m koi.related_work.cli"
     if related_work_id:
         return (
-            f"ResearchOS Literature Inbox — Related Work `{related_work_id}`.\n\n"
+            f"ResearcherOS Literature Inbox — Related Work `{related_work_id}`.\n\n"
             f"Проверь очередь:\n`{py} {inbox} pending`\n\n"
             f"Обработай по скиллу **koi-related-work**:\n"
             f"1. `{py} {rw} claim {related_work_id}`\n"

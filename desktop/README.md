@@ -7,6 +7,14 @@ research projects or connecting a local Git repository, then asks where research
 data should live. Its path and other application settings live under
 `~/Library/Application Support/researchos-desktop/`, outside the research projects.
 
+Both agent chats have a microphone button. Recording stops on a second click or
+after two minutes; the pulse and audio level show that recording is active.
+Speech is transcribed by the bundled local Faster Whisper engine and inserted
+into the composer for review, never sent automatically. The multilingual base
+model downloads once on first use into the application data directory. Audio
+is removed from the temporary directory after transcription. The same CPU path
+is packaged for macOS, Windows, and Linux.
+
 ## Install from a clone
 
 Double-click `installers/Установить ResearcherOS.command` in Finder.

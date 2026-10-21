@@ -1,4 +1,4 @@
-"""Read-only KOI API routes so the main ResearchOS web UI works on Hub."""
+"""Read-only KOI API routes so the main ResearcherOS web UI works on Hub."""
 
 from __future__ import annotations
 
@@ -266,7 +266,7 @@ def node_types_meta() -> dict[str, Any]:
 def get_laboratory() -> dict[str, str]:
     return {
         "id": "researchos-hub",
-        "title": "ResearchOS Hub",
+        "title": "ResearcherOS Hub",
         "description": "Публичные и сетевые исследовательские проекты",
     }
 

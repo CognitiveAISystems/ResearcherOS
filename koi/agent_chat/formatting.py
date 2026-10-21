@@ -1,4 +1,4 @@
-"""Answer-format rules for the ResearchOS agent-chat capability."""
+"""Answer-format rules for the ResearcherOS agent-chat capability."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def no_cursor_key_warning() -> str:
     return (
         "⚠️ Ключ Cursor API не настроен.\n\n"
         "Сейчас агент может ответить только по готовым выводам из базы research.json. "
-        "Для полноценных ответов на произвольные вопросы укажите ключ в настройках ResearchOS "
+        "Для полноценных ответов на произвольные вопросы укажите ключ в настройках ResearcherOS "
         "(кнопка «Настройки» в верхней панели).\n\n"
         f"Как получить ключ: {CURSOR_API_KEY_URL}"
     )

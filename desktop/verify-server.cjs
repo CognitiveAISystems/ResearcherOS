@@ -19,6 +19,8 @@ function get(url) {
 }
 
 async function verify(executable) {
+  const vadAsset = path.join(path.dirname(path.resolve(executable)), '_internal', 'faster_whisper', 'assets', 'silero_vad_v6.onnx');
+  if (!fs.existsSync(vadAsset)) throw new Error(`Bundled speech asset missing: ${vadAsset}`);
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'researchos-check-'));
   const child = spawn(path.resolve(executable), [], {
     cwd: data,
@@ -53,7 +55,9 @@ async function verify(executable) {
       if (response.status !== 200) throw new Error(`Packaged resource ${resource}: HTTP ${response.status}\n${diagnostics}`);
       if (resource === 'api/health' && JSON.parse(response.body).status !== 'ok') throw new Error('API is unhealthy');
     }
-    console.log('Packaged server: UI, API and onboarding OK');
+    const voiceRoute = await get(new URL('api/voice/transcribe', url));
+    if (voiceRoute.status !== 405) throw new Error(`Packaged voice route: HTTP ${voiceRoute.status}`);
+    console.log('Packaged server: UI, API, onboarding and voice OK');
   } finally {
     clearTimeout(timer);
     child.kill('SIGTERM');

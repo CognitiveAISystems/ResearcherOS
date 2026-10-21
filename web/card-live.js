@@ -3,7 +3,7 @@
 import { KoiApi } from "./api.js";
 
 /** Matches live_log / metrics_dir / live_note lines in card description (see card_live.py). */
-const LIVE_HINT_RE = /^(live_log|metrics_dir|live_note|evo_run):\s*.+/im;
+const LIVE_HINT_RE = /^(live_log|metrics_dir|live_note):\s*.+/im;
 
 /** @param {string} [text] */
 export function cardHasLiveHints(text) {
@@ -28,6 +28,7 @@ let activeKey = null;
 let pinnedKey = null;
 /** @type {() => Array<object>} */
 let getRunningSeedCards = () => [];
+let isMonitorProjectAllowed = () => true;
 
 function cardKey(ctx) {
   return `${ctx.projectId}:${ctx.boardId}:${ctx.cardId}`;
@@ -35,7 +36,7 @@ function cardKey(ctx) {
 
 function cardTabTitle(entry, allEntries) {
   const ctx = entry.ctx;
-  const card = truncateTitle(ctx.cardTitle);
+  const card = String(ctx.cardTitle || "Эксперимент").trim();
   const projectIds = new Set(allEntries.map(([, e]) => e.ctx.projectId));
   const project = String(ctx.projectTitle || "").trim();
   if (projectIds.size > 1 && project) {
@@ -69,7 +70,18 @@ function cardHasLiveData(data) {
   return Boolean(String(data.live_note || "").trim());
 }
 
+/** Available content, rather than configured paths, drives tab highlights. */
+export function liveContentViews(data) {
+  return {
+    metrics: Boolean(data?.metrics_dir?.images?.length),
+    note: Boolean(String(data?.live_note || "").trim()),
+    log: Boolean(data?.live_log?.tail?.trim()),
+    status: Boolean(data?.subtasks?.open?.length || data?.subtasks?.done?.length),
+  };
+}
+
 function shouldKeepInMonitor(key, entry, data) {
+  if (!isMonitorProjectAllowed(entry.ctx.projectId)) return false;
   if (key === pinnedKey) return true;
   if (!data || data.column_id !== "running") return false;
   if (cardHasLiveData(data)) return true;
@@ -99,6 +111,7 @@ function pruneInactiveCards() {
 }
 
 function upsertMonitoredCard(ctx) {
+  if (!isMonitorProjectAllowed(ctx.projectId)) return;
   const key = cardKey(ctx);
   if (!monitored.has(key)) {
     monitored.set(key, {
@@ -119,6 +132,7 @@ export function runningCardContextsFromProjects(projectsById) {
   /** @type {Array<object>} */
   const items = [];
   for (const [projectId, project] of Object.entries(projectsById || {})) {
+    if (!isMonitorProjectAllowed(projectId)) continue;
     const boards = Array.isArray(project.boards)
       ? project.boards
       : Object.values(project.boards || {});
@@ -150,8 +164,9 @@ export function runningCardContextsFromProjects(projectsById) {
 }
 
 /** @param {() => Array<object>} provider */
-export function setRunningSeedProvider(provider) {
+export function setRunningSeedProvider(provider, projectAllowed = () => true) {
   getRunningSeedCards = provider || (() => []);
+  isMonitorProjectAllowed = projectAllowed;
 }
 
 function escapeHtml(s) {
@@ -238,34 +253,6 @@ function noteHtml(data) {
   return `<div class="card-live-note-block"><p class="card-live-note-text">${escapeHtml(note)}</p></div>`;
 }
 
-function evoHtml(evo, projectId) {
-  if (!evo?.configured) {
-    return `<p class="card-live-empty">Укажите <code>evo_run: runs/evo/&lt;run_id&gt;</code> в description карточки или отчёте.</p>`;
-  }
-  if (evo.error) return `<p class="card-live-error">${escapeHtml(evo.error)}</p>`;
-  if (!evo.exists) return `<p class="card-live-empty">Evo state ещё не создан: <code>${escapeHtml(evo.path)}</code></p>`;
-  const summary = evo.summary || {};
-  const experiments = Array.isArray(evo.experiments) ? evo.experiments : [];
-  const rows = experiments.slice(-20).map((item) => {
-    const score = item.score == null ? "—" : String(item.score);
-    const status = item.status || (item.passed === false ? "rejected" : "ok");
-    return `<tr><td>${escapeHtml(item.id || item.experiment_id || "")}</td><td>${escapeHtml(status)}</td><td>${escapeHtml(score)}</td></tr>`;
-  }).join("");
-  const artifacts = (evo.artifacts || []).map((item) => {
-    const bust = item.mtime ? `&v=${encodeURIComponent(item.mtime)}` : "";
-    const url = `${KoiApi.liveFileUrl(projectId, item.path)}${bust}`;
-    return `<a class="card-live-metric" href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(url)}" alt="${escapeHtml(item.name)}" loading="lazy" /><span>${escapeHtml(item.name)}</span></a>`;
-  }).join("");
-  return `<div class="card-live-evo">
-    <div class="card-live-evo-summary"><span>Статус: <strong>${escapeHtml(evo.status || "unknown")}</strong></span><span>Лучший score: <strong>${escapeHtml(summary.best_score ?? "—")}</strong></span><span>Экспериментов: <strong>${escapeHtml(summary.experiments ?? experiments.length)}</strong></span></div>
-    <p><strong>Идея:</strong> ${escapeHtml(evo.idea || "—")}</p>
-    <p><strong>Решение:</strong> ${escapeHtml(evo.solution || "—")}</p>
-    ${evo.live_report ? `<p class="card-live-evo-report">Live-текст: <code>${escapeHtml(evo.live_report)}</code></p>` : ""}
-    ${artifacts ? `<h4>Графики</h4><div class="card-live-metrics-grid">${artifacts}</div>` : ""}
-    ${rows ? `<table class="card-live-evo-table"><thead><tr><th>Ветка</th><th>Статус</th><th>Score</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="card-live-empty">Evo ещё не записал список экспериментов.</p>`}
-  </div>`;
-}
-
 function paneHtml(view, data, projectId) {
   switch (view) {
     case "status":
@@ -274,8 +261,6 @@ function paneHtml(view, data, projectId) {
       return logHtml(data?.live_log);
     case "metrics":
       return metricsHtml(data?.metrics_dir, projectId);
-    case "evo":
-      return evoHtml(data?.evo, projectId);
     case "note":
       return noteHtml(data);
     default:
@@ -302,24 +287,35 @@ function renderCardTabs() {
     return;
   }
 
+  const scrollLeft = tabsEl.scrollLeft;
+  const focusedKey = tabsEl.contains(document.activeElement) ? document.activeElement.dataset.cardKey : null;
   const entries = [...monitored.entries()];
   const tabs = entries
     .map(([key, entry]) => {
       const on = key === activeKey;
       const title = cardTabTitle(entry, entries);
-      return `<button type="button" class="card-live-card-tab${on ? " is-active" : ""}" data-card-key="${escapeHtml(key)}" role="tab" aria-selected="${on}">
+      const views = liveContentViews(entry.error ? null : entry.data);
+      const labels = [views.metrics && "Графики", views.note && "Комментарий", views.log && "Логи"].filter(Boolean);
+      const detail = labels.length ? labels.join(" · ") : "Пока нет данных";
+      const fullTitle = `${entry.ctx.projectTitle || ""} · ${entry.ctx.cardTitle || title} — ${detail}`;
+      return `<button type="button" class="card-live-card-tab${on ? " is-active" : ""}${views.metrics ? " has-content" : ""}" data-card-key="${escapeHtml(key)}" role="tab" aria-selected="${on}" tabindex="${on ? 0 : -1}" title="${escapeHtml(fullTitle)}" aria-label="${escapeHtml(fullTitle)}">
         <span class="card-live-card-tab__dot" aria-hidden="true"></span>
         <span class="card-live-card-tab__title">${escapeHtml(title)}</span>
       </button>`;
     })
     .join("");
   tabsEl.innerHTML = tabs;
+  tabsEl.scrollLeft = scrollLeft;
+  if (focusedKey) [...tabsEl.children].find((tab) => tab.dataset.cardKey === focusedKey)?.focus({ preventScroll: true });
 }
 
-function renderNav(view) {
+function renderNav(view, data) {
+  const available = liveContentViews(data);
   document.querySelectorAll(".card-live-nav-btn").forEach((btn) => {
     const on = btn.dataset.view === view;
     btn.classList.toggle("is-active", on);
+    btn.classList.toggle("has-content", Boolean(available[btn.dataset.view]));
+    btn.title = available[btn.dataset.view] ? "Есть данные" : "Пока нет данных";
     btn.setAttribute("aria-current", on ? "page" : "false");
   });
 }
@@ -343,7 +339,7 @@ function renderActiveCard() {
     methodEl.textContent = ctx.methodTitle ? `Метод: ${ctx.methodTitle}` : "";
   }
   if (statusEl) statusEl.textContent = statusLine(entry);
-  renderNav(view);
+  renderNav(view, entry.error ? null : data);
   if (paneHost) {
     paneHost.innerHTML = paneHtml(view, data, ctx.projectId);
     if (view === "log") {
@@ -370,6 +366,7 @@ function activateCard(key) {
   if (!monitored.has(key)) return;
   activeKey = key;
   renderUI();
+  document.querySelector("#card-live-card-tabs .is-active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 async function syncRunningTabs(focusCtx, seedCards = []) {
@@ -384,6 +381,7 @@ async function syncRunningTabs(focusCtx, seedCards = []) {
   }
 
   for (const projectId of projectIds) {
+    if (!isMonitorProjectAllowed(projectId)) continue;
     try {
       const data = await KoiApi.getKanbanLiveMonitor(projectId);
       for (const item of data.items || []) {
@@ -415,7 +413,7 @@ async function syncRunningTabs(focusCtx, seedCards = []) {
 
 async function refreshCard(key) {
   const entry = monitored.get(key);
-  if (!entry) return;
+  if (!entry || !isMonitorProjectAllowed(entry.ctx.projectId)) return;
   try {
     const data = await KoiApi.getCardLive(
       entry.ctx.projectId,
@@ -505,6 +503,17 @@ export function closeCardLiveDrawer(ui) {
 }
 
 export function bindCardLiveModal(ui) {
+  document.getElementById("card-live-card-tabs")?.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    const keys = [...monitored.keys()];
+    if (!keys.length) return;
+    e.preventDefault();
+    const index = keys.indexOf(activeKey);
+    const next = e.key === "Home" ? 0 : e.key === "End" ? keys.length - 1
+      : (index + (e.key === "ArrowRight" ? 1 : -1) + keys.length) % keys.length;
+    activateCard(keys[next]);
+    document.querySelector("#card-live-card-tabs .is-active")?.focus({ preventScroll: true });
+  });
   document.getElementById("card-live-modal")?.addEventListener("click", (e) => {
     const cardTab = e.target.closest?.(".card-live-card-tab");
     if (cardTab?.dataset.cardKey) {

@@ -424,7 +424,8 @@ export function syncMethodActivityOverlay(viewport, camera, items, visible) {
 export function shouldUseActivityOverlay(cam) {
   if (!cam) return false;
   const fit = Math.max(cam.methodMaxScale ?? cam.maxScale ?? cam.scale, cam.minScale);
-  return cam.scale < fit * ACTIVITY_INLINE_ZOOM_RATIO;
+  // At native size the inline SVG is readable and must grow with its node.
+  return cam.scale < Math.min(1, fit * ACTIVITY_INLINE_ZOOM_RATIO);
 }
 
 /** @param {{ scale: number, minScale: number, maxScale: number }} cam */

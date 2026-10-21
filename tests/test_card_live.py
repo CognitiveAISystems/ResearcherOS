@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 
 import pytest
@@ -58,7 +57,7 @@ evo_run: runs/evo/wctr-demo
     assert hints["live_log"] == "runs/train.log"
     assert hints["metrics_dir"] == "runs/plots"
     assert hints["live_note"] == "epoch 3 running"
-    assert hints["evo_run"] == "runs/evo/wctr-demo"
+    assert "evo_run" not in hints
     subs = parse_subtasks(text)
     assert subs["done"] == ["Sync code"]
     assert subs["open"] == ["Train model"]
@@ -230,24 +229,10 @@ def test_live_snapshot_combines_log_metrics_and_subtasks(
     assert snapshot["active"] is True
 
 
-def test_live_snapshot_reads_evo_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = tmp_path / "proj"
-    run = repo / "runs" / "evo" / "wctr-demo"
-    run.mkdir(parents=True)
-    (run / "state.json").write_text(
-        json.dumps({"run_id": "wctr-demo", "status": "completed", "summary": {"best_score": 0.42}}),
-        encoding="utf-8",
-    )
-    (run / "experiments.json").write_text(
-        json.dumps([{"id": "root/a", "status": "accepted", "score": 0.42}]),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("koi.projects.live_artifacts.repo_root", lambda _pid: repo)
-
-    snapshot = live_snapshot(
-        "proj", hints={"evo_run": "runs/evo/wctr-demo"}, description="", column_id="running"
-    )
-
-    assert snapshot["evo"]["status"] == "completed"
-    assert snapshot["evo"]["summary"]["best_score"] == 0.42
-    assert snapshot["evo"]["experiments"][0]["id"] == "root/a"
+def test_legacy_evo_hint_does_not_activate_monitor() -> None:
+    hints = {"evo_run": "runs/evo/old-run"}
+    assert not has_live_hints(hints)
+    snapshot = live_snapshot("proj", hints=hints, description="", column_id="running")
+    assert "evo" not in snapshot
+    assert snapshot["has_live_hints"] is False
+    assert snapshot["active"] is False

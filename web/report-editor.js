@@ -55,8 +55,14 @@ export function setupWouldShrink(source, proposal) {
 }
 
 export class ReportEditor {
-  constructor(host, { render, onChange, onAgent, onPaste, hookLinks, readOnly = false }) {
-    Object.assign(this, { host, render, onChange, onAgent, onPaste, hookLinks, readOnly });
+  constructor(host, { render, onChange, onAgent, onPaste, hookLinks, readOnly = false, toc = null }) {
+    Object.assign(this, { host, render, onChange, onAgent, onPaste, hookLinks, readOnly, toc });
+    if (toc) {
+      this.tocMedia = window.matchMedia('(min-width: 1101px)');
+      const resize = () => { toc.open = this.tocMedia.matches; };
+      this.tocMedia.addEventListener('change', resize);
+      resize();
+    }
     this.blocks = [];
     host.addEventListener("contextmenu", e => {
       if (this.readOnly) return;
@@ -89,7 +95,31 @@ export class ReportEditor {
   }
   setValue(source) { this.blocks = reportBlocks(source); this.paint(); }
   getValue() { return this.blocks.map(b => b.raw).join(""); }
-  changed() { this.onChange(this.getValue()); }
+  changed() { this.onChange(this.getValue()); this.updateToc(); }
+  updateToc() {
+    if (!this.toc) return;
+    const nav = this.toc.querySelector('nav');
+    nav.replaceChildren();
+    this.blocks.forEach((block, index) => {
+      if (block.type !== 'heading' && !/^#{1,3}\s/.test(block.raw)) return;
+      const fragment = document.createElement('div');
+      fragment.innerHTML = this.renderBlock(block.raw);
+      const heading = fragment.querySelector('h1, h2, h3');
+      if (!heading) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = heading.textContent;
+      button.dataset.level = heading.tagName.slice(1);
+      button.onclick = () => {
+        if (!this.tocMedia.matches) this.toc.open = false;
+        const target = this.host.querySelector(`[data-block-index="${index}"]`);
+        target?.scrollIntoView({ block: 'start' });
+        target?.focus({ preventScroll: true });
+      };
+      nav.append(button);
+    });
+    this.toc.hidden = !nav.childElementCount;
+  }
   renderBlock(raw) {
     const links = marked.lexer(this.getValue()).links || {};
     const definitions = Object.entries(links).map(([name, link]) => `[${name}]: <${link.href}>${link.title ? ` ${JSON.stringify(link.title)}` : ""}`).join("\n");
@@ -100,6 +130,7 @@ export class ReportEditor {
     this.blocks.forEach((block, index) => {
       const el = document.createElement("div");
       el.className = "report-block";
+      el.dataset.blockIndex = index;
       el.tabIndex = this.readOnly ? -1 : 0;
       el.setAttribute("aria-label", "Редактировать блок");
       el.innerHTML = this.renderBlock(block.raw);
@@ -127,6 +158,7 @@ export class ReportEditor {
     };
     if (!this.readOnly) this.host.append(add);
     this.hookLinks(this.host);
+    this.updateToc();
   }
   edit(el, index) {
     if (el.querySelector("textarea")) return;

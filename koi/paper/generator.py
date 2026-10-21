@@ -6,7 +6,7 @@
 knowledge/*.md.
 
 Сценарий в режиме **cursor_inbox**: кнопка в UI → очередь `.run/paper-queue.json` →
-`PAPER_WAKE` → агент в чате **ResearchOS Paper Inbox** → `answer` → сборка PDF.
+`PAPER_WAKE` → агент в чате **ResearcherOS Paper Inbox** → `answer` → сборка PDF.
 
 Сценарий в других режимах: кнопка → POST /projects/{id}/paper → фоновая задача:
   1. собрать контекст проекта;
@@ -396,7 +396,7 @@ def _assemble_tex(title: str, body: str) -> str:
         PREAMBLE
         + "\n\\title{" + latex_escape(title) + "}\n\n"
         + "\\author{%\n  KOI Research Agent\\\\\n"
-        + "  ResearchOS\\\\\n}\n\n"
+        + "  ResearcherOS\\\\\n}\n\n"
         + "\\begin{document}\n\n\\maketitle\n\n"
         + body.strip()
         + "\n\n\\end{document}\n"

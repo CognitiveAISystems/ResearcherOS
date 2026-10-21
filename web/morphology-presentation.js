@@ -200,7 +200,7 @@ function renderCover(slide, paper, language) {
     : "";
   return `
     <article class="morph-presentation-slide is-cover">
-      <span class="morph-presentation-brand">ResearchOS</span>
+      <span class="morph-presentation-brand">ResearcherOS</span>
       <div class="morph-presentation-cover-copy">
         <p class="morph-presentation-eyebrow">${escapeHtml(copy.presentationTitle)}</p>
         <h2>${escapeHtml(localized(slide.title, language))}</h2>

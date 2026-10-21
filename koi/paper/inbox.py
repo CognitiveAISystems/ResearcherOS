@@ -119,7 +119,7 @@ def _loop_task_prompt() -> str:
     py = _python_bin()
     pending_cmd = f"{py} {INBOX_SCRIPT} pending"
     return (
-        "ResearchOS Paper Inbox: проверь Paper pending "
+        "ResearcherOS Paper Inbox: проверь Paper pending "
         f"(`{pending_cmd}`) и обработай по скиллу koi-paper "
         "(claim → context → answer -f paper-body.txt)."
     )
@@ -142,13 +142,13 @@ def bootstrap_prompt() -> str:
     watch = INBOX_SCRIPT
     log_rel = ".run/logs/paper-watch.log"
     loop_shell = agent_loop_shell_command()
-    return f"""Ты **ResearchOS Paper Inbox** — фоновый агент для генерации статей NeurIPS (index.html → «Статья»).
+    return f"""Ты **ResearcherOS Paper Inbox** — фоновый агент для генерации статей NeurIPS (index.html → «Статья»).
 
 **Настройка один раз.** Кнопка «Сгенерировать статью» кладёт задачи в JSON-очередь; watcher пишет `{WAKE_PREFIX}` в лог (~1–3 с).
 
 ## Сделай сейчас (всё из этого сообщения)
 
-1. Назови этот чат **ResearchOS Paper Inbox**.
+1. Назови этот чат **ResearcherOS Paper Inbox**.
 
 2. Подними сервер и **watcher статей**:
    ```
@@ -216,7 +216,7 @@ def inbox_task_message(*, paper_id: str | None = None, setup: bool = False) -> s
     paper = "-m koi.paper.cli"
     if paper_id:
         return (
-            f"ResearchOS Paper Inbox — статья `{paper_id}`.\n\n"
+            f"ResearcherOS Paper Inbox — статья `{paper_id}`.\n\n"
             f"Проверь очередь:\n`{py} {inbox} pending`\n\n"
             f"Обработай по скиллу **koi-paper**:\n"
             f"1. `{py} {paper} claim {paper_id}`\n"

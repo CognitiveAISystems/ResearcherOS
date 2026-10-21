@@ -585,7 +585,7 @@ function updatePanel(tab) {
   const desc = document.getElementById("hub-panel-desc");
   if (title) title.textContent = cfg.title;
   if (desc) desc.textContent = cfg.desc;
-  document.title = cfg.title + " · ResearchOS Hub";
+  document.title = cfg.title + " · ResearcherOS Hub";
 }
 
 function setActiveTabUi(tab) {

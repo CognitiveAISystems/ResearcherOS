@@ -1,4 +1,4 @@
-"""Run the ResearchOS API and web UI in one parent process.
+"""Run the ResearcherOS API and web UI in one parent process.
 
 The desktop shell owns this process. Both listeners bind to loopback on
 ephemeral ports, so parallel installs and unrelated local services do not
@@ -97,7 +97,7 @@ class DesktopServer:
                 if self._api_thread is not None and not self._api_thread.is_alive():
                     break
                 time.sleep(0.025)
-            raise RuntimeError("ResearchOS API did not become ready before timeout")
+            raise RuntimeError("ResearcherOS API did not become ready before timeout")
         except BaseException:
             self.stop()
             raise

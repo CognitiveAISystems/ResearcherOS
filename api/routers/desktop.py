@@ -22,7 +22,12 @@ from koi.adapters.onboarding_interview import (
     resolve_program,
     start_interview,
 )
-from koi.adapters.desktop_workspace import selected_workspace_root, set_workspace_root
+from koi.adapters.desktop_workspace import (
+    archived_tree_ids,
+    save_archived_tree_ids,
+    selected_workspace_root,
+    set_workspace_root,
+)
 from koi.adapters.project_mount import tree_dir_for
 from koi.adapters.workspace import reset_workspace_cache
 
@@ -143,3 +148,23 @@ def post_finish_interview(body: DesktopFolderBody) -> dict:
         raise HTTPException(400, str(exc)) from exc
     reset_workspace_cache()
     return result
+
+
+class ArchivedTreesBody(BaseModel):
+    ids: list[str] = Field(max_length=10000)
+
+
+@router.get("/desktop/archived-trees")
+def get_archived_trees() -> dict:
+    try:
+        return {"ids": archived_tree_ids()}
+    except (OSError, ValueError) as exc:
+        raise HTTPException(500, "Cannot read archived projects settings") from exc
+
+
+@router.put("/desktop/archived-trees")
+def put_archived_trees(body: ArchivedTreesBody) -> dict:
+    try:
+        return {"ids": save_archived_tree_ids(body.ids)}
+    except OSError as exc:
+        raise HTTPException(500, "Cannot save archived projects settings") from exc

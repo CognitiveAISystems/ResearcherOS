@@ -76,7 +76,7 @@
         if (!r.ok) throw new Error(r.status === 404 ? "Skill не найден" : r.statusText);
         return r.json();
       });
-      document.title = (skill.title || skill.id) + " — ResearchOS Hub";
+      document.title = (skill.title || skill.id) + " — ResearcherOS Hub";
       var html = "";
       if (typeof marked !== "undefined" && marked.parse) {
         html = marked.parse(skill.readme_md || "");

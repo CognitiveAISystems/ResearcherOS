@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ResearchOS</title>
+  <title>ResearcherOS</title>
   <script>
     if (window.researchOSDesktop) document.documentElement.classList.add('desktop-onboarding-pending');
   </script>
@@ -36,7 +36,7 @@
     <div class="topbar-row">
       <div class="topbar-start">
         <div class="brand">
-          <span class="logo">ResearchOS</span>
+          <span class="logo">ResearcherOS</span>
           <span class="tagline" id="brand-tagline" aria-live="polite"></span>
         </div>
       </div>
@@ -221,9 +221,16 @@
           id="agent-chat-input"
           class="agent-chat-input"
           rows="2"
-          placeholder="Спросите или поручите работу по проекту…"
+          placeholder="Задача агенту или /question для вопроса…"
           aria-describedby="agent-chat-form-status"
         ></textarea>
+        <label class="agent-cli-picker" title="Выбрать агента">
+          <select class="agent-cli-select" data-cli-agent aria-label="Выбрать агента"></select>
+        </label>
+        <button type="button" class="agent-chat-mic" data-voice-input="agent-chat-input" aria-label="Начать запись речи" title="Записать речь">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/></svg>
+          <span class="agent-chat-mic__level" aria-hidden="true"></span>
+        </button>
         <button type="submit" class="btn btn-primary agent-chat-send" id="btn-agent-chat-send" aria-label="Отправить сообщение" title="Отправить сообщение">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
         </button>
@@ -500,6 +507,10 @@
       <p class="modal-type">Отчёт</p>
       <p id="card-report-filename" class="card-report-filename"></p>
       <div class="report-workspace">
+        <details class="report-toc" id="report-toc">
+          <summary>Оглавление</summary>
+          <nav aria-label="Разделы отчёта"></nav>
+        </details>
         <div class="report-document">
           <h2 id="card-report-card-title" class="inline-edit-title"></h2>
           <div id="card-report-tags" class="card-tags"></div>
@@ -510,20 +521,27 @@
           <div id="card-report-preview" class="markdown-preview report-blocks"></div>
         </div>
         <aside id="report-interview" class="report-interview" hidden aria-label="Подготовка постановки">
-          <header>
-            <h3>Чат по задаче</h3>
-            <button type="button" id="report-agent-close" class="agent-chat-close" aria-label="Скрыть интервью">×</button>
-          </header>
-          <div class="agent-chat-tabs" role="tablist" aria-label="Чат и работа агента">
-            <button type="button" id="report-interview-tab-chat" role="tab" aria-selected="true" class="is-active">Чат</button>
-            <button type="button" id="report-interview-tab-activity" role="tab" aria-selected="false">Работа агента</button>
+          <div class="report-chat-resize" role="separator" tabindex="0" aria-label="Ширина чата" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="680" aria-valuenow="320" aria-controls="report-interview"></div>
+          <div class="report-chat-navigation">
+            <div class="agent-chat-tabs" role="tablist" aria-label="Чат и работа агента">
+              <button type="button" id="report-interview-tab-chat" role="tab" aria-selected="true" class="is-active">Чат</button>
+              <button type="button" id="report-interview-tab-activity" role="tab" aria-selected="false">Работа агента</button>
+            </div>
+            <button type="button" id="report-agent-close" class="agent-chat-close" aria-label="Свернуть чат" title="Свернуть чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 7 7-7 7m7-14 7 7-7 7"/></svg></button>
           </div>
           <div id="report-interview-log" class="agent-chat-log" role="tabpanel" aria-live="polite"></div>
           <div id="report-interview-activity" class="agent-chat-activity hidden" role="tabpanel" aria-live="polite"></div>
           <form id="report-interview-form" class="agent-chat-form">
             <div class="agent-chat-composer">
               <label class="sr-only" for="report-interview-input">Ответ агенту или идея эксперимента</label>
-              <textarea id="report-interview-input" class="agent-chat-input" rows="2" placeholder="Сообщение, /grill_me или /make_report" required></textarea>
+              <textarea id="report-interview-input" class="agent-chat-input" rows="2" placeholder="Задача агенту, /question, /grill_me или /make_report" required></textarea>
+              <label class="agent-cli-picker" title="Выбрать агента">
+                <select class="agent-cli-select" data-cli-agent aria-label="Выбрать агента"></select>
+              </label>
+              <button type="button" class="agent-chat-mic" data-voice-input="report-interview-input" aria-label="Начать запись речи" title="Записать речь">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/></svg>
+                <span class="agent-chat-mic__level" aria-hidden="true"></span>
+              </button>
               <button type="submit" class="btn btn-primary agent-chat-send" aria-label="Отправить вопрос">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
               </button>
@@ -640,7 +658,7 @@
       </div>
       <div id="paper-inbox-message" class="rw-inbox-message rw-literature-inbox-setup hidden" role="region" aria-label="Настройка Paper Inbox">
         <p class="rw-inbox-message-label">Paper Inbox не настроен</p>
-        <p class="rw-inbox-message-hint">Скопируйте bootstrap → чат <strong>ResearchOS Paper Inbox</strong> в Cursor → настройте мониторинг лога (<code>tail -f</code> или loop) → «Inbox готов».</p>
+        <p class="rw-inbox-message-hint">Скопируйте bootstrap → чат <strong>ResearcherOS Paper Inbox</strong> в Cursor → настройте мониторинг лога (<code>tail -f</code> или loop) → «Inbox готов».</p>
         <div class="rw-inbox-message-actions">
           <button type="button" id="paper-inbox-message-copy" class="btn btn-primary btn-small">Скопировать</button>
           <button type="button" id="paper-inbox-mark-configured" class="btn btn-small" disabled title="Сначала скопируйте сообщение и вставьте в Cursor">Inbox готов</button>
@@ -805,19 +823,17 @@
     <div class="modal-backdrop" data-close="card-live-modal"></div>
     <div class="modal-panel modal-panel--live">
       <button type="button" class="modal-close" data-close="card-live-modal" aria-label="Закрыть">×</button>
-      <p class="modal-type">Монитор</p>
-      <div class="card-live-head">
-        <div>
-          <h2 id="card-live-heading" class="inline-edit-title card-live-heading">Эксперименты в работе</h2>
-          <p id="card-live-method" class="card-live-method"></p>
-        </div>
+      <header class="card-live-head">
+        <h2 id="card-live-heading" class="card-live-heading">Эксперименты в работе</h2>
+      </header>
+      <div id="card-live-card-tabs" class="card-live-card-tabs" role="tablist" aria-label="Карточки в мониторе"></div>
+      <div class="card-live-toolbar">
+        <p id="card-live-method" class="card-live-method"></p>
         <span id="card-live-updated" class="card-live-updated"></span>
       </div>
-      <div id="card-live-card-tabs" class="card-live-card-tabs" role="tablist" aria-label="Карточки в мониторе"></div>
       <div class="card-live-layout">
         <nav id="card-live-nav" class="card-live-nav" aria-label="Раздел монитора">
           <button type="button" class="card-live-nav-btn is-active" data-view="metrics">Графики</button>
-          <button type="button" class="card-live-nav-btn" data-view="evo">Evo</button>
           <button type="button" class="card-live-nav-btn" data-view="note">Коммент модели</button>
           <button type="button" class="card-live-nav-btn" data-view="log">Логи</button>
           <button type="button" class="card-live-nav-btn" data-view="status">Статус</button>
@@ -827,7 +843,7 @@
           <div id="card-live-pane-host" class="card-live-pane-host"></div>
         </div>
       </div>
-      <p class="card-report-hint">Агент пишет <code>live_log:</code>, <code>metrics_dir:</code>, <code>live_note:</code>, опционально <code>compute_cost:</code> в description карточки или отчёт · UI читает файлы с диска</p>
+
     </div>
   </div>
 

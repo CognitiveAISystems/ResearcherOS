@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -33,10 +34,17 @@ def main() -> None:
         "--hidden-import", "api.main", "--hidden-import", "api.web_proxy",
         "--collect-submodules", "api", "--collect-submodules", "koi",
         "--collect-data", "latex2mathml",
+        "--collect-all", "faster_whisper", "--collect-all", "ctranslate2",
+        "--collect-all", "av", "--collect-all", "onnxruntime",
     ]
     for name in ("web", "koi/widgets", "agents", "docs"):
         source = docs_copy if name == "docs" else root / name
         command.extend(("--add-data", f"{source}{os.pathsep}{name}"))
+    whisper_spec = importlib.util.find_spec("faster_whisper")
+    if whisper_spec is None or whisper_spec.origin is None:
+        raise RuntimeError("faster-whisper is required for desktop voice input")
+    whisper_assets = Path(whisper_spec.origin).parent / "assets"
+    command.extend(("--add-data", f"{whisper_assets}{os.pathsep}faster_whisper/assets"))
     command.append(str(root / "api" / "desktop_server.py"))
     subprocess.run(command, cwd=root, check=True)
 

@@ -325,10 +325,33 @@ def backend_order() -> list[str]:
     return [b.strip().lower() for b in raw.split(",") if b.strip() in _RUNNERS]
 
 
+CLI_AGENTS = (
+    ("cursor", "Cursor"),
+    ("codex", "Codex"),
+    ("claude", "Claude"),
+)
+
+
+def cli_agents() -> list[dict]:
+    """Какие CLI реально есть на этой машине."""
+    from koi.literature.cursor_agent_terminal import find_agent_bin
+
+    checks = {
+        "cursor": find_agent_bin() is not None,
+        "codex": _codex_ready(),
+        "claude": _claude_bin() is not None,
+    }
+    return [
+        {"id": key, "label": label, "available": checks[key]}
+        for key, label in CLI_AGENTS
+    ]
+
+
 def backend_status() -> dict:
     """Что доступно на этой машине — для диагностики и эндпоинта."""
     return {
         "order": backend_order(),
+        "cli": cli_agents(),
         "codex": {
             "available": _codex_ready(),
             "bin": _codex_bin(),

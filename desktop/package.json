@@ -33,7 +33,10 @@
     "mac": {
       "target": "dir",
       "category": "public.app-category.productivity",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Запись речи для локальной расшифровки в чате ResearcherOS"
+      }
     },
     "win": {
       "target": "nsis"

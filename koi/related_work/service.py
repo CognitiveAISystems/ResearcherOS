@@ -42,7 +42,7 @@ def _related_work_script() -> str:
 def cursor_chat_message(item_id: str) -> str:
     py = _python_bin()
     script = _related_work_script()
-    return f"""ResearchOS Literature Inbox — Related Work `{item_id}`.
+    return f"""ResearcherOS Literature Inbox — Related Work `{item_id}`.
 
 Скилл **koi-related-work** (или выполни шаги ниже):
 
