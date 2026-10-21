@@ -32,9 +32,9 @@ def main() -> None:
         "--specpath", str(root / "build"), "--paths", str(root),
         "--hidden-import", "api.main", "--hidden-import", "api.web_proxy",
         "--collect-submodules", "api", "--collect-submodules", "koi",
-        "--collect-submodules", "widgets", "--collect-data", "latex2mathml",
+        "--collect-data", "latex2mathml",
     ]
-    for name in ("web", "widgets", "agents", "docs"):
+    for name in ("web", "koi/widgets", "agents", "docs"):
         source = docs_copy if name == "docs" else root / name
         command.extend(("--add-data", f"{source}{os.pathsep}{name}"))
     command.append(str(root / "api" / "desktop_server.py"))

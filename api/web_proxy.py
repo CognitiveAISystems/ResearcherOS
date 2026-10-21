@@ -2,7 +2,7 @@
 """Serve ``web/`` and proxy ``/api/*`` to the KOI FastAPI server.
 
 Also serves ResearchOS widgets:
-  /widgets/_base/...                      → widgets/base/web/...
+  /widgets/_base/...                      → koi/widgets/base/web/...
   /widgets/<project_id>/<id>/...          → tree/.../koi-structure/widgets/<id>/...
 """
 
@@ -20,7 +20,7 @@ from urllib.parse import unquote, urlparse
 
 ENGINE_ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = ENGINE_ROOT / "web"
-WIDGETS_ROOT = ENGINE_ROOT / "widgets"
+WIDGETS_ROOT = ENGINE_ROOT / "koi" / "widgets"
 API_PREFIX = "/api"
 WIDGETS_PREFIX = "/widgets/"
 
@@ -146,7 +146,7 @@ class KoiWebHandler(SimpleHTTPRequestHandler):
         if not rel or ".." in rel.split("/"):
             return None
 
-        # Shared base assets: /widgets/_base/floating.js → widgets/base/web/floating.js
+        # Shared base assets: /widgets/_base/floating.js → koi/widgets/base/web/floating.js
         if rel.startswith("_base/"):
             candidate = (WIDGETS_ROOT / "base" / "web" / rel[len("_base/") :]).resolve()
             base_web = (WIDGETS_ROOT / "base" / "web").resolve()
@@ -164,7 +164,7 @@ class KoiWebHandler(SimpleHTTPRequestHandler):
             return None
 
         # Lazy import so static server starts even if mounts are cold
-        from widgets.base.registry import resolve_widget_asset
+        from koi.widgets.base.registry import resolve_widget_asset
 
         return resolve_widget_asset(project_or_installed, widget_id, "/".join(rest))
 

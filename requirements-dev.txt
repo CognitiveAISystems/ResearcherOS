@@ -3,3 +3,6 @@ pytest>=8.0
 playwright>=1.49.0
 # Optional: auto agent answers for UI chat (pip install cursor-sdk; set CURSOR_API_KEY)
 # cursor-sdk>=0.1.0
+
+# Build the static documentation feature pages.
+Markdown>=3.0

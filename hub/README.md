@@ -19,8 +19,8 @@ GitHub OAuth callback for local dev: `http://127.0.0.1:8020/auth/callback`
 ```bash
 # hub/.env: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, HUB_SESSION_SECRET
 # optional: HUB_S3_ACCESS_KEY, HUB_S3_SECRET_KEY after first run
-chmod +x hub/deploy/deploy.sh
-./hub/deploy/deploy.sh
+chmod +x deploy/hub/deploy.sh
+./deploy/hub/deploy.sh
 ```
 
 After deploy, set `HUB_PUBLIC_URL` to the API Gateway URL and update GitHub OAuth callback.

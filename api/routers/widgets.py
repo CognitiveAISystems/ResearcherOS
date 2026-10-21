@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from widgets.base.registry import list_widgets, set_widget_enabled
+from koi.widgets.base.registry import list_widgets, set_widget_enabled
 
 router = APIRouter(tags=["widgets"])
 
@@ -35,7 +35,7 @@ def get_widgets() -> dict:
 @router.get("/widgets/{project_id}/{widget_id}/data")
 def get_widget_data(project_id: str, widget_id: str) -> dict:
     """Run the widget's ``backend/fetch.py`` and return its payload."""
-    from widgets.base.runner import run_widget_fetch
+    from koi.widgets.base.runner import run_widget_fetch
 
     key = f"{project_id}/{widget_id}"
     try:
@@ -51,7 +51,7 @@ def get_widget_data(project_id: str, widget_id: str) -> dict:
 @router.post("/widgets/{project_id}/{widget_id}/data")
 def post_widget_data(project_id: str, widget_id: str, body: WidgetUpdateBody) -> dict:
     """Run the widget's optional ``update(payload)`` and return a fresh payload."""
-    from widgets.base.runner import run_widget_update
+    from koi.widgets.base.runner import run_widget_update
 
     key = f"{project_id}/{widget_id}"
     try:

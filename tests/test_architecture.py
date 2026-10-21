@@ -210,7 +210,7 @@ def test_cli_entrypoints_are_importable() -> None:
         "koi.agent_chat.inbox_cli",
         "koi.agent_chat.worker",
         "koi.cursor.widget",
-        "widgets.base.cli",
+        "koi.widgets.base.cli",
         "koi.paper.cli",
         "koi.paper.inbox_cli",
         "koi.projects.done_research_cli",

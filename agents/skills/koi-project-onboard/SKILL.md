@@ -729,7 +729,7 @@ python -m koi.projects.sync_cli status
 - Install / migrate layout: `python -m koi.projects.install_cli`
 - Orphan sync CLI: `python -m koi.projects.sync_cli` · skill `koi-project-sync`
 - Discovery: `docs/adr-001-project-discovery.md` · `AGENTS.md` § Layout
-- Attach (human): `README.md` § «Add a project» · `docs-site/start/with-code.html`
+- Attach (human): `README.md` § «Add a project» · `docs/site/start/with-code.html`
 - Формат дерева: `docs/human/project-format.md`
 - Словарь узлов: `docs/human/getting-started.md` (§3–§5, §0a)
 - Grill карточки: `agents/skills/koi-grill-experiment/SKILL.md`

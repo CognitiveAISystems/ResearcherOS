@@ -15,8 +15,12 @@ desktop/dist/
 .DS_Store
 hub/.data/
 hub/.env
-hub/deploy/*.rendered
+deploy/hub/*.rendered
 deploy/signaling/*.rendered
 REFACTORING_PLAN.md
 # Local Cursor IDE config/hooks/skill links
 .cursor/
+
+/mockups/
+
+*.zip

@@ -91,14 +91,14 @@ python -m koi.projects.install_cli install <name> --create # пустой про
   `agents/skills/koi-project-onboard/SKILL.md` (запись в `tree/<repo>/koi-structure/`).
 - Полный путь новичка (для людей): `docs/human/getting-started.md`.
 - Доменная модель: `docs/domain-model.md`.
-- Документация: `docs/README.md` · публичный сайт: `docs-site/start/`.
+- Документация: `docs/README.md` · публичный сайт: `docs/site/start/`.
 - Процесс накопления знаний и матрица ревью: `docs/research-workflow.md`.
 - Inbox-чат UI: `docs/agent-chat-inbox.md`.
-- Спецификация переписывания платформы: `docs/spec/README.md` · витрина `docs-site/todo/`.
+- Спецификация переписывания платформы: `docs/spec/README.md` · витрина `docs/site/todo/`.
 
 ## Спецификация платформы (переписывание ResearcherOS)
 
-Источник требований — `docs/spec/README.md`. Страница `docs-site/todo/` — витрина того же документа.
+Источник требований — `docs/spec/README.md`. Страница `docs/site/todo/` — витрина того же документа.
 Текущий код и UI — образец желаемого результата, не спецификация
 и не каркас, который нужно аккуратно наращивать.
 

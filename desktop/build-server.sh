@@ -21,10 +21,9 @@ fi
   --hidden-import api.web_proxy \
   --collect-submodules api \
   --collect-submodules koi \
-  --collect-submodules widgets \
   --collect-data latex2mathml \
   --add-data "$repo_root/web:web" \
-  --add-data "$repo_root/widgets:widgets" \
+  --add-data "$repo_root/koi/widgets:koi/widgets" \
   --add-data "$repo_root/agents:agents" \
   --add-data "$repo_root/docs:docs" \
   api/desktop_server.py
