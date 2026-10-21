@@ -499,3 +499,46 @@ def delete_project_paper_comment(project_id: str, slug: str, comment_id: str) ->
     except KeyError as e:
         raise HTTPException(404, "Comment not found") from e
     return {"ok": True}
+
+
+class PaperEditTaskBody(BaseModel):
+    prompt: str = Field(min_length=1, max_length=20000)
+    backend: str | None = None
+    run_agent: bool = True
+
+
+@router.get("/projects/{project_id}/papers/{slug}/edit-tasks")
+def get_paper_edit_tasks(project_id: str, slug: str) -> dict:
+    from koi.paper import edit_tasks
+    normalized, _ = _require_paper_slot(project_id, slug)
+    return {"tasks": edit_tasks.list_tasks(project_id, normalized)}
+
+
+@router.post("/projects/{project_id}/papers/{slug}/edit-tasks")
+def post_paper_edit_task(project_id: str, slug: str, body: PaperEditTaskBody) -> dict:
+    from koi.paper import edit_tasks
+    normalized, slot = _require_paper_slot(project_id, slug)
+    try:
+        if body.run_agent:
+            return edit_tasks.launch(project_id, normalized, slot, body.prompt, backend=body.backend)
+        return edit_tasks.begin(project_id, normalized, slot, body.prompt)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/projects/{project_id}/papers/{slug}/edit-tasks/{task_id}/{action}")
+def resolve_paper_edit_task(project_id: str, slug: str, task_id: str, action: str) -> dict:
+    from koi.paper import edit_tasks
+    normalized, _ = _require_paper_slot(project_id, slug)
+    if action not in {"submit", "cancel"}:
+        raise HTTPException(404, "Неизвестное действие")
+    try:
+        return getattr(edit_tasks, action)(project_id, normalized, task_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc

@@ -127,3 +127,41 @@ def import_relative(base: str, current: str, incoming: str) -> MergeResult:
         agent_span=agent,
         human_span=human,
     )
+
+
+def merge_proposal(base: str, current: str, incoming: str) -> MergeResult:
+    """Conservative line-wise three-way merge; competing insertions conflict."""
+    import difflib
+
+    if incoming == current or incoming == base:
+        return MergeResult(ok=True, text=current, changed=False)
+    if current == base:
+        return MergeResult(ok=True, text=incoming, changed=True)
+    lines = base.splitlines(keepends=True)
+
+    def edits(text):
+        target = text.splitlines(keepends=True)
+        return [(a, b, target[c:d]) for op, a, b, c, d in
+                difflib.SequenceMatcher(None, lines, target, autojunk=False).get_opcodes()
+                if op != "equal"]
+
+    human, agent = edits(current), edits(incoming)
+    combined = list(human)
+    for edit in agent:
+        if edit in human:
+            continue
+        a, b, _ = edit
+        for c, d, _ in human:
+            overlap = max(a, c) < min(b, d)
+            if a == b:
+                overlap = c <= a <= d
+            if c == d:
+                overlap = a <= c <= b
+            if overlap:
+                return MergeResult(ok=False, text=current, changed=False, conflict=True,
+                                   reason="Один фрагмент изменён человеком и агентом")
+        combined.append(edit)
+    for a, b, replacement in sorted(combined, key=lambda edit: edit[:2], reverse=True):
+        lines[a:b] = replacement
+    merged = "".join(lines)
+    return MergeResult(ok=True, text=merged, changed=merged != current)

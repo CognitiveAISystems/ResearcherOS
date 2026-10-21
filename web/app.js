@@ -1,3 +1,4 @@
+import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
 import {
   bindCardLiveModal,
@@ -12,7 +13,7 @@ import {
   computeCostChipHtml,
   mergeComputeCost,
 } from "./compute-cost.js";
-import { KoiApi } from "./api.js?v=20261007b";
+import { KoiApi } from "./api.js?v=20261021paper-edits";
 import { openNewProjectWizard } from "./desktop-onboarding.js";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
 import {
@@ -9118,6 +9119,22 @@ function openKnowledgeModal() {
   void loadKnowledgeTab();
 }
 
+const paperEdits = createPaperEditPanel({
+  api: KoiApi,
+  save: () => savePaperTex({ quiet: true }),
+  onReview: async (projectId, slug) => {
+    const entry = activePaperEntry();
+    if (!entry || entry.project_id !== projectId || entry.slug !== slug) return;
+    await ensurePaperCollab(projectId, slug);
+    const event = await KoiApi.getPaperCollabProposal(projectId, slug);
+    if (activePaperEntry()?.project_id !== projectId || activePaperEntry()?.slug !== slug) return;
+    paperState.collabProposal = event?.proposal || null;
+    if (paperState.collabProposal) setPaperCommentsOpen(true);
+    renderPaperCollabProposal();
+    updatePaperSaveUi();
+  },
+});
+
 const PAPER_TOAST_MS = 3200;
 
 const PAPER_COMMENT_ICONS = {
@@ -9374,6 +9391,16 @@ function updatePaperCollabUi() {
 function renderPaperCollabProposal() {
   const els = paperEls();
   const proposal = paperState.collabProposal;
+  const summary = document.getElementById("paper-proposal-summary");
+  summary?.classList.toggle("hidden", !proposal);
+  const title = document.getElementById("paper-proposal-title");
+  if (title) title.textContent = proposal?.conflict
+    ? "Конфликт: этот фрагмент изменился во время работы агента. Скопируйте нужные правки и отклоните предложение."
+    : proposal?.title || "Предлагаемые изменения";
+  const acceptAll = document.getElementById("paper-proposal-accept-all");
+  if (acceptAll) acceptAll.disabled = Boolean(proposal?.conflict || paperState.collabProposalResolving);
+  const rejectAll = document.getElementById("paper-proposal-reject-all");
+  if (rejectAll) rejectAll.disabled = Boolean(paperState.collabProposalResolving);
   if (els.proposalPreview) {
     els.proposalPreview.classList.toggle("hidden", !proposal);
     els.proposalPreview.innerHTML = proposal
@@ -9391,6 +9418,29 @@ function renderPaperCollabProposal() {
   void renderPaperCommentMargin();
   requestAnimationFrame(syncPaperLayoutMetrics);
 }
+
+async function resolvePaperProposalAll(accept) {
+  const entry = activePaperEntry();
+  const proposal = paperState.collabProposal;
+  if (!entry || !proposal || paperState.collabProposalResolving) return;
+  paperState.collabProposalResolving = true;
+  renderPaperCollabProposal();
+  try {
+    const resolve = accept ? KoiApi.acceptPaperCollabProposal : KoiApi.rejectPaperCollabProposal;
+    await resolve(entry.project_id, entry.slug, proposal.id);
+    paperState.collabProposal = null;
+    await paperEdits.refresh();
+  } catch (err) {
+    showPaperToast(err.message || "Предложение изменилось", { variant: "error" });
+  } finally {
+    paperState.collabProposalResolving = false;
+    renderPaperCollabProposal();
+    updatePaperSaveUi();
+  }
+}
+
+document.getElementById("paper-proposal-accept-all")?.addEventListener("click", () => void resolvePaperProposalAll(true));
+document.getElementById("paper-proposal-reject-all")?.addEventListener("click", () => void resolvePaperProposalAll(false));
 
 async function resolvePaperCollabProposalHunk(hunkId, resolution) {
   const proposal = paperState.collabProposal;
@@ -11193,9 +11243,7 @@ function paperProposalAnchorHtml(proposal, hunk) {
   const end = Math.max(start, Number(hunk.line_end) || start);
   const lineTop = measurePaperLineTop(start);
   const source =
-    proposal.source === "cursor-buffer"
-      ? "Cursor · не сохранено"
-      : proposal.source === "agent" || proposal.source === "paper-comment-agent"
+    proposal.source === "agent" || proposal.source === "paper-comment-agent" || proposal.source === "paper-edit-agent"
         ? "Агент"
         : "main.tex";
   const resolving =
@@ -11205,7 +11253,7 @@ function paperProposalAnchorHtml(proposal, hunk) {
     ? `<p class="paper-comment-card__agent">Агент правит…</p>`
     : `<div class="paper-comment-card__actions paper-comment-card__actions--compact">
           <button type="button" class="paper-comment-btn" data-proposal-hunk-reject="${escapeHtml(hunk.id)}" ${resolving ? "disabled" : ""}>Отклонить</button>
-          <button type="button" class="paper-comment-btn paper-comment-btn--primary" data-proposal-hunk-accept="${escapeHtml(hunk.id)}" ${resolving ? "disabled" : ""}>Принять</button>
+          <button type="button" class="paper-comment-btn paper-comment-btn--primary" data-proposal-hunk-accept="${escapeHtml(hunk.id)}" ${resolving || proposal.conflict ? "disabled" : ""}>Принять</button>
         </div>`;
   return `<div class="paper-proposal-anchor" data-proposal-id="${escapeHtml(proposal.id)}" data-hunk-id="${escapeHtml(hunk.id)}" data-line-no="${start}" data-line-top="${lineTop}" style="top:${lineTop}px">
     <article class="paper-comment-card">
@@ -11470,6 +11518,7 @@ async function loadPaperWorkspace(projectId, slug, { pdfExists = false, pdfStamp
   void loadPaperVersions(projectId, slug);
   if (texLoaded) {
     void ensurePaperCollab(projectId, slug);
+    paperEdits.open(projectId, slug);
   }
 
   if (pdfExists) {
@@ -11626,6 +11675,7 @@ async function askPaperCommentAgent(commentId) {
   const entry = activePaperEntry();
   const comment = paperState.comments.find((item) => item.id === commentId);
   if (!entry || !comment || paperState.commentAgents[commentId] === "running") return;
+  if (!(await savePaperTex({ quiet: true }))) return;
   paperState.commentAgents[commentId] = "running";
   void renderPaperCommentMargin();
   try {

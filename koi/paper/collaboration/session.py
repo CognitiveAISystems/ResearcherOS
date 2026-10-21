@@ -21,6 +21,7 @@ from koi.paper.collaboration.materializer import atomic_write_text
 from koi.paper.collaboration.revisions import content_hash, utc_now
 from koi.paper.collaboration.text_ops import (
     MergeResult,
+    merge_proposal,
     TextSpan,
     clamp_span,
     prefix_suffix_span,
@@ -67,6 +68,8 @@ class PaperProposal:
     base_revision: int | None = None
     task_id: str | None = None
     created_at: str = field(default_factory=utc_now)
+    conflict: bool = False
+    title: str = ""
 
     def hunks(self) -> list[dict[str, Any]]:
         current_lines = self.current.splitlines(keepends=True)
@@ -186,6 +189,8 @@ class PaperProposal:
             "base_revision": self.base_revision,
             "task_id": self.task_id,
             "created_at": self.created_at,
+            "conflict": self.conflict,
+            "title": self.title,
             "current_hash": content_hash(self.current),
             "candidate_hash": content_hash(self.candidate),
             "diff": diff,
@@ -215,6 +220,8 @@ class PaperProposal:
                 base_revision=data.get("base_revision"),
                 task_id=data.get("task_id"),
                 created_at=str(data.get("created_at") or utc_now()),
+                conflict=bool(data.get("conflict", False)),
+                title=str(data.get("title") or ""),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -269,6 +276,10 @@ class CollabSession:
             if content_hash(initial) == content_hash(self.proposal.candidate):
                 initial = self.proposal.current
             elif initial != self.proposal.current:
+                merged = merge_proposal(self.proposal.current, initial, self.proposal.candidate)
+                self.proposal.conflict = self.proposal.conflict or not merged.ok
+                if merged.ok:
+                    self.proposal.candidate = merged.text
                 self.proposal.current = initial
                 self._save_proposal()
         self.document = CollabDocument(initial, document_id=self.document_id)
@@ -286,7 +297,6 @@ class CollabSession:
         self.peers: dict[str, Peer] = {}
         self.agent_tasks: dict[str, AgentTask] = {}
         self.rejected_hashes: set[str] = set()
-        self.editor_commands: list[dict[str, Any]] = []
         self.conflict: CollabConflict | None = None
         self.op_log: list[tuple[int, TextSpan]] = []
         self.debounce_s = debounce_s
@@ -337,22 +347,6 @@ class CollabSession:
                 "proposal": self.proposal.to_dict() if self.proposal else None,
             }
 
-    def latest_editor_command(self, after: str | None = None) -> dict[str, Any] | None:
-        with self._lock:
-            if not self.editor_commands:
-                return None
-            command = self.editor_commands[-1]
-            return None if command["id"] == after else dict(command)
-
-    def queue_editor_sync(self, *, force: bool = False) -> dict[str, Any]:
-        with self._lock:
-            self._queue_editor_command(
-                self.document.to_string(),
-                force=force,
-                save=True,
-            )
-            return dict(self.editor_commands[-1])
-
     def force_reload_from_disk(self) -> dict[str, Any]:
         """Replace the live CRDT with main.tex from disk and reset all peers.
 
@@ -377,7 +371,6 @@ class CollabSession:
             self.op_log.clear()
             self.conflict = None
             self.last_activity = time.time()
-            self._queue_editor_command(disk, force=True, save=True)
             event = {
                 "type": "reset_sync",
                 "update": base64.b64encode(self.document.get_update()).decode("ascii"),
@@ -390,24 +383,6 @@ class CollabSession:
             }
         self._broadcast(event)
         return event
-
-    def _queue_editor_command(
-        self,
-        text: str,
-        *,
-        force: bool = True,
-        save: bool = False,
-    ) -> None:
-        self.editor_commands.append(
-            {
-                "id": f"editor-{uuid.uuid4().hex[:10]}",
-                "text": text,
-                "force": force,
-                "save": save,
-            }
-        )
-        if len(self.editor_commands) > 20:
-            self.editor_commands = self.editor_commands[-10:]
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -528,11 +503,6 @@ class CollabSession:
             self.op_log.clear()
             self.conflict = None
             self.bridge.materialize()
-            self._queue_editor_command(
-                self.document.to_string(),
-                force=True,
-                save=True,
-            )
             event = {
                 "type": "reset_sync",
                 "update": base64.b64encode(self.document.get_update()).decode("ascii"),
@@ -623,6 +593,7 @@ class CollabSession:
             peer = self.peers.get(peer_id)
             if peer is not None:
                 peer.last_submitted = self.document.to_string()
+            self._refresh_proposal_locked()
             self.last_activity = time.time()
             event = self.snapshot_event(origin=peer_id, applied=applied)
             crdt_event = self._update_event(self.document.get_update(state_before), origin=peer_id)
@@ -648,16 +619,11 @@ class CollabSession:
             before = self.document.to_string()
             self.document.apply_update(update)
             changed = self.document.to_string() != before
+            self._refresh_proposal_locked()
             peer = self.peers.get(peer_id)
             if peer is not None:
                 peer.last_submitted = self.document.to_string()
                 peer.last_seen = time.time()
-            if changed and self.proposal is None:
-                self._queue_editor_command(
-                    self.document.to_string(),
-                    force=False,
-                    save=True,
-                )
             self.last_activity = time.time()
             event = self._update_event(update, origin=peer_id)
         if changed:
@@ -668,6 +634,42 @@ class CollabSession:
             "revision": event["revision"],
             "hash": event["hash"],
         }
+
+    def submit_agent_draft(self, *, base: str, candidate: str, task_id: str, title: str = "") -> dict[str, Any]:
+        """Review a finished task against its durable base, never replace live text."""
+        with self._lock:
+            if self.proposal is not None:
+                if self.proposal.task_id == task_id:
+                    return self.proposal_event()
+                raise RuntimeError("Сначала примите или отклоните предыдущее предложение")
+            current = self.document.to_string()
+            merged = merge_proposal(base, current, candidate)
+            if merged.ok and not merged.changed:
+                return {"type": "proposal", "proposal": None}
+            self.proposal = PaperProposal(
+                id=f"proposal-{uuid.uuid4().hex[:10]}", document_id=self.document_id,
+                source="paper-edit-agent", current=current,
+                candidate=merged.text if merged.ok else candidate,
+                base=base, task_id=task_id, title=title, conflict=not merged.ok,
+            )
+            self._save_proposal()
+            event = self.proposal_event()
+        self._broadcast(event)
+        return event
+
+    def _refresh_proposal_locked(self) -> None:
+        proposal = self.proposal
+        current = self.document.to_string()
+        if proposal is None or proposal.current == current:
+            return
+        merged = merge_proposal(proposal.current, current, proposal.candidate)
+        proposal.conflict = proposal.conflict or not merged.ok
+        if merged.ok:
+            proposal.candidate = merged.text
+        proposal.current = current
+        proposal.id = f"proposal-{uuid.uuid4().hex[:10]}"
+        self._save_proposal()
+        self._broadcast(self.proposal_event())
 
     def register_agent_task(self, task_id: str | None = None) -> AgentTask:
         tid = task_id or f"task-{uuid.uuid4().hex[:8]}"
@@ -691,6 +693,13 @@ class CollabSession:
         event: dict[str, Any] | None = None
         with self._lock:
             current = self.document.to_string()
+            if self.proposal is not None and self.proposal.source == "paper-edit-agent":
+                # Preserve an unrelated edit for recovery without replacing this task.
+                if incoming != current and incoming != self.proposal.candidate:
+                    atomic_write_text(self.proposal_root / f"{self.room_id}.external-{content_hash(incoming)[:16]}.tex", incoming)
+                self.bridge.materialize()
+                return MergeResult(ok=False, text=current, changed=False, conflict=True,
+                                   reason="agent proposal is awaiting review")
             if content_hash(incoming) == content_hash(current):
                 cleared = self.proposal is not None
                 self.proposal = None
@@ -775,12 +784,12 @@ class CollabSession:
             proposal = self.proposal
             if proposal is None or proposal.id != proposal_id:
                 raise KeyError("proposal is no longer current")
+            if proposal.conflict or self.document.to_string() != proposal.current:
+                raise KeyError("article changed; proposal requires conflict resolution")
             state_before = self.document.get_state()
             changed = self.document.replace_with(proposal.candidate)
             update = self.document.get_update(state_before)
             self.proposal = None
-            if proposal.source == "cursor-buffer":
-                self._queue_editor_command(self.document.to_string())
             self.conflict = None
             self._delete_proposal()
             materialized = self.bridge.materialize()
@@ -807,8 +816,6 @@ class CollabSession:
                 raise KeyError("proposal is no longer current")
             self.rejected_hashes.add(content_hash(proposal.candidate))
             self.proposal = None
-            if proposal.source == "cursor-buffer":
-                self._queue_editor_command(self.document.to_string())
             self.conflict = None
             self._delete_proposal()
             materialized = self.bridge.materialize()
@@ -836,7 +843,7 @@ class CollabSession:
             proposal = self.proposal
             if proposal is None or proposal.id != proposal_id:
                 raise KeyError("proposal is no longer current")
-            if self.document.to_string() != proposal.current:
+            if (accept and proposal.conflict) or self.document.to_string() != proposal.current:
                 raise KeyError("live document changed after proposal")
             hunk = next((item for item in proposal.hunks() if item["id"] == hunk_id), None)
             if hunk is None:
@@ -867,21 +874,16 @@ class CollabSession:
                     + current_lines[hunk["old_start"] : hunk["old_end"]]
                     + candidate_lines[hunk["new_end"] :]
                 )
-                if proposal.source == "cursor-buffer":
-                    self._queue_editor_command(proposal.candidate)
 
             resolved_all = proposal.current == proposal.candidate
             old_id = proposal.id
             if resolved_all:
                 self.proposal = None
                 self._delete_proposal()
-                if proposal.source == "cursor-buffer":
-                    self._queue_editor_command(self.document.to_string())
             else:
                 proposal.id = f"proposal-{uuid.uuid4().hex[:10]}"
                 self._save_proposal()
-            should_materialize = proposal.source != "cursor-buffer" or resolved_all
-            materialized = self.bridge.materialize() if should_materialize else None
+            materialized = self.bridge.materialize()
             self.last_activity = time.time()
             response = {
                 "type": "proposal_hunk_resolved",
@@ -950,7 +952,6 @@ class CollabSession:
             }
         if update_event is not None:
             self._broadcast(update_event)
-            self._queue_editor_command(text or "", force=True, save=True)
         return response
 
     def close(self) -> None:
@@ -1062,15 +1063,6 @@ _REGISTRY_LOCK = threading.RLock()
 def get_session(project_id: str, slug: str) -> CollabSession | None:
     with _REGISTRY_LOCK:
         return _REGISTRY.get(session_key(project_id, slug))
-
-
-def get_session_by_tex_path(tex_path: Path) -> CollabSession | None:
-    target = Path(tex_path).resolve()
-    with _REGISTRY_LOCK:
-        for session in _REGISTRY.values():
-            if not session.closed and session.tex_path.resolve() == target:
-                return session
-    return None
 
 
 def get_or_create_session(project_id: str, slug: str, tex_path: Path, **kwargs: Any) -> CollabSession:

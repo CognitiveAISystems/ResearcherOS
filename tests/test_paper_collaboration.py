@@ -91,11 +91,6 @@ def test_crdt_updates_are_relayed_verbatim_between_peers(tmp_path: Path) -> None
     bob.apply_update(base64.b64decode(session.sync_event()["update"]))
     assert bob.to_string() == session.document.to_string() == "hello!\n"
     assert ack["type"] == "ack"
-    command = session.latest_editor_command()
-    assert command is not None
-    assert command["text"] == "hello!\n"
-    assert command["force"] is False
-    assert command["save"] is True
     session.close()
 
 
@@ -435,7 +430,7 @@ def test_proposal_hunks_resolve_independently(tmp_path: Path) -> None:
     session = CollabSession(
         "demo", "emnlp", tex, watch=False, debounce_s=10, proposal_root=tmp_path / "proposals"
     )
-    session.import_external(candidate, source="cursor-buffer")
+    session.import_external(candidate, source="agent")
     assert session.proposal is not None
     first_id = session.proposal.id
     hunks = session.proposal.hunks()
@@ -458,13 +453,10 @@ def test_proposal_hunks_resolve_independently(tmp_path: Path) -> None:
     assert rejected["resolution"] == "rejected"
     assert session.proposal is None
     assert session.document.to_string() == "A\nb\nc\nd\ne\nf\n"
-    command = session.latest_editor_command()
-    assert command is not None
-    assert command["text"] == session.document.to_string()
     session.close()
 
 
-def test_final_accepted_hunk_reconciles_cursor_buffer(tmp_path: Path) -> None:
+def test_final_accepted_hunk_materializes_article(tmp_path: Path) -> None:
     tex = tmp_path / "main.tex"
     current = "a\nb\nc\nd\ne\nf\n"
     candidate = "A\nb\nc\nd\ne\nF\n"
@@ -472,7 +464,7 @@ def test_final_accepted_hunk_reconciles_cursor_buffer(tmp_path: Path) -> None:
     session = CollabSession(
         "demo", "emnlp", tex, watch=False, debounce_s=10, proposal_root=tmp_path / "proposals"
     )
-    session.import_external(candidate, source="cursor-buffer")
+    session.import_external(candidate, source="agent")
     proposal = session.proposal
     assert proposal is not None
     first, second = proposal.hunks()
@@ -483,9 +475,6 @@ def test_final_accepted_hunk_reconciles_cursor_buffer(tmp_path: Path) -> None:
     session.resolve_proposal_hunk(proposal.id, remaining["id"], accept=True)
     assert session.proposal is None
     assert session.document.to_string() == "a\nb\nc\nd\ne\nF\n"
-    command = session.latest_editor_command()
-    assert command is not None
-    assert command["text"] == session.document.to_string()
     assert tex.read_text(encoding="utf-8") == session.document.to_string()
     session.close()
 
@@ -498,7 +487,7 @@ def test_moved_repeated_line_is_one_atomic_hunk(tmp_path: Path) -> None:
     session = CollabSession(
         "demo", "emnlp", tex, watch=False, debounce_s=10, proposal_root=tmp_path / "proposals"
     )
-    session.import_external(candidate, source="cursor-buffer")
+    session.import_external(candidate, source="agent")
     proposal = session.proposal
     assert proposal is not None
     hunks = proposal.hunks()
@@ -556,35 +545,6 @@ def test_collab_rest_edit_and_live_get() -> None:
             assert got.text == "hello world\n"
             flushed = client.post("/projects/demo/papers/emnlp-demo/collab/flush")
             assert flushed.status_code == 200
-            buffered = client.post(
-                "/collaboration/editor-buffer",
-                json={
-                    "path": str(slot / TEX_NAME),
-                    "text": "unsaved cursor text\n",
-                    "version": 7,
-                },
-            )
-            assert buffered.status_code == 200
-            assert buffered.json()["proposal"]["source"] == "cursor-buffer"
-            assert (slot / TEX_NAME).read_text(encoding="utf-8") == "hello world\n"
-            buffer_proposal_id = buffered.json()["proposal"]["id"]
-            rejected_buffer = client.post(
-                "/projects/demo/papers/emnlp-demo/collab/proposal/reject",
-                json={"proposal_id": buffer_proposal_id},
-            )
-            assert rejected_buffer.status_code == 200
-            editor_command = client.get(
-                "/collaboration/editor-buffer/command",
-                params={"path": str(slot / TEX_NAME)},
-            )
-            assert editor_command.status_code == 200
-            assert editor_command.json()["command"]["text"] == "hello world\n"
-            forced_sync = client.post(
-                "/collaboration/editor-buffer/sync",
-                json={"path": str(slot / TEX_NAME), "force": True},
-            )
-            assert forced_sync.status_code == 200
-            assert forced_sync.json()["command"]["force"] is True
             (slot / TEX_NAME).write_text("agent candidate\n", encoding="utf-8")
             live_session = get_session("demo", "emnlp-demo")
             assert live_session is not None

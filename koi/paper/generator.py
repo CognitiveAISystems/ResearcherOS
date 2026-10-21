@@ -40,6 +40,7 @@ from koi.adapters.paths import knowledge_dir, paper_dir
 from koi.adapters.workspace import get_workspace
 from koi.paper.catalog import (
     DEFAULT_PAPER_SLUG,
+    get_paper_slot_dir,
     list_project_papers,
     prepare_paper_slot_dir,
     read_paper_meta,
@@ -161,8 +162,15 @@ def paper_status(project_id: str, paper_slug: str = DEFAULT_PAPER_SLUG) -> dict:
     return out
 
 
+def _require_new_paper(project_id: str, paper_slug: str) -> None:
+    slot = get_paper_slot_dir(project_id, paper_slug)
+    if slot is not None and (slot / TEX_NAME).is_file():
+        raise RuntimeError("Статья уже существует. Используйте «Попросить агента» в редакторе: правки появятся как предложения.")
+
+
 def start_paper_generation(project_id: str, paper_slug: str = DEFAULT_PAPER_SLUG) -> bool:
     """Пометить генерацию запущенной. False — уже идёт другая генерация."""
+    _require_new_paper(project_id, paper_slug)
     if _is_running(_read_status_file(project_id, paper_slug)):
         return False
     _write_status(
@@ -793,6 +801,7 @@ def build_paper_from_agent_text(
     if project is None:
         raise KeyError(f"Project not found: {project_id}")
 
+    _require_new_paper(project_id, paper_slug)
     d = _prepare_paper_dir(project_id, paper_slug)
     context = collect_paper_context(project, paper_slug=paper_slug)
     parsed = _parse_agent_response(agent_text) if agent_text else None
@@ -869,6 +878,7 @@ def _generate_paper_inner(
             error="Проект не найден",
         )
 
+    _require_new_paper(project_id, paper_slug)
     d = _prepare_paper_dir(project_id, paper_slug)
     context = collect_paper_context(project, paper_slug=paper_slug)
 

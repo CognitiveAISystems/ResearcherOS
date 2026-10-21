@@ -16773,3 +16773,41 @@ button.kb-doc {
   .report-block,
   .report-block-placeholder { transition: none; }
 }
+
+.paper-edit-panel, .paper-edit-summary {
+  padding: .65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: .85rem;
+}
+.paper-edit-panel summary { cursor: pointer; }
+.paper-edit-panel form { display: grid; gap: .5rem; margin-top: .65rem; }
+.paper-edit-panel textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.paper-edit-actions, .paper-edit-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.paper-edit-hint { color: var(--muted); margin: 0; }
+.paper-edit-task { padding: .6rem 0; border-top: 1px solid var(--border); }
+.paper-edit-task p { margin: .35rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.paper-edit-task button + button { margin-left: .5rem; }
+#paper-edit-tasks { max-height: 16rem; overflow: auto; }
+.paper-edit-panel, .paper-edit-summary { flex-shrink: 0; }
+.paper-edit-panel[open] { max-height: 22rem; overflow: auto; }
+.paper-edit-panel :is(textarea, select) {
+  padding: .45rem .6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+.paper-edit-panel :is(textarea, select, summary):focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.paper-edit-panel .btn:disabled {
+  background: var(--surface-muted-btn);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}

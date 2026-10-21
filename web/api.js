@@ -408,6 +408,14 @@ export const KoiApi = {
     }),
   getPaperTexMeta: (projectId, slug = "default") =>
     api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/tex/meta`),
+  paperEditTasks: (projectId, slug) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/edit-tasks`),
+  startPaperEdit: (projectId, slug, prompt, backend = null) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/edit-tasks`, {
+      method: "POST", body: JSON.stringify({ prompt, backend }),
+    }),
+  resolvePaperEdit: (projectId, slug, taskId, action) =>
+    api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/edit-tasks/${taskId}/${action}`, { method: "POST" }),
   savePaperTex: (projectId, slug, content) =>
     api(`/projects/${projectId}/papers/${encodeURIComponent(slug)}/tex`, {
       method: "PUT",

@@ -15,7 +15,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="ResearchOS desktop server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--paper-edit-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.paper_edit_worker:
+        from koi.paper.edit_worker import main as edit_worker_main
+        edit_worker_main()
+        return 0
 
     stopped = threading.Event()
     server = DesktopServer(host=args.host, port=args.port)

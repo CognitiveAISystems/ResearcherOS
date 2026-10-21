@@ -722,6 +722,31 @@
               <span id="paper-tex-selection" class="paper-tex-selection">Выделите фрагмент текста</span>
               <button type="button" id="btn-paper-comment-add" class="btn btn-primary btn-small paper-comment-cta" disabled>Комментировать</button>
             </header>
+            <details id="paper-edit-panel" class="paper-edit-panel">
+              <summary>Попросить агента</summary>
+              <form id="paper-edit-form">
+                <label for="paper-edit-prompt">Что изменить в статье?</label>
+                <textarea id="paper-edit-prompt" rows="2" required maxlength="20000" placeholder="Например, сократить введение и уточнить вклад работы"></textarea>
+                <div class="paper-edit-actions">
+                  <label for="paper-edit-backend">Агент</label>
+                  <select id="paper-edit-backend">
+                    <option value="">Автоматически</option>
+                    <option value="cursor">Cursor</option>
+                    <option value="codex">Codex</option>
+                    <option value="claude">Claude</option>
+                  </select>
+                  <button type="submit" class="btn btn-primary btn-small">Предложить правки</button>
+                </div>
+                <p class="paper-edit-hint">Агент работает с копией. Статья изменится после принятия правок.</p>
+              </form>
+              <p id="paper-edit-status" role="status" aria-live="polite"></p>
+              <div id="paper-edit-tasks"></div>
+            </details>
+            <div id="paper-proposal-summary" class="paper-edit-summary hidden" aria-live="polite">
+              <span id="paper-proposal-title"></span>
+              <button type="button" id="paper-proposal-accept-all" class="btn btn-primary btn-small">Принять всё</button>
+              <button type="button" id="paper-proposal-reject-all" class="btn btn-small">Отклонить всё</button>
+            </div>
             <div id="paper-tex-scroll" class="paper-tex-scroll" tabindex="0">
               <div id="paper-tex-scroll-inner" class="paper-tex-scroll-inner">
                 <div class="paper-tex-editor">
@@ -829,6 +854,6 @@
   <div id="koi-widgets-root" aria-live="polite"></div>
 
   <script type="module" src="desktop-onboarding.js"></script>
-  <script type="module" src="app.js?v=20261011archive-ui"></script>
+  <script type="module" src="app.js?v=20261021paper-edits"></script>
 </body>
 </html>

@@ -106,6 +106,7 @@ def run_codex_exec(
     cwd: Path | str | None = None,
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
+    externally_sandboxed: bool = False,
 ) -> Optional[str]:
     """Non-interactive вызов локального Codex CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -113,7 +114,8 @@ def run_codex_exec(
     if not bin_path:
         return None
 
-    sandbox_mode = "workspace-write" if allow_edits else "read-only"
+    # The paper worker already has OS protection; macOS forbids nested Seatbelt.
+    sandbox_mode = "danger-full-access" if externally_sandboxed else ("workspace-write" if allow_edits else "read-only")
     with tempfile.NamedTemporaryFile(prefix="koi-codex-", suffix=".txt", delete=False) as tmp:
         output_path = Path(tmp.name)
     cmd = [
@@ -364,6 +366,7 @@ def run_agent(
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
     backend: Optional[str] = None,
+    externally_sandboxed: bool = False,
 ) -> tuple[Optional[str], Optional[str]]:
     """Запустить агента первым доступным бэкендом.
 
@@ -378,7 +381,8 @@ def run_agent(
         runner = _RUNNERS.get(name)
         if runner is None:
             continue
-        text = runner(prompt, cwd=cwd, timeout=timeout, allow_edits=allow_edits)
+        extra = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
+        text = runner(prompt, cwd=cwd, timeout=timeout, allow_edits=allow_edits, **extra)
         if text:
             return text, name
     return None, None

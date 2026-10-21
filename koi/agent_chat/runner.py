@@ -85,10 +85,20 @@ def _run_local_agent(
     timeout: int = 1800,
     model: str | None = None,
     fallback: bool = True,
+    log_activity: bool = True,
+    cli_agent: str | None = None,
+    externally_sandboxed: bool = False,
 ) -> tuple[str | None, str | None]:
     """Prefer the same Cursor CLI used by literature, without opening Terminal.app."""
     workdir = cwd or _ws.agent_cwd()
+    if cli_agent in ("codex", "claude"):
+        return run_agent(prompt, cwd=workdir, backend=cli_agent, timeout=timeout, allow_edits=force,
+                         **({"externally_sandboxed": True} if externally_sandboxed else {}))
+    if cli_agent == "cursor":
+        fallback = False
     agent_bin = find_agent_bin()
+    if cli_agent == "cursor" and not agent_bin:
+        return None, None
     if agent_bin:
         process = subprocess.Popen(
             _cursor_print_command(agent_bin, mode=mode, force=force, model=model),
@@ -117,11 +127,13 @@ def _run_local_agent(
                     message = "".join(part.get("text", "") for part in parts if part.get("type") == "text").strip()
                     if message:
                         answer = message
-                        _note_chat(item_id, f"Агент: {message[:500]}")
+                        if log_activity:
+                            _note_chat(item_id, f"Агент: {message[:500]}")
                 elif kind == "tool_call" and event.get("subtype") == "started":
                     calls = event.get("tool_call") or {}
                     name = next((key.removesuffix("ToolCall") for key in calls if key.endswith("ToolCall")), "tool")
-                    _note_chat(item_id, f"Агент использует инструмент: {name}.")
+                    if log_activity:
+                        _note_chat(item_id, f"Агент использует инструмент: {name}.")
                 elif kind == "result":
                     result_text = str(event.get("result") or "").strip()
             process.wait()
@@ -132,13 +144,15 @@ def _run_local_agent(
                 process.wait()
         if process.returncode == 0 and (answer or result_text):
             return answer or result_text, "Cursor CLI"
-        _note_chat(item_id, "Cursor CLI не вернул ответ; пробую другой локальный агент.")
+        if log_activity:
+            _note_chat(item_id, "Cursor CLI не вернул ответ; пробую другой локальный агент.")
         if not fallback:
             return None, None
     if agent_bin and not fallback:
         return None, None
     for backend in ("codex", "claude"):
-        text, name = run_agent(prompt, cwd=workdir, backend=backend, timeout=timeout, allow_edits=force)
+        text, name = run_agent(prompt, cwd=workdir, backend=backend, timeout=timeout, allow_edits=force,
+                         **({"externally_sandboxed": True} if externally_sandboxed else {}))
         if text:
             return text, name
     return None, None

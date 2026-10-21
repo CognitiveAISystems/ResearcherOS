@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -23,7 +22,6 @@ from koi.paper.collaboration.network import (
 from koi.paper.collaboration.session import (
     get_or_create_session,
     get_session,
-    get_session_by_tex_path,
     register_agent_task,
 )
 
@@ -46,17 +44,6 @@ class ProposalResolutionBody(BaseModel):
 
 class ProposalHunkResolutionBody(ProposalResolutionBody):
     hunk_id: str
-
-
-class EditorBufferBody(BaseModel):
-    path: str
-    text: str
-    version: int | None = None
-
-
-class EditorSyncBody(BaseModel):
-    path: str
-    force: bool = False
 
 
 def _slot(project_id: str, slug: str):
@@ -211,39 +198,6 @@ def reject_collab_proposal_hunk(
         return session.resolve_proposal_hunk(body.proposal_id, body.hunk_id, accept=False)
     except KeyError as exc:
         raise HTTPException(409, "Фрагмент уже изменился; проверьте актуальный diff") from exc
-
-
-@router.post("/collaboration/editor-buffer")
-def post_editor_buffer(body: EditorBufferBody) -> dict[str, Any]:
-    session = get_session_by_tex_path(Path(body.path))
-    if session is None:
-        raise HTTPException(404, "Для main.tex нет активной collaborative session")
-    session.import_external(body.text, source="cursor-buffer")
-    proposal = session.proposal.to_dict() if session.proposal else None
-    return {
-        "accepted": True,
-        "version": body.version,
-        "proposal": proposal,
-    }
-
-
-@router.get("/collaboration/editor-buffer/command")
-def get_editor_buffer_command(
-    path: str = Query(...),
-    after: str | None = Query(default=None),
-) -> dict[str, Any]:
-    session = get_session_by_tex_path(Path(path))
-    if session is None:
-        raise HTTPException(404, "Для main.tex нет активной collaborative session")
-    return {"command": session.latest_editor_command(after)}
-
-
-@router.post("/collaboration/editor-buffer/sync")
-def post_editor_buffer_sync(body: EditorSyncBody) -> dict[str, Any]:
-    session = get_session_by_tex_path(Path(body.path))
-    if session is None:
-        raise HTTPException(404, "Для main.tex нет активной collaborative session")
-    return {"command": session.queue_editor_sync(force=body.force)}
 
 
 @router.post("/projects/{project_id}/papers/{slug}/collab/agent-task")

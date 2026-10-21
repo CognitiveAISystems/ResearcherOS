@@ -94,3 +94,45 @@ If Chromium is not installed yet:
    local `main.tex` differs rather than silently replacing or merging it.
 9. Test once with TURN disabled and once from networks that require the
    configured TURN relay.
+
+## Agent edits through working copies
+
+In the paper editor, open **Попросить агента**, describe an edit, and choose
+Cursor, Codex, Claude, or automatic selection. Review the resulting changes
+in the editor, individually or with **Принять всё / Отклонить всё**. The comment
+button **Попросить агента** uses the same workflow.
+
+Each task stores a base snapshot, a copy of the paper directory, and its status
+under the runtime `paper-edits/` directory. The agent edits the copy with ordinary
+file tools. Saves do not change the accepted article. When the process finishes,
+ResearcherOS compares the copy with the base and the current article. Independent
+changes merge; overlapping edits produce a conflict and cannot be accepted.
+Copy the desired text before rejecting a conflicting proposal, then edit the
+accepted article manually. Failed or interrupted tasks retain their copies and
+can be submitted for review later. One active task/proposal is allowed per paper.
+
+The editor currently reviews `main.tex`. Bibliography, style, and included TeX
+files are copied for context and compilation; changing them blocks submission
+instead of silently dropping those edits. Direct re-generation of an existing
+article is blocked; use an edit task instead.
+
+Managed CLI processes protect the original directory and task metadata using
+`sandbox-exec` on macOS or `bubblewrap` on Linux. A missing sandbox prevents launch;
+there is no unrestricted fallback. Windows managed launching is not yet supported.
+This restriction applies to processes launched by ResearcherOS, not to an
+independently launched IDE with write access to the original files. The former
+VS Code buffer extension and its synchronization API have been removed.
+Codex uses the outer ResearcherOS sandbox for these tasks; nesting its macOS
+sandbox would prevent tool execution. Other Codex launches retain their own sandbox.
+
+Local API (all paths start with `/projects/{project_id}/papers/{slug}`):
+
+- `GET /edit-tasks`: durable task history.
+- `POST /edit-tasks`: `{ "prompt": "…", "backend": "codex" }` starts a task.
+- With `"run_agent": false`, creation instead returns `workspace`, the directory
+  to edit with any file-based tool. This external tool is not sandboxed by ResearcherOS.
+- `POST /edit-tasks/{task_id}/submit`: collect the saved draft as a proposal.
+- `POST /edit-tasks/{task_id}/cancel`: close an inactive task without applying it.
+
+Validation: `pytest -q tests/test_paper_edit_tasks.py tests/test_paper_collaboration.py
+ tests/test_paper_edit_ui.py` (the browser check requires Playwright Chromium).
