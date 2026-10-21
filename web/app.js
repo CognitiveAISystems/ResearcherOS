@@ -22,6 +22,7 @@ import {
   showKoiLoader,
   hideKoiLoader,
 } from "./koi-loader.js";
+import { ProjectAttention, projectProximity } from "./project-attention.js";
 import { MindmapCamera } from "./lab-canvas.js?v=20260803b";
 import { renderMarkdown } from "./markdown.js";
 import { initImageLightbox } from "./image-lightbox.js?v=20260703b";
@@ -2256,6 +2257,54 @@ function syncLabProject(project) {
   rebuildLabWorldLayoutFull();
 }
 
+const projectAttention = new ProjectAttention();
+let attentionUpdateFrame = 0;
+
+function attentionProximity() {
+  const viewport = document.getElementById("mindmap-viewport");
+  if (!viewport) return {};
+  // ponytail: scan mounted nodes; cache geometry if large maps need it.
+  const nodes = [...viewport.querySelectorAll(".node-wrap[data-project-id] .map-node:not(.add-node)")]
+    .map(el => ({ id: el.closest("[data-project-id]").dataset.projectId,
+      rect: el.closest(".node-wrap").getBoundingClientRect() }));
+  return projectProximity(nodes, viewport.getBoundingClientRect());
+}
+
+function activateAttentionProject(id) {
+  const project = state.lab?.projectsById?.[id];
+  if (!project) return;
+  const changed = state.project?.id !== id;
+  state.project = project;
+  if (changed) {
+    state.activeNodeId = null;
+    state.kanbanNodeId = null;
+    state.questionsNodeId = null;
+  }
+  if (!isCompositeVirtualId(id)) state.literatureBranchId = id;
+  else if (!(project.members || []).some(m => m.project_id === state.literatureBranchId)) {
+    state.literatureBranchId = null;
+  }
+  setActiveProjectInList(id);
+  updatePaperReviewLink();
+  updateAgentChatScope();
+}
+
+function recordProjectAttention(id) {
+  if (!state.lab?.projectsById?.[id]) return;
+  projectAttention.interact(id, attentionProximity(), performance.now());
+  activateAttentionProject(id);
+}
+
+function updateProjectAttention() {
+  if (document.hidden || !state.lab || document.body.classList.contains("modal-open") ||
+      labCamera?._anim) {
+    projectAttention.reset();
+    return;
+  }
+  const id = projectAttention.choose(state.project?.id, attentionProximity(), performance.now());
+  if (id && id !== state.project?.id) activateAttentionProject(id);
+}
+
 function ensureLabCamera() {
   if (labCamera) return;
   const viewport = document.getElementById("mindmap-viewport");
@@ -2264,9 +2313,27 @@ function ensureLabCamera() {
 
   labCamera = new MindmapCamera(viewport, canvas, {
     onChange: () => {
+      if (!attentionUpdateFrame) {
+        attentionUpdateFrame = requestAnimationFrame(() => {
+          attentionUpdateFrame = 0;
+          updateProjectAttention();
+        });
+      }
       syncLabActivityOverlay();
     },
   });
+  // Capture before node/card handlers, including those stopping propagation.
+  for (const type of ["click", "contextmenu"]) {
+    viewport.addEventListener(type, event => {
+      if (document.body.classList.contains("modal-open")) return;
+      const owner = event.target.closest?.("[data-project-id]");
+      if (owner && !owner.classList.contains("lab-project-frame") &&
+          !viewport.classList.contains("is-panning")) {
+        recordProjectAttention(owner.dataset.projectId);
+      }
+    }, true);
+  }
+  setInterval(updateProjectAttention, 500);
   bindMethodActivityZoomPreview(viewport, () => labCamera);
   syncLabActivityOverlay();
 
@@ -2736,6 +2803,7 @@ async function focusLabProject(projectId, { animate = false, reload = false } = 
       state.lab.projectsById[projectId] = await KoiApi.getProject(projectId);
     }
   }
+  recordProjectAttention(projectId);
   state.project = state.lab.projectsById[projectId];
   if (isCompositeVirtualId(projectId)) {
     const members = new Set(
@@ -8074,7 +8142,7 @@ function toggleAgentChatPanel(open) {
   trigger?.setAttribute("aria-label", show ? "Свернуть чат" : "Открыть чат");
   if (trigger) trigger.title = show ? "Свернуть чат" : "Открыть чат";
   if (show) {
-    agentChatProjectOverrideId = null;
+    agentChatProjectOverrideId = primaryMemberProjectId() || null;
     void refreshAppSettings();
     updateAgentChatScope();
     showAgentChatTab("chat");
