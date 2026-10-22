@@ -1,0 +1,41 @@
+{
+  "workspace": "lukashevskiy",
+  "project": "verl-agent-craftext-safety",
+  "tail": 20,
+  "runs": [
+    {"id": "10cca6c65cf2436cb97e70fc0b964332", "label": "PPO-Lag wood achievements", "color": "#0ea5e9"}
+  ],
+  "panels": [
+    {
+      "file": "quality.png",
+      "charts": [
+        {"metric": "episode/success_rate", "title": "Доля успешных эпизодов", "ylabel": "Доля", "ylim": [0, 1]},
+        {"metric": "episode/reward/mean", "title": "Среднее вознаграждение", "ylabel": "Вознаграждение"}
+      ]
+    },
+    {
+      "file": "safety.png",
+      "charts": [
+        {"metric": "actor/avg_episodic_cost", "title": "Средняя стоимость по траекториям", "ylabel": "Стоимость"},
+        {"metric": "actor/episodic_cost_max", "title": "Максимум стоимости в пакете", "ylabel": "Стоимость"},
+        {"metric": "actor/lagrange_lambda", "title": "Множитель ограничения", "ylabel": "lambda"}
+      ]
+    },
+    {
+      "file": "cost-critic.png",
+      "charts": [
+        {"metric": "cost_critic/vf_loss", "title": "Функция потерь критика стоимости", "ylabel": "Значение функции потерь"},
+        {"metric": "cost_critic/vf_explained_var_true", "title": "Объяснённая дисперсия", "ylabel": "Доля", "ylim": [-1, 1]},
+        {"metric": "cost_critic/grad_norm", "title": "Норма градиента", "ylabel": "Норма"}
+      ]
+    },
+    {
+      "file": "response-length.png",
+      "charts": [
+        {"metric": "response_length/mean", "title": "Средняя длина ответа", "ylabel": "Токены"},
+        {"metric": "response_length/max", "title": "Максимальная длина ответа", "ylabel": "Токены"},
+        {"metric": "response_length/min", "title": "Минимальная длина ответа", "ylabel": "Токены"}
+      ]
+    }
+  ]
+}
