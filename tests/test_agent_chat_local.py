@@ -132,6 +132,8 @@ def test_cli_agents_report_only_installed_bins(monkeypatch) -> None:
     monkeypatch.setattr(cursor_agent_terminal, "find_agent_bin", lambda: Path("/usr/bin/agent"))
     monkeypatch.setattr(agent_backends, "_codex_ready", lambda: False)
     monkeypatch.setattr(agent_backends, "_claude_bin", lambda: None)
+    from koi.adapters import acp_agents
+    monkeypatch.setattr(acp_agents, "agents", lambda: [])
     listed = {row["id"]: row["available"] for row in agent_backends.cli_agents()}
     assert listed == {"cursor": True, "codex": False, "claude": False}
 

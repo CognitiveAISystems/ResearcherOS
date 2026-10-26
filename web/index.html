@@ -85,7 +85,7 @@
           <div id="projects-archive-bar" class="projects-archive-bar" hidden></div>
           <ul id="project-list" class="project-list" role="list"></ul>
           <div class="projects-sidebar__footer">
-            <button type="button" id="btn-new-project" class="btn btn-primary projects-sidebar__add">+ Новый проект</button>
+            <button type="button" id="btn-new-project" class="btn btn-primary projects-sidebar__add">Новое дерево</button>
           </div>
         </div>
       </aside>
@@ -162,17 +162,6 @@
           </div>
           <p id="canvas-hint" class="sr-only" aria-live="polite"></p>
         </div>
-        <div class="mindmap-corner-tr">
-          <button type="button" id="btn-agent-chat-welcome" class="agent-chat-trigger" title="Спросить агента" aria-controls="agent-chat-panel">
-            <span class="agent-chat-trigger__label">Press to ask the questions</span>
-          </button>
-        </div>
-        <div class="mindmap-zoom-controls" aria-label="Масштаб">
-          <button type="button" id="btn-zoom-in" class="mindmap-zoom-btn" title="Приблизить">+</button>
-          <button type="button" id="btn-zoom-out" class="mindmap-zoom-btn" title="Отдалить">−</button>
-          <button type="button" id="btn-zoom-fit-lab" class="mindmap-zoom-btn" title="Вся лаборатория">◇</button>
-          <button type="button" id="btn-zoom-fit-project" class="mindmap-zoom-btn" title="Текущий проект">▣</button>
-        </div>
         <nav class="workspace-dock" aria-label="Панель инструментов">
           <button type="button" id="btn-knowledge" class="workspace-dock__item" title="База знаний проекта">
             <svg class="workspace-dock__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3L2 8.25v8.5L12 22l10-5.25v-8.5L12 3zm0 2.18l7.4 3.7L12 12.57 4.6 8.88 12 5.18zM4 10.09l7 3.5v7.16l-7-3.5V10.1zm9 10.66v-7.16l7-3.5v7.16l-7 3.5z"/></svg>
@@ -195,27 +184,28 @@
     </main>
 
     <aside id="agent-chat-panel" class="agent-chat-panel hidden" aria-labelledby="agent-chat-title">
+<div class="conversation-layout"><div class="conversation-content">
       <div class="agent-chat-header">
+
         <div class="agent-chat-heading">
-          <h2 id="agent-chat-title" class="agent-chat-title">Агент проекта</h2>
+          <h2 id="agent-chat-title" class="agent-chat-title" data-conversation-title>Новый чат</h2><p class="conversation-context" data-conversation-context></p>
 
         </div>
+        <button type="button" id="btn-chat-collapse" class="conversation-icon-button" aria-label="Свернуть чат" title="Свернуть чат" aria-controls="agent-chat-log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
       </div>
       <p id="agent-chat-scope" class="agent-chat-scope" hidden></p>
-      <div class="agent-chat-tabs" role="tablist" aria-label="Чат и работа агента">
-        <button type="button" id="agent-chat-tab-chat" role="tab" aria-selected="true" class="is-active">Чат</button>
-        <button type="button" id="agent-chat-tab-activity" role="tab" aria-selected="false">Работа агента</button>
-      </div>
-      <div id="agent-chat-log" class="agent-chat-log" role="tabpanel" aria-live="polite"></div>
-      <div id="agent-chat-activity" class="agent-chat-activity hidden" role="tabpanel" aria-live="polite"></div>
-      <form id="agent-chat-form" class="agent-chat-form">
+
+      <div id="agent-chat-log" aria-label="Переписка" class="agent-chat-log" role="region" aria-live="polite"></div>
+      <div id="agent-chat-activity" aria-label="Журнал работы агента" class="agent-chat-activity hidden" role="region" aria-live="polite"></div>
+      <div id="agent-chat-controls" class="conversation-controls" role="status"></div>
+<form id="agent-chat-form" class="agent-chat-form">
         <div class="agent-chat-composer">
         <label class="sr-only" for="agent-chat-input">Вопрос или поручение</label>
         <textarea
           id="agent-chat-input"
           class="agent-chat-input"
           rows="2"
-          placeholder="Задача агенту или /question для вопроса…"
+          placeholder="Например, сравни результаты экспериментов…"
           aria-describedby="agent-chat-form-status"
         ></textarea>
         <label class="agent-cli-picker" title="Выбрать агента">
@@ -231,7 +221,7 @@
         </div>
         <p id="agent-chat-form-status" class="agent-chat-form-status" role="status" aria-live="polite" hidden></p>
       </form>
-    </aside>
+    </div><nav id="agent-chat-conversations" class="conversation-sidebar" aria-label="Список чатов"></nav><div class="conversation-rail" role="group" aria-label="Инструменты разговора"><button type="button" class="conversation-icon-button conversation-nav-toggle" data-chat-navigation aria-label="Открыть список чатов" title="Открыть список чатов" aria-controls="agent-chat-conversations" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button><button type="button" class="conversation-icon-button" data-current-project aria-label="Показывать только текущий проект" title="Показывать только текущий проект" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg></button></div></div></aside>
   </div>
 
   <!-- Настройки -->
@@ -239,8 +229,8 @@
     <div class="modal-backdrop" data-close="create-project-modal"></div>
     <div class="modal-panel modal-panel--narrow">
       <button type="button" class="modal-close" data-close="create-project-modal" aria-label="Закрыть">×</button>
-      <p class="modal-type">Новый проект</p>
-      <h2 id="create-project-title" class="inline-edit-title">Создать проект</h2>
+      <p class="modal-type">Новое дерево</p>
+      <h2 id="create-project-title" class="inline-edit-title">Создать дерево исследований</h2>
       <form id="create-project-form" class="form create-project-form">
         <label for="create-project-title-input">Название проекта</label>
         <input
@@ -393,12 +383,6 @@
   <div id="kanban-modal" class="modal hidden" role="dialog" aria-labelledby="kanban-node-title-display">
     <div class="modal-backdrop" data-close="kanban-modal"></div>
     <div class="modal-panel modal-panel--kanban">
-      <div class="kanban-modal-actions">
-        <button type="button" id="kanban-focus-toggle" class="kanban-hint-btn kanban-focus-btn" aria-pressed="false" aria-label="Фокус: в работе, очередь и изменённые сегодня" title="Фокус: в работе, очередь и изменённые сегодня">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="2.25"/></svg>
-        </button>
-        <button type="button" class="modal-close" data-close="kanban-modal" aria-label="Закрыть">×</button>
-      </div>
       <header class="kanban-modal-header">
         <div class="kanban-modal-headline">
           <div class="kanban-modal-headline__text">
@@ -406,8 +390,13 @@
             <h2 id="kanban-node-title-display" class="inline-edit-text inline-edit-title kanban-modal-title" title="Двойной клик — редактировать"></h2>
             <input type="text" id="kanban-node-title-input" class="inline-edit-field hidden" />
           </div>
+      <div class="kanban-modal-actions">
+        <button type="button" id="kanban-details-toggle" class="kanban-hint-btn kanban-details-toggle" popovertarget="kanban-method-details" aria-label="Описание и мастер-отчёты" title="Описание и мастер-отчёты"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button>
+        <button type="button" id="kanban-filters-toggle" class="kanban-filters-toggle" popovertarget="kanban-board-filters" aria-label="Фильтры" title="Фильтры"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg><span class="kanban-filters-toggle__label">Фильтры</span><span id="kanban-filter-count" class="kanban-filter-count" hidden></span></button>
+        <button type="button" class="modal-close" data-close="kanban-modal" aria-label="Закрыть">×</button>
+      </div>
         </div>
-        <details id="kanban-method-details" class="kanban-method-details">
+        <details id="kanban-method-details" class="kanban-method-details kanban-header-popover" popover="auto" open>
           <summary>Описание и мастер-отчёты</summary>
           <div class="kanban-node-meta kanban-node-meta--compact">
             <p id="kanban-node-desc-display" class="inline-edit-text inline-edit-desc kanban-node-desc is-clamped" data-placeholder="Описание (двойной клик)"></p>
@@ -423,14 +412,15 @@
           </section>
         </details>
         <p class="modal-desc kanban-modal-hint hidden" id="kanban-modal-hint">⠿ — перетащить · булавка — закрепить сверху · + в колонке — новая карточка · двойной клик — правка · в Done под заголовком — краткий вывод · ↗ — отчёт</p>
-        <div class="kanban-modal-toolbar">
-          <div id="kanban-board-filters" class="kanban-board-filters" aria-label="Фильтры доски">
+          <div id="kanban-board-filters" class="kanban-board-filters kanban-header-popover" popover="auto" role="group" aria-label="Фильтры доски">
+            <div class="kanban-filter-heading">Период изменения</div>
             <div id="kanban-date-filter" class="kanban-date-filter" role="group" aria-label="Период изменения"></div>
             <div id="kanban-tag-filter" class="kanban-tag-filter kanban-tag-filter--inline hidden" aria-label="Фильтр по тегам"></div>
-            <button type="button" id="kanban-tags-settings" class="kanban-hint-btn" aria-label="Настройки тегов" title="Настройки тегов">⚙</button>
+            <div class="kanban-filter-footer">
+            <button type="button" id="kanban-tags-settings" class="kanban-hint-btn" aria-label="Настройки тегов">Настройки тегов</button>
             <button type="button" id="kanban-filters-clear" class="kanban-filters-clear hidden" title="Сбросить все фильтры" aria-label="Сбросить все фильтры">Сбросить</button>
+            </div>
           </div>
-        </div>
       </header>
       <div class="kanban-modal-body">
         <div id="kanban-pane-board" class="kanban-pane is-active">
@@ -501,34 +491,22 @@
       <p class="modal-type">Отчёт</p>
       <p id="card-report-filename" class="card-report-filename"></p>
       <div class="report-workspace">
-        <details class="report-toc" id="report-toc">
-          <summary>Оглавление</summary>
-          <nav aria-label="Разделы отчёта"></nav>
-        </details>
-        <div class="report-document">
-          <h2 id="card-report-card-title" class="inline-edit-title"></h2>
-          <div id="card-report-tags" class="card-tags"></div>
-          <div class="report-toolbar">
-            <button type="button" id="report-agent-open" class="btn">Сформулировать постановку</button>
-          </div>
-          <textarea id="card-report-editor" hidden></textarea>
-          <div id="card-report-preview" class="markdown-preview report-blocks"></div>
-        </div>
         <aside id="report-interview" class="report-interview" hidden aria-label="Подготовка постановки">
           <div class="report-chat-resize" role="separator" tabindex="0" aria-label="Ширина чата" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="680" aria-valuenow="320" aria-controls="report-interview"></div>
-          <div class="report-chat-navigation">
-            <div class="agent-chat-tabs" role="tablist" aria-label="Чат и работа агента">
-              <button type="button" id="report-interview-tab-chat" role="tab" aria-selected="true" class="is-active">Чат</button>
-              <button type="button" id="report-interview-tab-activity" role="tab" aria-selected="false">Работа агента</button>
-            </div>
-            <button type="button" id="report-agent-close" class="agent-chat-close" aria-label="Свернуть чат" title="Свернуть чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 7 7-7 7m7-14 7 7-7 7"/></svg></button>
+<div class="conversation-layout"><div class="conversation-content">
+          <div class="agent-chat-header">
+
+            <div class="agent-chat-heading"><h3 class="agent-chat-title" data-conversation-title>Новый чат</h3><p class="conversation-context" data-conversation-context>Чат карточки</p></div>
+            <button type="button" id="report-agent-close" class="agent-chat-close" aria-label="Свернуть чат" title="Свернуть чат"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
           </div>
-          <div id="report-interview-log" class="agent-chat-log" role="tabpanel" aria-live="polite"></div>
-          <div id="report-interview-activity" class="agent-chat-activity hidden" role="tabpanel" aria-live="polite"></div>
-          <form id="report-interview-form" class="agent-chat-form">
+
+          <div id="report-interview-log" aria-label="Переписка" class="agent-chat-log" role="region" aria-live="polite"></div>
+          <div id="report-interview-activity" aria-label="Журнал работы агента" class="agent-chat-activity hidden" role="region" aria-live="polite"></div>
+          <div id="report-interview-controls" class="conversation-controls" role="status"></div>
+<form id="report-interview-form" class="agent-chat-form">
             <div class="agent-chat-composer">
               <label class="sr-only" for="report-interview-input">Ответ агенту или идея эксперимента</label>
-              <textarea id="report-interview-input" class="agent-chat-input" rows="2" placeholder="Задача агенту, /question, /grill_me или /make_report" required></textarea>
+              <textarea id="report-interview-input" class="agent-chat-input" rows="2" placeholder="Например, помоги уточнить постановку…" required></textarea>
               <label class="agent-cli-picker" title="Выбрать агента">
                 <select class="agent-cli-select" data-cli-agent aria-label="Выбрать агента"></select>
               </label>
@@ -542,9 +520,22 @@
             </div>
             <p id="report-interview-status" class="agent-chat-form-status" role="status" hidden></p>
           </form>
-        </aside>
+        </div><nav id="report-interview-conversations" class="conversation-sidebar" aria-label="Список чатов"></nav><div class="conversation-rail" role="group" aria-label="Инструменты разговора"><button type="button" class="conversation-icon-button conversation-nav-toggle" data-chat-navigation aria-label="Открыть список чатов" title="Открыть список чатов" aria-controls="report-interview-conversations" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button><button type="button" id="report-interview-tab-activity" class="conversation-icon-button" aria-label="Журнал работы агента" title="Журнал работы агента" aria-pressed="false" aria-controls="report-interview-activity"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button></div></div></aside>
+        <div class="report-document">
+          <h2 id="card-report-card-title" class="inline-edit-title"></h2>
+          <div id="card-report-tags" class="card-tags"></div>
+          <div class="report-toolbar">
+            <button type="button" id="report-agent-open" class="btn">Сформулировать постановку</button>
+          </div>
+          <textarea id="card-report-editor" hidden></textarea>
+          <div id="card-report-preview" class="markdown-preview report-blocks"></div>
+        </div>
+        <details class="report-toc" id="report-toc">
+          <summary>Оглавление</summary>
+          <nav aria-label="Разделы отчёта"></nav>
+        </details>
       </div>
-      <button type="button" id="report-agent-fab" class="agent-chat-trigger report-agent-fab" aria-label="Спросить агента">
+      <button type="button" id="report-agent-fab" class="agent-chat-trigger report-agent-fab" aria-label="Спросить агента" title="Спросить агента" aria-controls="report-interview" aria-expanded="false">
         <svg class="report-agent-fab__mark" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
           <circle cx="12" cy="12" r="7.2" fill="none" stroke="currentColor" stroke-width="1.4"></circle>
@@ -865,5 +856,6 @@
 
   <script type="module" src="desktop-onboarding.js"></script>
   <script type="module" src="app.js?v=20261021paper-edits"></script>
+  <script type="module" src="tooltips.js"></script>
 </body>
 </html>

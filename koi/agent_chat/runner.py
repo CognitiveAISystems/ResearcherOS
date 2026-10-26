@@ -28,6 +28,16 @@ _ws = get_workspace()
 
 def _sdk_prompt(item_id: str) -> str:
     ctx = build_context(item_id)
+    if "project_id" in ctx and ctx["project_id"] is None:
+        return (
+            "Ты агент ResearcherOS. Этот чат не привязан к проекту. Запрос может касаться "
+            "всех исследований рабочего пространства. В контексте дан список проектов и пути "
+            "к их исследовательским материалам. Изучи нужные research.json и отчёты, "
+            "ссылайся на найденные результаты. Не приписывай вопрос текущему проекту интерфейса. "
+            "Перед изменением файлов прочитай AGENTS.md соответствующего проекта. "
+            + ("Не меняй файлы. " if ctx.get("purpose") == "question" else "")
+            + "Ответь по-русски.\n\nКонтекст:\n" + json.dumps(ctx, ensure_ascii=False, indent=2)
+        )
     if ctx.get("purpose") in ("report_grill", "grill_me"):
         from koi.agent_chat.report_grill import build_prompt
         return build_prompt(ctx)
@@ -247,6 +257,9 @@ def process_item(item_id: str) -> bool:
             )
         )
     )
+    if chosen and chosen.startswith("acp:"):
+        submit_answer(item_id, "ACP отложен. Выберите Cursor, Codex или Claude и повторите запрос.", answer_kind="warning")
+        return True
     if not available:
         if local_mode:
             label = chosen_row["label"] if chosen_row else "Локальный агент"

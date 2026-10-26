@@ -187,7 +187,7 @@ class LiteratureSelectionBody(BaseModel):
 
 
 class AgentChatBody(BaseModel):
-    project_id: str = Field(min_length=1)
+    project_id: Optional[str] = Field(default=None, min_length=1)
     question: str = Field(min_length=1)
     method_id: Optional[str] = None
     node_id: Optional[str] = None
@@ -195,7 +195,24 @@ class AgentChatBody(BaseModel):
     board_id: Optional[str] = None
     card_id: Optional[str] = None
     report_markdown: str = ""
-    cli_agent: Optional[Literal["cursor", "codex", "claude"]] = None
+    cli_agent: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class ConversationScopeBody(BaseModel):
+    project_id: Optional[str] = Field(default=None, min_length=1)
+    board_id: Optional[str] = None
+    card_id: Optional[str] = None
+
+
+class ConversationCreateBody(ConversationScopeBody):
+    title: str = Field(default="Новый чат", min_length=1, max_length=80)
+    backend: Optional[str] = None
+
+
+class PermissionBody(BaseModel):
+    permission_id: str
+    option_id: str
 
 
 class AgentChatAnswerBody(BaseModel):
@@ -207,6 +224,9 @@ class CursorApiKeyBody(BaseModel):
 
 
 class AgentChatSettingsBody(BaseModel):
+    chat_panel_width: Optional[int] = Field(default=None, ge=280, le=10000)
+    chat_list_main_width: Optional[int] = Field(default=None, ge=160, le=440)
+    chat_list_card_width: Optional[int] = Field(default=None, ge=160, le=440)
     agent_chat_mode: Optional[str] = None
     cursor_api_key: Optional[str] = None
 

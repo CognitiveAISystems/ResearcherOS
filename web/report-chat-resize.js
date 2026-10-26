@@ -4,7 +4,7 @@ export function attachReportChatResize(panel) {
   let drag;
   const width = () => panel.getBoundingClientRect().width;
   const setWidth = value => {
-    const maximum = Math.max(280, Math.min(680, workspace.clientWidth * 0.5));
+    const maximum = Math.max(280, Math.min(800, workspace.clientWidth * 0.6));
     const next = Math.round(Math.max(280, Math.min(maximum, value)));
     workspace.style.setProperty('--report-chat-width', `${next}px`);
     handle.setAttribute('aria-valuenow', next);
@@ -13,19 +13,68 @@ export function attachReportChatResize(panel) {
   handle.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
     event.preventDefault();
-    drag = {x: event.clientX, width: width()};
+    drag = {x: event.clientX, width: width(), direction: getComputedStyle(workspace).direction === "rtl" ? -1 : 1};
     handle.setPointerCapture(event.pointerId);
   });
   handle.addEventListener('pointermove', event => {
-    if (drag) setWidth(drag.width + drag.x - event.clientX);
+    if (drag) setWidth(drag.width + (event.clientX - drag.x) * drag.direction);
   });
   handle.addEventListener('lostpointercapture', () => { drag = null; });
   handle.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    setWidth(event.key === 'Home' ? 280 : event.key === 'End' ? 680 : width() + (event.key === 'ArrowLeft' ? 24 : -24));
+    const direction = getComputedStyle(workspace).direction === 'rtl' ? -1 : 1;
+    setWidth(event.key === 'Home' ? 280 : event.key === 'End' ? 800 : width() + (event.key === 'ArrowRight' ? 24 : -24) * direction);
   });
   new ResizeObserver(() => {
     if (panel.getClientRects().length) handle.setAttribute('aria-valuenow', Math.round(width()));
   }).observe(panel);
+}
+
+export function attachMainChatResize(panel, api) {
+  const workspace = panel.closest('.workspace');
+  const handle = document.createElement('div');
+  handle.className = 'main-chat-resize'; handle.tabIndex = 0;
+  handle.setAttribute('role', 'separator'); handle.setAttribute('aria-orientation', 'vertical');
+  handle.setAttribute('aria-label', 'Ширина чата'); handle.setAttribute('aria-controls', panel.id);
+  panel.append(handle);
+  let preferred = 960, drag, edited = false;
+  const minimum = () => Math.min(640, workspace.clientWidth - 180);
+  const maximum = () => Math.max(minimum(), workspace.clientWidth - 180);
+  const width = () => panel.getBoundingClientRect().width;
+  const render = () => {
+    const next = Math.round(Math.max(minimum(), Math.min(maximum(), preferred)));
+    panel.style.setProperty('--main-chat-width', `${next}px`);
+    handle.setAttribute('aria-valuemin', Math.round(minimum()));
+    handle.setAttribute('aria-valuemax', Math.round(maximum()));
+    handle.setAttribute('aria-valuenow', Math.round(width()));
+  };
+  const save = () => {
+    preferred = Math.round(width()); edited = true;
+    api.saveAgentChatSettings({chat_panel_width: preferred}).catch(() => {});
+  };
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    event.preventDefault(); handle.focus();
+    drag = {x: event.clientX, width: width(), direction: getComputedStyle(workspace).direction === 'rtl' ? 1 : -1};
+    handle.setPointerCapture(event.pointerId);
+  });
+  handle.addEventListener('pointermove', event => {
+    if (!drag) return;
+    preferred = drag.width + (drag.x - event.clientX) * drag.direction; render();
+  });
+  handle.addEventListener('lostpointercapture', () => { if (drag) { drag = null; save(); } });
+  handle.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const direction = getComputedStyle(workspace).direction === 'rtl' ? 1 : -1;
+    preferred = event.key === 'Home' ? minimum() : event.key === 'End' ? maximum() : width() + (event.key === 'ArrowLeft' ? 24 : -24) * direction;
+    render(); save();
+  });
+  handle.addEventListener('dblclick', () => { preferred = 960; render(); save(); });
+  new ResizeObserver(render).observe(workspace);
+  api.getSettings().then(settings => {
+    if (!edited && !drag && Number.isFinite(settings.chat_panel_width)) { preferred = settings.chat_panel_width; render(); }
+  }).catch(() => {});
+  render();
 }

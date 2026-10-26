@@ -61,8 +61,9 @@ async def check():
         narrower = await panel.bounding_box()
         assert narrower['width'] < after['width'] - 20
         await page.evaluate("document.querySelector('.report-workspace').style.removeProperty('--report-chat-width')")
-        typography = await page.evaluate("""() => ['#report-interview-input', '#report-interview .agent-chat-tabs button', '#report-interview .agent-chat-q', '#report-interview .agent-chat-reply'].map(selector => {const s=getComputedStyle(document.querySelector(selector));return [s.fontFamily,s.fontSize,s.lineHeight];})""")
-        assert all(style == typography[0] for style in typography), typography
+        typography = await page.evaluate("""() => ['#report-interview-input', '#report-interview .agent-chat-q', '#report-interview .agent-chat-reply'].map(selector => {const s=getComputedStyle(document.querySelector(selector));return [s.fontFamily,s.fontSize,s.lineHeight];})""")
+        assert all(style[:2] == typography[0][:2] for style in typography), typography
+        assert all(float(style[2].removesuffix("px")) / float(style[1].removesuffix("px")) >= 1.5 for style in typography), typography
         field = page.locator('#report-interview-input')
         await field.fill('/')
         options = page.locator('.chat-skills [role="option"]')

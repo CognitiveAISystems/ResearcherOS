@@ -589,6 +589,14 @@ export const KoiApi = {
   sendAgentQuestion: (body) =>
     api("/agent-chat", { method: "POST", body: JSON.stringify(body) }),
   getAgentBackends: () => api("/agent/backends"),
+  listConversations: (scope = {}) => api(`/agent-conversations?${new URLSearchParams(Object.entries(scope).filter(([, v]) => v != null))}`),
+  createConversation: body => api("/agent-conversations", { method: "POST", body: JSON.stringify(body) }),
+  moveConversation: (id, body) => api(`/agent-conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteConversation: id => api(`/agent-conversations/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getConversation: id => api(`/agent-conversations/${encodeURIComponent(id)}`),
+  conversationActivity: id => api(`/agent-conversations/${encodeURIComponent(id)}/activity`),
+  cancelConversation: id => api(`/agent-conversations/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  decideConversationPermission: (id, permission_id, option_id) => api(`/agent-conversations/${encodeURIComponent(id)}/permission`, { method: "POST", body: JSON.stringify({ permission_id, option_id }) }),
   listAgentChat: (projectId, boardId = null, cardId = null) =>
     api(`/agent-chat?project_id=${encodeURIComponent(projectId)}${cardId ? `&board_id=${encodeURIComponent(boardId)}&card_id=${encodeURIComponent(cardId)}` : ""}`),
   listAgentChatActivity: (projectId, boardId = null, cardId = null) =>

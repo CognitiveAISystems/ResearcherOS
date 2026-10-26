@@ -48,6 +48,10 @@ def _startup() -> None:
     from koi.adapters.settings_store import load_env_file
 
     load_env_file()
+    from koi.adapters.agent_chat_queue import _load, submit_answer
+    for item in _load():
+        if item.get("conversation_id") and item.get("status") in ("pending", "processing"):
+            submit_answer(item["id"], "Запуск прерван перезапуском приложения. Продолжите работу новым сообщением.", answer_kind="warning")
     start_project_discovery_watch()
     from koi.projects.done_research_auto import kick_recent
 

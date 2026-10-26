@@ -1,4 +1,5 @@
-import { attachReportChatResize } from "./report-chat-resize.js";
+import { ChatConversations } from "./chat-conversations.js";
+import { attachReportChatResize, attachMainChatResize } from "./report-chat-resize.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
 import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
@@ -144,7 +145,6 @@ function applyHubReadonlyChrome() {
     "btn-widgets",
     "btn-new-project",
     "btn-agent-chat",
-    "btn-agent-chat-welcome",
     "btn-knowledge",
     "btn-related-work",
     "btn-paper",
@@ -315,7 +315,6 @@ let state = {
   kanbanNodeId: null,
   kanbanDisabledTagFilters: [],
   kanbanDateFilter: "all",
-  kanbanFocus: false,
   questionsNodeId: null,
   reportCardId: null,
   reportBoardId: null,
@@ -2350,16 +2349,7 @@ function ensureLabCamera() {
   bindMethodActivityZoomPreview(viewport, () => labCamera);
   syncLabActivityOverlay();
 
-  document.getElementById("btn-zoom-in")?.addEventListener("click", () => labCamera.zoomBy(1.2));
-  document.getElementById("btn-zoom-out")?.addEventListener("click", () => labCamera.zoomBy(1 / 1.2));
-  document.getElementById("btn-zoom-fit-lab")?.addEventListener("click", () => labCamera.fitWorld());
-  document.getElementById("btn-zoom-fit-project")?.addEventListener("click", () => {
-    const id = state.project?.id;
-    const regions = labCameraLayout()?.projectRegions;
-    if (id && regions?.[id]) {
-      labCamera.flyToRegion(regions[id]);
-    }
-  });
+
 }
 
 async function loadLab() {
@@ -2444,6 +2434,7 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
   wrap.className = "node-wrap" + (hasKanban ? " has-kanban-wrap" : "");
   wrap.dataset.nodeId = node.id;
   wrap.dataset.projectId = project.id;
+  wrap.classList.toggle("is-active-project", project.id === state.project?.id);
   wrap.style.left = `${pos.x}px`;
   if (hasKanban) {
     wrap.style.top = `${pos.y - size.h / 2}px`;
@@ -2629,7 +2620,6 @@ function renderLabMindmap(options = {}) {
     const frame = document.createElement("button");
     frame.type = "button";
     frame.className = "lab-project-frame";
-    frame.classList.toggle("is-active", placement.project.id === state.project?.id);
     frame.dataset.projectId = placement.project.id;
     frame.style.left = `${region.x}px`;
     frame.style.top = `${region.y}px`;
@@ -3042,6 +3032,8 @@ function renderMindmap(options = {}) {
 function showModal(id) {
   document.getElementById(id).classList.remove("hidden");
   document.body.classList.add("modal-open");
+  if (rqBellPanelOpen) setRqBellPanelOpen(false);
+  if (["kanban-modal", "card-report-modal"].includes(id)) void syncWorkspaceChatContext();
 }
 
 function hideModal(id) {
@@ -3054,10 +3046,10 @@ function hideModal(id) {
     if (frame) frame.src = "about:blank";
   }
   document.getElementById(id).classList.add("hidden");
+  if (id === "kanban-modal") for (const popup of document.querySelectorAll('.kanban-header-popover:popover-open')) popup.hidePopover();
   if (id === "node-modal") resetNodeModal();
   if (id === "method-questions-modal") resetMethodQuestionsEditMode();
-  if (id === "kanban-modal") {
-  }
+  if (["kanban-modal", "card-report-modal"].includes(id)) void syncWorkspaceChatContext();
   if (!document.querySelector(".modal:not(.hidden)")) {
     document.body.classList.remove("modal-open");
   }
@@ -3068,6 +3060,7 @@ let reportLinkedReadOnly = false;
 let reportAutoSaveTimer;
 let reportInterviewTimer;
 let reportInterviewItems = [];
+let mainConversations, cardConversations;
 let reportInterviewSignature = "";
 let reportInterviewSending = false;
 let reportLastSyncedContent = null;
@@ -3127,7 +3120,7 @@ function formatReportGrillAnswer(text) {
   return html + formatAgentChatReply(src.slice(last));
 }
 function reportInterviewStuck(item) {
-  if (!item || item.status === "answered") return false;
+  if (!item || item.status === "answered" || item.acp_active) return false;
   const started = Date.parse(item.processing_at || item.enqueued_at || "");
   const age = Number.isFinite(started) ? Date.now() - started : 0;
   if (isInboxAgentMode() && !isChatInboxWatcherRunning() && item.status !== "processing" && age > 15000) return true;
@@ -3144,17 +3137,18 @@ function showReportInterviewTab(tab) {
   const activity = tab === "activity";
   document.getElementById("report-interview-log")?.classList.toggle("hidden", activity);
   document.getElementById("report-interview-activity")?.classList.toggle("hidden", !activity);
-  for (const name of ["chat", "activity"]) {
-    const button = document.getElementById(`report-interview-tab-${name}`);
-    button?.classList.toggle("is-active", name === tab);
-    button?.setAttribute("aria-selected", String(name === tab));
-  }
+  const button = document.getElementById("report-interview-tab-activity");
+  button?.classList.toggle("is-active", activity);
+  button?.setAttribute("aria-pressed", String(activity));
+  button?.setAttribute("aria-label", activity ? "Показать переписку" : "Журнал работы агента");
+  button?.setAttribute("title", activity ? "Показать переписку" : "Журнал работы агента");
   if (activity) void refreshReportInterviewActivity();
 }
 function stopReportInterview() {
   clearInterval(reportInterviewTimer);
   reportInterviewTimer = null;
   reportInterviewItems = [];
+  cardConversations?.reset();
   reportInterviewSignature = "";
   reportInterviewSending = false;
   document.querySelector(".report-agent-menu")?.remove();
@@ -3163,10 +3157,18 @@ function stopReportInterview() {
   document.getElementById("report-interview-status").hidden = true;
 }
 async function openReportInterview(idea = "") {
+  if (!isHubMode() && document.body.classList.contains("unified-workspace")) {
+    await syncWorkspaceChatContext();
+    toggleAgentChatPanel(true);
+    const input = document.getElementById("agent-chat-input");
+    input.value = reportGrillDraft(idea); input.focus();
+    return;
+  }
   if (isHubMode() || reportLinkedReadOnly) return;
   const identity = reportIdentity();
   const panel = document.getElementById("report-interview");
   panel.hidden = false;
+  document.getElementById("report-agent-fab").setAttribute("aria-expanded", "true");
   void refreshCliAgents();
   await refreshReportInterview();
   if (identity !== reportIdentity() || !state.reportCardId) return;
@@ -3180,9 +3182,10 @@ async function refreshReportInterview() {
   if (!state.reportCardId) return;
   const identity = reportIdentity();
   try {
-    const data = await KoiApi.listAgentChat(reportWriteProjectId(), state.reportBoardId, state.reportCardId);
-    if (identity !== reportIdentity()) return;
-    reportInterviewItems = data.items || [];
+    const data = await cardConversations.refresh();
+    if (!data || identity !== reportIdentity()) return;
+    reportInterviewItems = withLiveAnswer(data);
+    syncConversationAgent(cardConversations, "report-interview");
     const signature = JSON.stringify(reportInterviewItems);
     if (signature !== reportInterviewSignature) {
       reportInterviewSignature = signature;
@@ -3191,8 +3194,7 @@ async function refreshReportInterview() {
     if (!document.getElementById("report-interview-activity")?.classList.contains("hidden")) {
       void refreshReportInterviewActivity();
     }
-    const pending = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i));
-    document.querySelector("#report-interview-form button").disabled = pending || reportInterviewSending;
+    cardConversations.syncSendButton();
     if (!reportInterviewSending && reportInterviewItems.some(reportInterviewStuck)) {
       setReportInterviewStatus("Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.", "error");
     }
@@ -3224,7 +3226,10 @@ async function refreshReportInterviewActivity() {
   const pid = reportWriteProjectId();
   if (!host || !pid || !state.reportCardId) return;
   try {
-    const data = await KoiApi.listAgentChatActivity(pid, state.reportBoardId, state.reportCardId);
+    if (!cardConversations.row) { host.textContent = "Пока нет запусков агента."; return; }
+    const cid = cardConversations.row.id;
+    const data = await KoiApi.conversationActivity(cid);
+    if (cid !== cardConversations.row?.id) return;
     const ids = new Set(reportInterviewItems.map((item) => item.id));
     const items = (data.items || []).filter((item) => ids.has(item.id) && item.events?.length);
     host.innerHTML = items.length ? items.map((item) =>
@@ -3241,7 +3246,7 @@ function renderReportInterview() {
   const nearBottom = agentChatLogNearBottom(log);
   log.replaceChildren();
   if (!reportInterviewItems.length) {
-    log.innerHTML = '<p class="agent-chat-empty">Начните с идеи. Агент изучит контекст задачи и поможет уточнить постановку.</p>';
+    log.innerHTML = '<div class="agent-chat-empty"><p>Обсудите постановку или результаты этой карточки.</p></div>';
   }
   for (const item of [...reportInterviewItems].reverse()) {
     const pending = item.status !== "answered";
@@ -3252,7 +3257,7 @@ function renderReportInterview() {
     const answerBody = item.purpose === "grill_me" || item.purpose === "report_grill"
       ? formatReportGrillAnswer(item.answer || "")
       : formatAgentChatReply(item.answer || "");
-    const answerHtml = item.status === "answered"
+    const answerHtml = item.status === "answered" || item.streaming
       ? `<div class="agent-chat-reply${item.answer_kind === "warning" ? " agent-chat-reply--warning" : ""}">${answerBody}</div>`
       : stuck
         ? `<div class="agent-chat-reply agent-chat-reply--warning">Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.</div>`
@@ -3308,14 +3313,13 @@ async function sendReportInterview(event) {
   const question = input.value.trim();
   if (!question) return;
   const identity = reportIdentity();
-  const button = document.querySelector("#report-interview-form button");
+  const button = document.querySelector("#report-interview-form .agent-chat-send");
   reportInterviewSending = true; button.disabled = true; setReportInterviewStatus("Отправляем вопрос…");
   const command = reportChatCommand(question);
   try {
-    for (const item of reportInterviewItems.filter(reportInterviewStuck)) {
-      await KoiApi.deleteAgentChatItem(item.id);
-    }
-    await KoiApi.sendAgentQuestion({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent() });
+    const conversation = await cardConversations.ensure();
+    if (identity !== reportIdentity()) return;
+    await KoiApi.sendAgentQuestion({ conversation_id: conversation.id, project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent("report-interview") });
     if (identity !== reportIdentity()) return;
     input.value = command.purpose === "grill_me" ? "/grill-me " : "";
     input.setSelectionRange(input.value.length, input.value.length);
@@ -3323,7 +3327,7 @@ async function sendReportInterview(event) {
     await refreshReportInterview();
   } catch (err) { if (identity === reportIdentity()) setReportInterviewStatus(err.message, "error"); }
   finally {
-    if (identity === reportIdentity()) { reportInterviewSending = false; button.disabled = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i)); }
+    if (identity === reportIdentity()) { reportInterviewSending = false; cardConversations.syncSendButton(); }
   }
 }
 
@@ -3407,6 +3411,7 @@ async function openLinkedReportMarkdown(knowledgePath) {
     document.getElementById("report-agent-fab").hidden = true;
     document.getElementById("card-report-save").hidden = true;
     document.getElementById("report-interview").hidden = true;
+  document.getElementById("report-agent-fab").setAttribute("aria-expanded", "false");
     document.getElementById("report-save-status").textContent = "Связанный документ · только чтение";
     editor.value = content;
     state.reportRelativePath = knowledgePath;
@@ -3570,6 +3575,7 @@ async function openCardReport(card, board) {
   reportLinkedReadOnly = false;
   getReportBlockEditor().readOnly = isHubMode();
   document.getElementById("report-interview").hidden = true;
+  document.getElementById("report-agent-fab").setAttribute("aria-expanded", "false");
   state.reportCardId = card.id;
   state.reportBoardId = board.id;
   state.reportProjectId = boardWriteProjectId(board);
@@ -3979,15 +3985,6 @@ function initKanbanModalChrome() {
     toggle.textContent = expand ? "свернуть" : "развернуть";
     toggle.setAttribute("aria-expanded", expand ? "true" : "false");
     if (!expand) syncKanbanDescClamp();
-  });
-  document.getElementById("kanban-focus-toggle")?.addEventListener("click", () => {
-    state.kanbanFocus = !state.kanbanFocus;
-    const btn = document.getElementById("kanban-focus-toggle");
-    btn?.classList.toggle("is-active", state.kanbanFocus);
-    btn?.setAttribute("aria-pressed", state.kanbanFocus ? "true" : "false");
-    const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
-    const board = node?.board_id ? state.project.boards[node.board_id] : null;
-    if (board && node) renderActiveKanbanView(board, node);
   });
 }
 
@@ -4987,7 +4984,7 @@ function createResearchQuestionEditRow(q, node, { expand = false } = {}) {
         `<textarea class="rq-editable-input rq-question inline-edit-field hidden" rows="2" placeholder="Формулировка понятна без знания метрик…">${escapeHtml(questionText)}</textarea>`,
         "Вопрос (без жаргона: SFT, RL, diversity…)"
       )}
-      <button type="button" class="btn btn-danger btn-remove-rq" aria-label="Удалить вопрос">×</button>
+      <button type="button" class="btn btn-danger btn-remove-rq" aria-label="Удалить вопрос" ${pending ? "disabled" : ""}>×</button>
     </div>
     <div class="method-rq-edit-details${expand ? "" : " hidden"}">
       ${rqFieldBlockHtml(
@@ -5132,7 +5129,10 @@ function openMethodQuestionsModal(node) {
 }
 
 function openKanbanModal(node) {
-  document.getElementById("kanban-method-details").open = false;
+  for (const id of ["kanban-method-details", "kanban-board-filters"]) {
+    const popup = document.getElementById(id);
+    if (popup.matches(":popover-open")) popup.hidePopover();
+  }
   state.kanbanNodeId = node.id;
   const board = getBoardForNode(state.project, node);
   if (!board) return;
@@ -5623,11 +5623,6 @@ function cardActivityTimestamp(card) {
   return parseCardTimestamp(card?.updated_at) ?? parseCardTimestamp(card?.created_at);
 }
 
-function cardStaysInKanbanFocus(card) {
-  if (card?.column_id === "running" || card?.column_id === "backlog") return true;
-  return cardWithinDateWindow(card, "today");
-}
-
 function cardWithinDateWindow(card, windowId) {
   if (!windowId || windowId === "all") return true;
   const ts = cardActivityTimestamp(card);
@@ -5735,19 +5730,21 @@ function renderKanbanDateFilter(project, board) {
 function syncKanbanFilterChrome(project, board) {
   const clearBtn = document.getElementById("kanban-filters-clear");
   const active = hasActiveKanbanFilters();
+  const count = (state.kanbanDateFilter && state.kanbanDateFilter !== "all" ? 1 : 0) + (state.kanbanDisabledTagFilters || []).length;
+  const badge = document.getElementById("kanban-filter-count");
+  badge.hidden = !count; badge.textContent = String(count);
+  document.getElementById("kanban-filters-toggle").classList.toggle("is-filtering", active);
   clearBtn?.classList.toggle("hidden", !active);
   document.getElementById("kanban-board-filters")?.classList.toggle("is-filtering", active);
   if (clearBtn && !clearBtn.dataset.bound) {
     clearBtn.dataset.bound = "1";
     clearBtn.addEventListener("click", () => {
       const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
-      const b =
-        board ||
-        (node?.board_id ? state.project?.boards?.[node.board_id] : null);
+      const b = node ? getBoardForNode(state.project, node) : board;
       if (!b) return;
       state.kanbanDateFilter = "all";
       state.kanbanDisabledTagFilters = [];
-      const pid = project?.id || state.project?.id;
+      const pid = boardWriteProjectId(b);
       if (pid && b.id) {
         saveKanbanDateFilter(pid, b.id, "all");
         saveKanbanDisabledTagFilters(pid, b.id, []);
@@ -5788,10 +5785,40 @@ function renderKanbanTagFilter(project, board) {
   bindKanbanTagFilter(project, board);
 }
 
+function initKanbanHeaderPopovers() {
+  for (const [popupId, triggerId] of [["kanban-board-filters", "kanban-filters-toggle"], ["kanban-method-details", "kanban-details-toggle"]]) {
+    const popup = document.getElementById(popupId), trigger = document.getElementById(triggerId);
+    popup.addEventListener("beforetoggle", event => {
+      if (event.newState !== "open") return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(popupId === "kanban-board-filters" ? 360 : 480, innerWidth - 24);
+      popup.style.width = `${width}px`;
+      popup.style.left = `${Math.max(12, Math.min(innerWidth - width - 12, rect.right - width))}px`;
+      popup.style.top = `${Math.min(rect.bottom + 8, innerHeight - 80)}px`;
+      popup.style.maxHeight = `${Math.max(60, innerHeight - rect.bottom - 24)}px`;
+    });
+    trigger.setAttribute("aria-controls", popupId);
+    trigger.setAttribute("aria-expanded", "false");
+    popup.addEventListener("toggle", event => {
+      trigger.setAttribute("aria-expanded", String(event.newState === "open"));
+      if (event.newState === "open") popup.querySelector('button:not(.hidden):not([hidden]):not(:disabled),input:not([hidden])')?.focus({preventScroll: true});
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || !popup.matches(":popover-open")) return;
+      event.preventDefault(); event.stopImmediatePropagation(); popup.hidePopover(); trigger.focus();
+    }, true);
+  }
+}
+
 function renderKanbanBoardFilters(project, board) {
+  const focused = document.activeElement;
+  const windowId = focused?.dataset.window;
+  const tag = focused?.dataset.tag;
   renderKanbanDateFilter(project, board);
   renderKanbanTagFilter(project, board);
   syncKanbanFilterChrome(project, board);
+  if (windowId || tag) [...document.querySelectorAll('#kanban-board-filters button')]
+    .find(button => windowId ? button.dataset.window === windowId : button.dataset.tag === tag)?.focus({preventScroll: true});
 }
 
 function bindKanbanTagFilter(project, board) {
@@ -6427,9 +6454,8 @@ function kanbanCardHtml(c, col, variant = "modal") {
               <input type="text" class="card-title-input inline-edit-field hidden" />`;
   const pinned = cardIsPinned(c);
   const pinControl = kanbanCardPinControlHtml(c, { map });
-  const focusMuted = variant === "modal" && state.kanbanFocus && !cardStaysInKanbanFocus(c);
   return `
-        <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}${focusMuted ? " is-focus-muted" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
+        <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
           <div class="kanban-card-head">
             <span class="card-drag-handle" draggable="true" title="Перетащить в другую колонку" aria-label="Перетащить">${gripIcon}</span>
             <div class="card-text-block">
@@ -6526,7 +6552,6 @@ function renderKanbanBoard(board) {
   const node = project?.nodes?.find((n) => n.id === state.kanbanNodeId) || null;
   const boardEl = document.getElementById("kanban-board");
   if (!boardEl) return;
-  boardEl.classList.toggle("is-focus", Boolean(state.kanbanFocus));
   renderKanbanBoardInto(boardEl, board, {
     variant: "modal",
     tagFilters: state.kanbanDisabledTagFilters || [],
@@ -6749,7 +6774,7 @@ function ensureLabTreeVisible(id) {
   return true;
 }
 
-const ARCHIVE_BOX_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23 19.15 3.55C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5 6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5h13.75l.83 1H4.29l.83-1z"/></svg>`;
+const ARCHIVE_BOX_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1.5"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg>`;
 const ARCHIVE_IN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>`;
 const ARCHIVE_OUT_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m14 6 1.41 1.41L10.83 12l4.58 4.59L14 18l-6-6z"/></svg>`;
 
@@ -6862,11 +6887,6 @@ function renderProjectsArchiveBar(grouped) {
   const bar = document.getElementById("projects-archive-bar");
   if (!bar) return;
   const count = archivedTreeCount(grouped);
-  if (!projectsArchiveOpen && !count) {
-    bar.hidden = true;
-    bar.innerHTML = "";
-    return;
-  }
   bar.hidden = false;
   if (projectsArchiveOpen) {
     bar.innerHTML =
@@ -6883,21 +6903,6 @@ function renderProjectsArchiveBar(grouped) {
     `<span class="projects-archive-bar__label">Архив</span>` +
     `<span class="projects-archive-bar__count">${count}</span>` +
     `</button>`;
-}
-
-function renderProjectListEye(treeId) {
-  if (projectsArchiveOpen) return "";
-  const hidden = isLabTreeHidden(treeId);
-  const title = hidden ? "Показать дерево на карте" : "Скрыть дерево с карты";
-  return (
-    `<button type="button" class="project-list__eye${hidden ? "" : " is-on"}"` +
-    ` data-tree-id="${escapeHtml(treeId)}"` +
-    ` title="${title}"` +
-    ` aria-label="${title}"` +
-    ` aria-pressed="${hidden ? "false" : "true"}">` +
-    `${hidden ? EYE_OFF_SVG : EYE_ON_SVG}` +
-    `</button>`
-  );
 }
 
 function renderProjectListArchive(treeId) {
@@ -6988,7 +6993,6 @@ function renderProjectListButton(p, currentId) {
     (active ? ' aria-current="true"' : "") +
     `>${escapeHtml(p.title)}</button>` +
     renderProjectListPull(p.id) +
-    renderProjectListEye(p.id) +
     renderProjectListArchive(p.id) +
     `</div>` +
     `</li>`
@@ -7046,7 +7050,6 @@ function renderCompositeListButton(c, currentId, selectedBranchId) {
     (active ? ' aria-current="true"' : "") +
     `><span class="project-list__composite-mark" aria-hidden="true">⎇</span> ${escapeHtml(c.title)}</button>` +
     headerPull +
-    renderProjectListEye(virtualId) +
     renderProjectListArchive(virtualId) +
     `</div>` +
     branches +
@@ -7329,6 +7332,7 @@ async function loadProjectList(activeId) {
       ul.innerHTML = html;
     }
     applyProjectListPullStatus();
+    renderUnifiedNavigation();
     return flat;
   }
 
@@ -7372,12 +7376,13 @@ async function loadProjectList(activeId) {
     ul.innerHTML = rendered.join("");
   }
   applyProjectListPullStatus();
+  renderUnifiedNavigation();
   return list;
 }
 
 function setActiveProjectInList(id) {
-  document.querySelectorAll(".lab-project-frame").forEach((frame) => {
-    frame.classList.toggle("is-active", frame.dataset.projectId === id);
+  document.querySelectorAll(".node-wrap[data-project-id]").forEach((wrap) => {
+    wrap.classList.toggle("is-active-project", wrap.dataset.projectId === id);
   });
   const selectedBranch = state.literatureBranchId;
   document.querySelectorAll(".project-list__btn").forEach((btn) => {
@@ -7607,14 +7612,6 @@ function initProjectsSidebar() {
       if (projectId) void runTreeProjectSync(projectId);
       return;
     }
-    const eyeBtn = e.target.closest(".project-list__eye");
-    if (eyeBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      const treeId = eyeBtn.dataset.treeId;
-      if (treeId) toggleLabTreeHidden(treeId);
-      return;
-    }
     const branchBtn = e.target.closest("[data-branch-id]");
     if (branchBtn) {
       const branchId = branchBtn.dataset.branchId;
@@ -7701,7 +7698,7 @@ let agentChatItems = [];
 let agentChatPollTimer = null;
 let agentChatDisplayedProjectId = null;
 let lastAgentChatInboxMessage = "";
-const AGENT_CHAT_POLL_MS = 5000;
+const AGENT_CHAT_POLL_MS = 1500;
 let appSettings = {
   agent_chat_mode: "local",
   cursor_api_key_configured: false,
@@ -7950,7 +7947,19 @@ function agentChatTypingHtml() {
 }
 
 function agentChatContext() {
-  if (agentChatProjectId() !== primaryMemberProjectId()) {
+  const conversation = mainConversations?.row;
+  const projectId = conversation?.project_id || mainConversations?.contextScope?.project_id;
+  const boardId = conversation?.board_id || mainConversations?.contextScope?.board_id;
+  const scopedProject = state.project?.id === projectId ? state.project : null;
+  const board = scopedProject?.boards?.[boardId];
+  if (board) {
+    const cardId = conversation?.card_id || mainConversations?.contextScope?.card_id;
+    const card = cardId && board.cards.find(card => card.id === cardId);
+    const node = scopedProject.nodes.find(node => node.id === board.owner_node_id);
+    return {method_id: board.owner_node_id, node_id: board.owner_node_id,
+      label: [cardId ? "Чаты карточки" : "Чаты метода", card?.title || node?.title].filter(Boolean).join(" · ")};
+  }
+  if (!agentChatProjectId() || agentChatProjectId() !== primaryMemberProjectId()) {
     return { method_id: null, node_id: null, label: null };
   }
   const project = state.project;
@@ -8004,7 +8013,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const prevScrollTop = log.scrollTop;
   const items = [...agentChatItems].reverse();
   if (!items.length) {
-    log.innerHTML = '<p class="agent-chat-empty">Задайте первый вопрос.</p>';
+    log.innerHTML = '<div class="agent-chat-empty"><p>Обсудите проект или дайте агенту задачу.</p></div>';
     return;
   }
   log.innerHTML = items
@@ -8015,7 +8024,9 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       const isWarning = item.answer_kind === "warning";
       const pendingLabel = agentChatPendingLabel(item);
       let answerHtml;
-      if (isProcessing) {
+      if (item.streaming) {
+        answerHtml = `<div class="agent-chat-reply">${formatAgentChatReply(item.answer)}</div>`;
+      } else if (isProcessing) {
         answerHtml = agentChatTypingHtml();
       } else if (pending) {
         answerHtml =
@@ -8028,7 +8039,6 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         `<div class="agent-chat-q-row">` +
         `<p class="agent-chat-q">${escapeHtml(item.question)}</p>` +
         agentChatDeliveryHtml(item) +
-        `<button type="button" class="btn btn-small btn-danger agent-chat-delete" title="Удалить" aria-label="Удалить вопрос">×</button>` +
         `</div>` +
         answerHtml +
         `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>` +
@@ -8045,16 +8055,11 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
 }
 
 async function refreshAgentChat({ scrollToBottom = false } = {}) {
-  const pid = agentChatProjectId();
-  if (!pid) {
-    agentChatItems = [];
-    renderAgentChatLog();
-    return;
-  }
   try {
-    const data = await KoiApi.listAgentChat(pid);
-    if (pid !== agentChatProjectId()) return;
-    agentChatItems = (data.items || []).filter(i => !i.card_id);
+    const data = await mainConversations.refresh();
+    if (!data) return;
+    agentChatItems = withLiveAnswer(data);
+    syncConversationAgent(mainConversations, "agent-chat");
     renderAgentChatLog({ scrollToBottom });
     if (!document.getElementById("agent-chat-activity")?.classList.contains("hidden")) {
       void refreshAgentChatActivity();
@@ -8069,13 +8074,11 @@ async function refreshAgentChatActivity() {
   const pid = agentChatProjectId();
   const host = document.getElementById("agent-chat-activity");
   if (!host) return;
-  if (!pid) {
-    host.textContent = "Выберите проект для чата.";
-    return;
-  }
   try {
-    const data = await KoiApi.listAgentChatActivity(pid);
-    if (pid !== agentChatProjectId()) return;
+    if (!mainConversations.row) { host.textContent = "Пока нет запусков агента."; return; }
+    const cid = mainConversations.row.id;
+    const data = await KoiApi.conversationActivity(cid);
+    if (cid !== mainConversations.row?.id) return;
     const items = (data.items || []).filter((item) => item.events?.length);
     host.innerHTML = items.length ? items.map((item) =>
       `<section><h3>${escapeHtml(item.question)}</h3>${item.events.map((event) =>
@@ -8092,11 +8095,11 @@ function showAgentChatTab(tab) {
   const activity = tab === "activity";
   document.getElementById("agent-chat-log")?.classList.toggle("hidden", activity);
   document.getElementById("agent-chat-activity")?.classList.toggle("hidden", !activity);
-  for (const name of ["chat", "activity"]) {
-    const button = document.getElementById(`agent-chat-tab-${name}`);
-    button?.classList.toggle("is-active", name === tab);
-    button?.setAttribute("aria-selected", String(name === tab));
-  }
+  const button = document.getElementById("agent-chat-tab-activity");
+  button?.classList.toggle("is-active", activity);
+  button?.setAttribute("aria-pressed", String(activity));
+  button?.setAttribute("aria-label", activity ? "Показать переписку" : "Журнал работы агента");
+  button?.setAttribute("title", activity ? "Показать переписку" : "Журнал работы агента");
   if (activity) void refreshAgentChatActivity();
 }
 
@@ -8115,7 +8118,8 @@ function syncAgentChatPolling() {
 }
 
 function agentChatProjectId() {
-  return primaryMemberProjectId() || null;
+  return mainConversations?.row ? mainConversations.row.project_id :
+    mainConversations?.contextScope?.project_id || (mainConversations?.currentProjectOnly ? primaryMemberProjectId() : null);
 }
 
 function resizeAgentChatInput() {
@@ -8149,19 +8153,31 @@ function updateAgentChatScope() {
   }
 }
 
+function syncWorkspaceSidebarToggle() {
+  const trigger = document.getElementById("btn-agent-chat");
+  const open = !document.getElementById("workspace")?.classList.contains("is-chat-list-hidden");
+  const label = open ? "Свернуть боковую панель" : "Развернуть боковую панель";
+  trigger?.setAttribute("aria-expanded", String(open));
+  trigger?.setAttribute("aria-label", label);
+  if (trigger) trigger.title = label;
+}
+
+function toggleWorkspaceSidebar() {
+  document.getElementById("workspace").classList.toggle("is-chat-list-hidden");
+  syncWorkspaceSidebarToggle();
+  scheduleMindmapRender();
+}
+
 function toggleAgentChatPanel(open) {
   const panel = document.getElementById("agent-chat-panel");
   const workspace = document.getElementById("workspace");
   if (!panel) return;
-  const show = open ?? panel.classList.contains("hidden");
-  panel.classList.toggle("hidden", !show);
+  const show = open ?? !workspace?.classList.contains("is-chat-open");
+  if (show) workspace?.classList.remove("is-sidebar-hidden");
+  panel.classList.toggle("hidden", !show && !workspace?.classList.contains("unified-navigation"));
   workspace?.classList.toggle("is-chat-open", show);
   document.body.classList.toggle("chat-open", show);
-  document.getElementById("btn-agent-chat-welcome")?.classList.toggle("hidden", show);
-  const trigger = document.getElementById("btn-agent-chat");
-  trigger?.setAttribute("aria-expanded", String(show));
-  trigger?.setAttribute("aria-label", show ? "Свернуть чат" : "Открыть чат");
-  if (trigger) trigger.title = show ? "Свернуть чат" : "Открыть чат";
+  syncWorkspaceSidebarToggle(!workspace?.classList.contains("is-sidebar-hidden"));
   if (show) {
     void refreshAppSettings();
     void refreshCliAgents();
@@ -8295,8 +8311,8 @@ function initVoiceInput() {
 
 const CLI_AGENT_KEY = "koi-chat-cli-agent";
 
-function chatCliAgent() {
-  const value = document.querySelector("[data-cli-agent]:not(:disabled)")?.value || "";
+function chatCliAgent(panel = "agent-chat") {
+  const value = document.querySelector(`#${panel}-form [data-cli-agent]:not(:disabled)`)?.value || "";
   return value || undefined;
 }
 
@@ -8311,7 +8327,7 @@ async function refreshCliAgents() {
   const available = agents.filter((agent) => agent.available && agent.id);
   let saved = "";
   try { saved = localStorage.getItem(CLI_AGENT_KEY) || ""; } catch { saved = ""; }
-  const chosen = available.some((agent) => agent.id === saved) ? saved : (available[0]?.id || "");
+  const chosen = (available.some(agent => agent.id === saved) ? saved : available[0]?.id) || "";
   try {
     if (chosen) localStorage.setItem(CLI_AGENT_KEY, chosen);
     else localStorage.removeItem(CLI_AGENT_KEY);
@@ -8322,11 +8338,15 @@ async function refreshCliAgents() {
       : `<option value="">Нет доступных</option>`;
     select.value = chosen;
     select.disabled = !available.length;
+    delete select.dataset.conversation;
   });
+  if (mainConversations) syncConversationAgent(mainConversations, "agent-chat");
+  if (cardConversations) syncConversationAgent(cardConversations, "report-interview");
 }
 
 async function submitAgentQuestion(e) {
   e.preventDefault();
+  if (mainConversations.live) return;
   const input = document.getElementById("agent-chat-input");
   if (document.getElementById("btn-agent-chat-send")?.disabled) return;
   const text = input?.value?.trim();
@@ -8336,12 +8356,12 @@ async function submitAgentQuestion(e) {
     return;
   }
   const projectId = agentChatProjectId();
-  if (!projectId || isCompositeVirtualId(projectId)) {
+  if (projectId && isCompositeVirtualId(projectId)) {
     setAgentChatFormStatus("Сначала выберите проект для чата.", "error");
     return;
   }
 
-  if (/^\/(?:grill-me|grill_me|prose|run|make_report)(?:\s|$)/i.test(text)) {
+  if (!mainConversations.contextScope?.card_id && /^\/(?:grill-me|grill_me|prose|run|make_report)(?:\s|$)/i.test(text)) {
     setAgentChatFormStatus("Откройте карточку, чтобы выполнить эту команду.", "error");
     return;
   }
@@ -8352,16 +8372,22 @@ async function submitAgentQuestion(e) {
 
   try {
     const command = reportChatCommand(text);
+    const conversation = await mainConversations.ensure();
+    const cid = conversation.id;
     const res = await KoiApi.sendAgentQuestion({
-      project_id: projectId,
+      project_id: conversation.project_id,
+      conversation_id: cid,
+      board_id: conversation.board_id,
+      card_id: conversation.card_id,
       question: command.question,
-      purpose: command.purpose === "question" ? "question" : "agent",
+      purpose: conversation.card_id ? command.purpose : command.purpose === "question" ? "question" : "agent",
+      report_markdown: conversation.card_id === state.reportCardId ? document.getElementById("card-report-editor").value : undefined,
       method_id: method_id || undefined,
       node_id: node_id || undefined,
       cli_agent: chatCliAgent(),
     });
     if (!res?.item?.id) throw new Error("Сервер не подтвердил отправку. Попробуйте ещё раз.");
-    if (projectId !== agentChatProjectId()) return;
+    if (cid !== mainConversations.row?.id) return;
     agentChatItems = [res.item, ...agentChatItems.filter((i) => i.id !== res.item.id)];
     showAgentChatTab("chat");
     renderAgentChatLog({ scrollToBottom: true });
@@ -8373,7 +8399,7 @@ async function submitAgentQuestion(e) {
   } catch (err) {
     setAgentChatFormStatus(err.message || "Не удалось отправить вопрос.", "error");
   } finally {
-    if (btn) btn.disabled = false;
+    mainConversations.syncSendButton();
   }
 }
 
@@ -8983,7 +9009,349 @@ function initSettings() {
   void refreshAppSettings();
 }
 
+function syncConversationAgent(controller, panel) {
+  const select = document.querySelector(`#${panel}-form [data-cli-agent]`);
+  const backend = controller.row?.backend;
+  if (select && select.dataset.conversation !== controller.row?.id) {
+    if (backend && [...select.options].some(o => o.value === backend)) select.value = backend;
+    select.dataset.conversation = controller.row?.id || "";
+  }
+}
+
+function withLiveAnswer(data) {
+  return (data.items || []).map(item => data.live?.item_id === item.id
+    ? { ...item, acp_active: true, ...(data.live.text ? { answer: data.live.text, streaming: true } : {}) } : item);
+}
+
+function initUnifiedNavigation() {
+  if (isHubMode()) return;
+  const sidebar = document.getElementById("agent-chat-conversations");
+  localStorage.removeItem(LAB_HIDDEN_TREES_KEY);
+  if (state.lab) state.lab.hiddenTreeIds = new Set();
+  const workspace = document.getElementById("workspace");
+  workspace.classList.add("unified-navigation");
+  document.body.classList.add("navigation-left", "unified-workspace");
+  const header = document.querySelector(".topbar");
+  new ResizeObserver(() => {
+    workspace.style.setProperty("--workspace-header-height", `${header.getBoundingClientRect().height}px`);
+  }).observe(header);
+  const panel = document.getElementById("agent-chat-panel");
+  workspace.prepend(panel);
+  const layout = panel.querySelector(".conversation-layout");
+  layout.prepend(layout.querySelector(".conversation-rail"), sidebar);
+  const toolbar = document.querySelector(".topbar-row > .toolbar");
+  const chatToggle = document.getElementById("btn-agent-chat");
+  chatToggle.setAttribute("aria-controls", "agent-chat-conversations");
+  chatToggle.classList.remove("btn-chat-toggle");
+  chatToggle.classList.add("conversation-icon-button");
+  chatToggle.querySelector("svg path").setAttribute("d", "M9 4v16");
+  layout.querySelector(".conversation-nav-toggle").remove();
+  layout.querySelector(".conversation-rail").prepend(chatToggle);
+  const themeToggle = document.getElementById("btn-theme");
+  themeToggle.classList.add("conversation-icon-button");
+  layout.querySelector(".conversation-rail").append(themeToggle);
+  document.body.append(toolbar.querySelector(".rq-bell-wrap"));
+  toolbar.parentElement.prepend(document.querySelector(".topbar-start"));
+  document.getElementById("agent-chat-panel").classList.remove("hidden");
+  syncWorkspaceSidebarToggle(true);
+  sidebar.setAttribute("aria-label", "Проекты и чаты");
+  const heading = document.createElement("h2"); heading.className = "unified-navigation-title";
+  heading.textContent = "Проекты и чаты";
+  const navigationHeading = document.createElement("div"); navigationHeading.className = "unified-navigation-heading";
+  navigationHeading.append(heading, layout.querySelector("[data-current-project]"));
+  const actions = document.createElement("div"); actions.className = "unified-navigation-actions";
+  const archive = document.getElementById("projects-archive-bar");
+  const createProject = document.getElementById("btn-new-project");
+  createProject.className = "btn conversation-create";
+  createProject.textContent = "Новое дерево";
+  createProject.title = "Создать дерево исследований";
+  createProject.setAttribute("aria-label", "Создать дерево исследований");
+  createProject.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="5" rx="1.5"/><rect x="2" y="17" width="6" height="5" rx="1.5"/><rect x="16" y="17" width="6" height="5" rx="1.5"/><path d="M12 7v5M5 17v-5h14v5"/></svg>');
+  const createChat = document.createElement("button");
+  createChat.type = "button"; createChat.className = "btn conversation-create";
+  createChat.dataset.newChat = ""; createChat.dataset.globalChat = "";
+  createChat.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>Новый общий чат';
+  const move = document.createElement("button");
+  move.type = "button"; move.className = "btn conversation-create conversation-move-accessible";
+  move.dataset.moveChat = ""; move.textContent = "Перенести чат";
+  actions.append(createProject, createChat, move);
+  const global = document.createElement("section"); global.className = "unified-global-chats conversation-group";
+  const globalTitle = document.createElement("h3");
+  globalTitle.innerHTML = '<button type="button" class="unified-global-toggle unified-project-toggle" data-chat-project-toggle="global" aria-expanded="true" aria-controls="unified-global-chats"><span>Без проекта</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>';
+  globalTitle.dataset.chatDrop = ""; globalTitle.dataset.projectId = "";
+  const globalChats = document.createElement("div"); globalChats.id = "unified-global-chats"; globalChats.className = "unified-project-chats";
+  global.append(globalTitle, globalChats);
+  const list = document.getElementById("project-list");
+  const chats = document.createElement("div"); chats.className = "unified-chat-navigation";
+  chats.append(archive, global, list);
+  const contextFilter = document.createElement("button"); contextFilter.type = "button";
+  contextFilter.className = "conversation-context-filter"; contextFilter.hidden = true;
+  contextFilter.onclick = () => {
+    mainConversations.currentProjectOnly = !mainConversations.currentProjectOnly;
+    mainConversations.epoch++;
+    mainConversations.filterTrigger.setAttribute("aria-pressed", String(mainConversations.currentProjectOnly));
+    void mainConversations.changed({open: false});
+  };
+  sidebar.replaceChildren(navigationHeading, contextFilter, actions, chats);
+  const positionWorkspace = () => {
+    const rect = document.getElementById("agent-chat-panel").getBoundingClientRect();
+    document.body.style.setProperty("--workspace-chat-edge", `${rect.width ? rect.right : 0}px`);
+    document.body.style.setProperty("--workspace-header-bottom", `${document.querySelector(".topbar").getBoundingClientRect().bottom}px`);
+  };
+  new ResizeObserver(positionWorkspace).observe(document.getElementById("agent-chat-panel"));
+  new ResizeObserver(positionWorkspace).observe(document.querySelector(".topbar"));
+  window.addEventListener("resize", () => {
+    if (document.body.classList.contains("has-work-context") && innerWidth <= 900) workspace.classList.add("is-chat-list-hidden");
+    positionWorkspace();
+  });
+  attachMainChatResize(document.getElementById("agent-chat-panel"), KoiApi);
+  const clearTreeDrag = () => {
+    sidebar.classList.remove("is-tree-dragging");
+    sidebar.querySelectorAll('.is-dragging,.is-tree-drop-target').forEach(el => el.classList.remove('is-dragging','is-tree-drop-target'));
+    if (mainConversations) mainConversations.dragging = false;
+  };
+  archive.title = "Перетащите дерево в архив";
+  sidebar.addEventListener("dragstart", event => {
+    const title = event.target.closest('.project-list__btn[data-archive-tree-id]');
+    if (!title) return;
+    event.stopImmediatePropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-researcheros-tree', title.dataset.archiveTreeId);
+    title.classList.add('is-dragging'); sidebar.classList.add('is-tree-dragging');
+    mainConversations.dragging = true;
+  }, true);
+  sidebar.addEventListener("dragover", event => {
+    if (!event.dataTransfer.types.includes('application/x-researcheros-tree')) return;
+    if (!event.target.closest('#projects-archive-bar [data-archive-nav="open"]')) return;
+    event.preventDefault(); event.stopImmediatePropagation(); event.dataTransfer.dropEffect = 'move';
+    archive.classList.add('is-tree-drop-target');
+  }, true);
+  archive.addEventListener('dragleave', event => {
+    if (!archive.contains(event.relatedTarget)) archive.classList.remove('is-tree-drop-target');
+  });
+  sidebar.addEventListener('dragend', () => { if (sidebar.classList.contains('is-tree-dragging')) clearTreeDrag(); }, true);
+  sidebar.addEventListener('drop', event => {
+    const id = event.dataTransfer.getData('application/x-researcheros-tree');
+    if (!id || !event.target.closest('#projects-archive-bar [data-archive-nav="open"]')) return;
+    event.preventDefault(); event.stopImmediatePropagation(); clearTreeDrag();
+    void setTreeArchived(id, true);
+  }, true);
+
+  sidebar.addEventListener("click", event => {
+    const toggle = event.target.closest("[data-chat-project-toggle]");
+    if (!toggle) {
+      if (event.target.closest(".project-list__btn") && window.matchMedia("(max-width: 700px)").matches) mainConversations.showNavigation(false);
+      return;
+    }
+    const key = toggle.dataset.chatProjectToggle;
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    if (open) mainConversations.collapsedProjects.delete(key);
+    else mainConversations.collapsedProjects.add(key);
+    const item = toggle.closest(".project-list__item, .unified-global-chats");
+    item.querySelector(":scope > .unified-project-chats").hidden = !open;
+    const branches = item.querySelector(":scope > .project-list--branches");
+    if (branches) branches.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    if (key !== "global") toggle.setAttribute("aria-label", open ? "Скрыть чаты проекта" : "Показать чаты проекта");
+  });
+}
+
+async function syncWorkspaceChatContext() {
+  if (isHubMode() || !mainConversations) return;
+  const visible = id => !document.getElementById(id).classList.contains("hidden");
+  let scope = null, title = "";
+  if (visible("card-report-modal") && state.reportCardId) {
+    scope = {project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId};
+    title = document.getElementById("card-report-card-title").textContent;
+  } else if (visible("kanban-modal")) {
+    const node = state.project?.nodes.find(node => node.id === state.kanbanNodeId);
+    const board = node && getBoardForNode(state.project, node);
+    if (board) { scope = {project_id: boardWriteProjectId(board), board_id: board.id}; title = node.title; }
+  }
+  document.body.classList.toggle("has-work-context", Boolean(scope));
+  mainConversations.contextTitle = title;
+  const entering = !mainConversations.contextScope && scope;
+  const leaving = mainConversations.contextScope && !scope;
+  const workspace = document.getElementById("workspace");
+  if (entering) {
+    workspace.dataset.contextPreviousListHidden = String(workspace.classList.contains("is-chat-list-hidden"));
+    workspace.dataset.contextPreviousChatOpen = String(workspace.classList.contains("is-chat-open"));
+  }
+  if (leaving) workspace.classList.toggle("is-chat-list-hidden", workspace.dataset.contextPreviousListHidden === "true");
+  if (scope) mainConversations.collapsedProjects.delete(scope.project_id);
+  const changed = mainConversations.setContext(scope);
+  if (scope && changed) {
+    workspace.classList.remove("is-chat-list-hidden");
+    toggleAgentChatPanel(false);
+  } else if (leaving) toggleAgentChatPanel(workspace.dataset.contextPreviousChatOpen === "true");
+  if (changed) { agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
+  else renderUnifiedNavigation();
+}
+
+function renderUnifiedNavigation(controller = mainConversations) {
+  const sidebar = controller?.sidebar;
+  const global = sidebar?.querySelector("#unified-global-chats");
+  if (!global || controller.dragging) return;
+  const active = sidebar.contains(document.activeElement) ? document.activeElement : null;
+  const focusKey = active?.dataset.focusKey;
+  const scroll = sidebar.scrollTop;
+  const filter = sidebar.querySelector(".conversation-context-filter");
+  filter.hidden = !controller.contextScope;
+  if (controller.contextScope) {
+    filter.textContent = (controller.currentProjectOnly ? (controller.contextScope.card_id ? "Чаты карточки" : "Чаты метода") : "Все чаты") + " · " + controller.contextTitle;
+    filter.setAttribute("aria-pressed", String(controller.currentProjectOnly));
+  }
+  const create = sidebar.querySelector("[data-global-chat]");
+  create.lastChild.textContent = controller.contextScope ? "Новый чат" : "Новый общий чат";
+  const entry = row => {
+    const button = controller.entry(row);
+    const scope = document.createElement("small"); scope.className = "unified-chat-scope";
+    scope.textContent = row.card_id ? "Чат карточки" : row.board_id ? "Чаты метода" : row.project_id ? "Чат проекта" : "Общий чат";
+    button.querySelector(".conversation-entry-text").append(scope);
+    return button;
+  };
+  sidebar.querySelector("[data-move-chat]").disabled = !controller.row || Boolean(controller.row.pending);
+  global.replaceChildren(...controller.rows.filter(row => !row.project_id && !controller.currentProjectOnly).map(entry));
+  global.closest(".unified-global-chats").hidden = projectsArchiveOpen || Boolean(controller.contextScope && controller.currentProjectOnly);
+  global.hidden = controller.collapsedProjects.has("global");
+  sidebar.querySelector('[data-chat-project-toggle="global"]').setAttribute("aria-expanded", String(!global.hidden));
+  const composites = (state.lab?.grouped?.groups || []).flatMap(group => group.composites || []);
+  const list = document.getElementById("project-list");
+  for (const title of list.querySelectorAll(".project-list__btn")) {
+    const row = title.closest(".project-list__row");
+    const item = row.parentElement;
+    item.classList.add("conversation-group");
+    const composite = composites.find(c => c.id === title.dataset.compositeId);
+    const pid = title.dataset.projectId || title.dataset.branchId || (composite?.member_ids?.length === 1 ? composite.member_ids[0] : null);
+    const ids = pid ? [pid] : (composite?.member_ids || []);
+    item.hidden = Boolean(controller.contextScope && controller.currentProjectOnly && !ids.includes(controller.contextScope.project_id));
+    const key = title.dataset.compositeId ? "composite:" + title.dataset.compositeId : pid;
+    if (!title.querySelector(".unified-tree-title")) {
+      const text = document.createElement("span"); text.className = "unified-tree-title";
+      text.textContent = title.textContent.trim().replace(/^[⎇↳]\s*/, "");
+      title.replaceChildren(text);
+      title.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="5" rx="1.5"/><rect x="2" y="17" width="6" height="5" rx="1.5"/><rect x="16" y="17" width="6" height="5" rx="1.5"/><path d="M12 7v5M5 17v-5h14v5"/></svg>');
+    }
+    title.title = title.textContent.trim();
+    if (pid) { title.dataset.chatDrop = ""; title.dataset.projectId = pid; }
+    // Tree visibility is controlled through the archive, not a second eye toggle.
+    row.querySelectorAll('.project-list__eye,.project-list__archive').forEach(button => button.remove());
+    if (!title.dataset.branchId && !row.querySelector('[data-tree-menu]')) {
+      title.draggable = true; title.dataset.archiveTreeId = key;
+      const trigger = document.createElement('button'); trigger.type = 'button';
+      trigger.className = 'unified-tree-menu'; trigger.dataset.treeMenu = key;
+      trigger.setAttribute('aria-label','Действия с деревом'); trigger.title = 'Действия с деревом';
+      trigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+      const menu = document.createElement('div'); menu.className = 'tree-actions-popover';
+      menu.id = 'tree-actions-' + crypto.randomUUID(); menu.setAttribute('popover','auto');
+      menu.setAttribute('aria-label','Действия с деревом');
+      trigger.setAttribute('popovertarget',menu.id);
+      const action = document.createElement('button'); action.type = 'button';
+      action.className = 'tree-archive-action'; action.autofocus = true;
+      action.dataset.archiveTreeId = key;
+      action.textContent = projectsArchiveOpen ? 'Вернуть из архива' : 'В архив';
+      action.onclick = async () => {
+        const archive = !projectsArchiveOpen;
+        menu.hidePopover(); await setTreeArchived(key, archive);
+        document.querySelector('#projects-archive-bar button')?.focus();
+      };
+      menu.append(action);
+      menu.addEventListener('beforetoggle', event => {
+        if (event.newState !== 'open') return;
+        const rect = trigger.getBoundingClientRect();
+        menu.style.left = `${Math.max(8, Math.min(window.innerWidth - 208, rect.right - 200))}px`;
+        menu.style.top = `${Math.max(8, Math.min(window.innerHeight - 72, rect.bottom + 4))}px`;
+      });
+      row.append(trigger, menu);
+    }
+
+    const chatProjectId = pid || (ids.includes(state.literatureBranchId) ? state.literatureBranchId : ids[0]);
+    if (chatProjectId) {
+      let compose = row.querySelector('[data-tree-new-chat]');
+      if (!compose) {
+        compose = document.createElement('button'); compose.type = 'button';
+        compose.className = 'unified-tree-compose';
+        compose.setAttribute('aria-label', 'Новый чат'); compose.title = 'Новый чат';
+        compose.dataset.focusKey = 'new-chat-' + key;
+        compose.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>';
+        row.insertBefore(compose, row.querySelector('[data-tree-menu]') || row.querySelector('[data-chat-project-toggle]'));
+      }
+      compose.dataset.treeNewChat = chatProjectId;
+      compose.onclick = () => {
+        controller.collapsedProjects.delete(key); controller.collapsedProjects.delete(chatProjectId);
+        void controller.newChat({project_id: chatProjectId});
+      };
+    }
+    let chats = item.querySelector(":scope > .unified-project-chats");
+    if (!chats) {
+      chats = document.createElement("div"); chats.className = "unified-project-chats";
+      item.append(chats);
+    }
+    // Multi-repository composites show conversations below their real repository branches.
+    const rows = controller.rows.filter(chat => ids.includes(chat.project_id) &&
+      (projectsArchiveOpen || !controller.currentProjectOnly || chat.project_id === (controller.contextScope?.project_id || primaryMemberProjectId())));
+    const displayed = composite?.member_ids?.length > 1 ? [] : rows;
+    const signature = JSON.stringify([displayed, controller.row?.id]);
+    if (chats.dataset.signature !== signature) {
+      chats.dataset.signature = signature;
+      chats.replaceChildren(...displayed.map(entry));
+    }
+    let toggle = row.querySelector("[data-chat-project-toggle]");
+    if (!toggle) {
+      toggle = document.createElement("button"); toggle.type = "button";
+      toggle.className = "unified-project-toggle"; toggle.dataset.chatProjectToggle = key;
+      toggle.dataset.focusKey = "toggle-" + key;
+      toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
+      row.append(toggle);
+    }
+    if (!controller.navigationGroups.has(key)) {
+      controller.navigationGroups.add(key);
+      controller.collapsedProjects.add(key);
+    }
+    const open = !controller.collapsedProjects.has(key);
+    const hasBranches = Boolean(item.querySelector(":scope > .project-list--branches"));
+    toggle.hidden = !displayed.length && !hasBranches;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-label", open ? "Скрыть чаты проекта" : "Показать чаты проекта");
+    chats.hidden = !open;
+    const branches = item.querySelector(":scope > .project-list--branches");
+    if (branches) branches.hidden = !open;
+    item.classList.toggle("has-active-chat", rows.some(chat => chat.id === controller.row?.id));
+  }
+  if (controller.contextScope && controller.currentProjectOnly) {
+    for (const group of list.querySelectorAll(".program-group")) group.hidden = ![...group.querySelectorAll(".project-list__item")].some(item => !item.hidden);
+  } else list.querySelectorAll(".program-group").forEach(group => group.hidden = false);
+  sidebar.scrollTop = scroll;
+  if (focusKey && !active?.isConnected) [...sidebar.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === focusKey)?.focus({preventScroll: true});
+}
+
+function initConversationLists() {
+  initUnifiedNavigation();
+  const projectName = id => state.lab?.projectsById?.[id]?.title || id;
+  mainConversations = new ChatConversations({ api: KoiApi, main: true,
+    renderNavigation: isHubMode() ? null : renderUnifiedNavigation,
+    sidebar: document.getElementById("agent-chat-conversations"),
+    controls: document.getElementById("agent-chat-controls"),
+    input: document.getElementById("agent-chat-input"),
+    scope: () => ({ project_id: primaryMemberProjectId() }),
+    changed: async (options = {}) => {
+      if (options.open !== false) {
+        if (mainConversations.contextScope && innerWidth <= 900) document.getElementById("workspace").classList.add("is-chat-list-hidden");
+        if (!document.getElementById("workspace").classList.contains("is-chat-open")) toggleAgentChatPanel(true);
+      }
+      agentChatItems = []; renderAgentChatLog(); await refreshAgentChat();
+    }, projectName });
+  cardConversations = new ChatConversations({ api: KoiApi,
+    sidebar: document.getElementById("report-interview-conversations"),
+    controls: document.getElementById("report-interview-controls"),
+    input: document.getElementById("report-interview-input"),
+    scope: () => ({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId }),
+    changed: async () => { reportInterviewItems = []; reportInterviewSignature = ""; renderReportInterview(); await refreshReportInterview(); }, projectName });
+  void refreshAgentChat();
+}
+
 function initAgentChat() {
+  initConversationLists();
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {
@@ -8992,11 +9360,13 @@ function initAgentChat() {
     });
   });
   void refreshCliAgents();
-  document.getElementById("btn-agent-chat-welcome")?.addEventListener("click", () => {
-    toggleAgentChatPanel(true);
+  document.getElementById("btn-chat-collapse")?.addEventListener("click", () => {
+    toggleAgentChatPanel(false);
+    const selected = document.querySelector('#agent-chat-conversations [aria-pressed="true"]');
+    (selected?.offsetParent ? selected : document.getElementById('btn-agent-chat'))?.focus();
   });
   document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
-    toggleAgentChatPanel();
+    toggleWorkspaceSidebar();
     void refreshAppSettings();
   });
   document.getElementById("agent-chat-form")?.addEventListener("submit", (e) => {
@@ -9012,26 +9382,7 @@ function initAgentChat() {
       e.currentTarget.form?.requestSubmit();
     }
   });
-  document.getElementById("agent-chat-tab-chat")?.addEventListener("click", () => showAgentChatTab("chat"));
-  document.getElementById("agent-chat-tab-activity")?.addEventListener("click", () => showAgentChatTab("activity"));
-  document.getElementById("agent-chat-log")?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".agent-chat-delete");
-    if (!btn) return;
-    const itemId = btn.closest(".agent-chat-thread")?.dataset.id;
-    if (itemId) void deleteAgentChatItem(itemId);
-  });
-}
-
-async function deleteAgentChatItem(itemId) {
-  if (!confirm("Удалить вопрос и ответ из чата?")) return;
-  try {
-    await KoiApi.deleteAgentChatItem(itemId);
-    agentChatItems = agentChatItems.filter((i) => i.id !== itemId);
-    renderAgentChatLog();
-    syncAgentChatPolling();
-  } catch (err) {
-    setStatus(err.message, true);
-  }
+  document.getElementById("agent-chat-tab-activity")?.addEventListener("click", () => showAgentChatTab(document.getElementById("agent-chat-activity").classList.contains("hidden") ? "activity" : "chat"));
 }
 
 const THEME_STORAGE_KEY = "koi-theme";
@@ -12258,6 +12609,7 @@ function initKnowledge() {
 }
 
 async function init() {
+  initKanbanHeaderPopovers();
   const hubMode = isHubMode();
   initImageLightbox();
   if (!hubMode) void initWidgets({ api: KoiApi, skip: false });
@@ -12346,10 +12698,13 @@ async function init() {
   document.getElementById("report-agent-open").onclick = () => openReportInterview("");
   document.getElementById("report-agent-fab").onclick = () => openReportInterview("");
   attachReportChatResize(document.getElementById("report-interview"));
-  document.getElementById("report-agent-close").onclick = () => { document.getElementById("report-interview").hidden = true; };
+  document.getElementById("report-agent-close").onclick = () => {
+    document.getElementById("report-interview").hidden = true;
+    document.getElementById("report-agent-fab").setAttribute("aria-expanded", "false");
+    document.getElementById("report-agent-fab").focus();
+  };
   document.getElementById("report-interview-form").onsubmit = sendReportInterview;
-  document.getElementById("report-interview-tab-chat")?.addEventListener("click", () => showReportInterviewTab("chat"));
-  document.getElementById("report-interview-tab-activity")?.addEventListener("click", () => showReportInterviewTab("activity"));
+  document.getElementById("report-interview-tab-activity")?.addEventListener("click", () => showReportInterviewTab(document.getElementById("report-interview-activity").classList.contains("hidden") ? "activity" : "chat"));
   document.getElementById("report-interview-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();

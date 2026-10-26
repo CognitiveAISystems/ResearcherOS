@@ -90,10 +90,27 @@ def build_context(item_id: str) -> dict:
     if item is None:
         raise SystemExit(f"Queue item not found: {item_id}")
 
+    if item["project_id"] is None:
+        from koi.adapters.repository import list_projects
+        from koi.agent_chat.conversations import messages
+        return {
+            "queue_id": item["id"], "project_id": None,
+            "purpose": item.get("purpose", "agent"), "user_question": item["question"],
+            "workspace_root": str(_ws.agent_cwd()),
+            "projects": [{**p, "research_root": str(koi_root(p["id"])),
+                          "research_database_path": str(research_path(p["id"])),
+                          "code_root": str(code_root(p["id"]))} for p in list_projects()],
+            "history": [{"user": h["question"], "assistant": h.get("answer")}
+                        for h in reversed(messages(item["conversation_id"]))
+                        if h["enqueued_at"] < item["enqueued_at"]],
+            "answer_policy": ANSWER_FORMAT_INSTRUCTIONS,
+        }
+
     project = load_project(item["project_id"], sync_reports=False)
     if project is None:
         raise SystemExit(f"Project not found: {item['project_id']}")
 
+    from koi.agent_chat.conversations import item_conversation, messages
     research_db = build_research_database(project)
     scope_method = None
     scope_node = None
@@ -129,12 +146,12 @@ def build_context(item_id: str) -> dict:
         "prose": "koi-prose-style/SKILL.md",
     }
     if item.get("card_id"):
-        history = list_for_project(project.id, limit=10000, board_id=item.get("board_id"), card_id=item.get("card_id"))
+        history = messages(item_conversation(item))
         interview = {
             "purpose": purpose,
             "card": _card_meta(project, item.get("board_id"), item.get("card_id")),
             "current_document": item.get("report_markdown", ""),
-            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal")} for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"]],
+            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal")} for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))],
         }
         skill = skills.get(purpose)
         if skill:
@@ -157,8 +174,8 @@ def build_context(item_id: str) -> dict:
         "code_root": str(code_root(project.id)),
         "history": interview.get("history", [
             {"user": h["question"], "assistant": h.get("answer")}
-            for h in reversed(list_for_project(project.id, limit=20))
-            if not h.get("card_id") and h["enqueued_at"] < item["enqueued_at"]
+            for h in reversed(messages(item_conversation(item))[:20])
+            if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))
         ]),
         "scope_method": scope_method,
         "scope_node": scope_node,

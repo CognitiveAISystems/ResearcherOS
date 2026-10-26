@@ -4,6 +4,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from api.schemas import (
     AgentChatAnswerBody,
+    ConversationCreateBody,
+    ConversationScopeBody,
+    PermissionBody,
     AgentChatBody,
     AgentChatSettingsBody,
     CursorApiKeyBody,
@@ -43,7 +46,101 @@ from koi.adapters.settings_store import (
     set_cursor_api_key,
 )
 
+from koi.agent_chat import conversations
+from koi.adapters.agent_chat_queue import _locked
+
 router = APIRouter(tags=["agents"])
+
+
+def _check_scope(project_id, board_id=None, card_id=None):
+    if not project_id:
+        if board_id or card_id:
+            raise HTTPException(400, "Project required")
+        return None
+    project = load_project(project_id, sync_reports=False)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    if card_id and not board_id:
+        raise HTTPException(400, "Укажите доску и карточку вместе")
+    if board_id:
+        board = next((b for b in project.boards if b.id == board_id), None)
+        if board is None or (card_id and not any(c.id == card_id for c in board.cards)):
+            raise HTTPException(404, "Card not found")
+    return project
+
+
+@router.get("/agent-conversations")
+def get_conversations(project_id: str | None = None, board_id: str | None = None, card_id: str | None = None):
+    if (board_id or card_id) and not project_id:
+        raise HTTPException(400, "Project required")
+    if project_id:
+        _check_scope(project_id, board_id, card_id)
+    return {"items": conversations.list_conversations(project_id, board_id, card_id)}
+
+
+@router.post("/agent-conversations")
+def create_conversation(body: ConversationCreateBody):
+    _check_scope(body.project_id, body.board_id, body.card_id)
+    if body.backend and not any(r["id"] == body.backend and r["available"] for r in cli_agents()):
+        raise HTTPException(400, "Агент недоступен")
+    return {"item": conversations.create(body.project_id, body.board_id, body.card_id, body.title, body.backend)}
+
+
+def _conversation(cid):
+    row = conversations.find(cid)
+    if not row:
+        raise HTTPException(404, "Chat not found")
+    _check_scope(row["project_id"], row.get("board_id"), row.get("card_id"))
+    return row
+
+
+@router.get("/agent-conversations/{cid}")
+def get_conversation(cid: str):
+    row = _conversation(cid)
+    return {"conversation": row, "items": conversations.messages(cid), "live": None}
+
+
+@router.delete("/agent-conversations/{cid}")
+def delete_conversation(cid: str):
+    try:
+        item_ids = conversations.delete(cid)
+    except KeyError:
+        raise HTTPException(404, "Chat not found")
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    for item_id in item_ids:
+        delete_agent_chat_activity(item_id)
+    return {"ok": True}
+
+
+@router.patch("/agent-conversations/{cid}")
+@_locked
+def move_conversation(cid: str, body: ConversationScopeBody):
+    row = _conversation(cid)
+    _check_scope(body.project_id, body.board_id, body.card_id)
+    if any(i["status"] != "answered" for i in conversations.messages(cid)):
+        raise HTTPException(409, "Дождитесь завершения ответа перед переносом чата")
+    conversations.update(cid, project_id=body.project_id, board_id=body.board_id, card_id=body.card_id,
+                         acp_session_id=None, acp_backend=None)
+    return {"item": conversations.find(cid)}
+
+
+@router.get("/agent-conversations/{cid}/activity")
+def get_conversation_activity(cid: str):
+    _conversation(cid)
+    return {"items": [{"id": i["id"], "question": i["question"], "events": read_agent_chat_activity(i["id"])} for i in conversations.messages(cid)]}
+
+
+@router.post("/agent-conversations/{cid}/cancel")
+def cancel_conversation(cid: str):
+    _conversation(cid)
+    return {"ok": False}
+
+
+@router.post("/agent-conversations/{cid}/permission")
+def decide_permission(cid: str, body: PermissionBody):
+    _conversation(cid)
+    raise HTTPException(409, "Нет активного запроса разрешения")
 
 
 def _run_agent_chat_item(item_id: str) -> None:
@@ -77,12 +174,20 @@ def get_agent_backends():
 
 
 @router.post("/agent-chat")
+@_locked
 def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> dict:
-    if load_project(body.project_id, sync_reports=False) is None:
-        raise HTTPException(404, "Project not found")
+    _check_scope(body.project_id, getattr(body, "board_id", None), getattr(body, "card_id", None))
+    if not body.project_id and not getattr(body, "conversation_id", None):
+        raise HTTPException(400, "Chat required")
     if getattr(body, "purpose", "agent") in ("prose", "run") and not (getattr(body, "card_id", None) and getattr(body, "board_id", None)):
         raise HTTPException(400, "Откройте карточку, чтобы выполнить эту команду.")
-    cli_agent = getattr(body, "cli_agent", None) or None
+    cid = getattr(body, "conversation_id", None)
+    conversation = _conversation(cid) if cid else None
+    if conversation and (conversation["project_id"], conversation.get("board_id"), conversation.get("card_id")) != (body.project_id, getattr(body, "board_id", None), getattr(body, "card_id", None)):
+        raise HTTPException(400, "Чат относится к другому проекту или карточке")
+    if cid and any(i["status"] != "answered" for i in conversations.messages(cid)):
+        raise HTTPException(409, "Дождитесь ответа в этом чате")
+    cli_agent = getattr(body, "cli_agent", None) or (conversation or {}).get("backend") or None
     if cli_agent:
         row = next((agent for agent in cli_agents() if agent["id"] == cli_agent), None)
         if row is None or not row["available"]:
@@ -94,7 +199,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
         if board is None or not any(c.id == body.card_id for c in board.cards):
             raise HTTPException(404, "Card not found")
         history = list_for_project(body.project_id, limit=10000, board_id=body.board_id, card_id=body.card_id)
-        if any(i.get("status") != "answered" for i in history):
+        if not cid and any(i.get("status") != "answered" for i in history):
             raise HTTPException(409, "Дождитесь ответа агента на предыдущий вопрос")
     try:
         item = enqueue_question(
@@ -107,10 +212,13 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
             card_id=getattr(body, "card_id", None),
             report_markdown=getattr(body, "report_markdown", ""),
             cli_agent=cli_agent,
+            **({"conversation_id": cid} if cid else {}),
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
+    if cid:
+        conversations.update(cid, backend=cli_agent, **({"title": body.question[:80]} if conversation["title"] == "Новый чат" else {}))
     answered = False
     item = find_item(item["id"]) or item
 
@@ -171,6 +279,9 @@ def patch_agent_chat_answer(item_id: str, body: AgentChatAnswerBody) -> dict:
 
 @router.delete("/agent-chat/{item_id}")
 def delete_agent_chat_item(item_id: str) -> dict:
+    existing = find_item(item_id)
+    if existing and existing.get("status") != "answered":
+        raise HTTPException(409, "Сначала дождитесь завершения или остановите агента")
     if not dequeue_agent_chat_item(item_id):
         raise HTTPException(404, f"Queue item not found: {item_id}")
     delete_agent_chat_activity(item_id)
@@ -218,7 +329,14 @@ def put_agent_chat_settings(body: AgentChatSettingsBody) -> dict:
         set_agent_chat_mode(mode)
     if body.cursor_api_key is not None:
         set_cursor_api_key(body.cursor_api_key.strip() or None)
-    running = _sync_agent_worker()
+    from koi.adapters.settings_store import _write_env_var
+    for scope in ("main", "card"):
+        width = getattr(body, f"chat_list_{scope}_width", None)
+        if width is not None:
+            _write_env_var(f"KOI_CHAT_LIST_{scope.upper()}_WIDTH", str(width))
+    if body.chat_panel_width is not None:
+        _write_env_var("KOI_CHAT_PANEL_WIDTH", str(body.chat_panel_width))
+    running = _sync_agent_worker() if body.agent_chat_mode is not None or body.cursor_api_key is not None else worker_running()
     snap = settings_snapshot()
     snap["agent_worker_running"] = running
     return {"ok": True, **snap}
