@@ -2629,6 +2629,7 @@ function renderLabMindmap(options = {}) {
     const frame = document.createElement("button");
     frame.type = "button";
     frame.className = "lab-project-frame";
+    frame.classList.toggle("is-active", placement.project.id === state.project?.id);
     frame.dataset.projectId = placement.project.id;
     frame.style.left = `${region.x}px`;
     frame.style.top = `${region.y}px`;
@@ -7375,6 +7376,9 @@ async function loadProjectList(activeId) {
 }
 
 function setActiveProjectInList(id) {
+  document.querySelectorAll(".lab-project-frame").forEach((frame) => {
+    frame.classList.toggle("is-active", frame.dataset.projectId === id);
+  });
   const selectedBranch = state.literatureBranchId;
   document.querySelectorAll(".project-list__btn").forEach((btn) => {
     const isComposite =
@@ -7695,7 +7699,6 @@ async function closeReportModal() {
 
 let agentChatItems = [];
 let agentChatPollTimer = null;
-let agentChatProjectOverrideId = null;
 let agentChatDisplayedProjectId = null;
 let lastAgentChatInboxMessage = "";
 const AGENT_CHAT_POLL_MS = 5000;
@@ -8112,33 +8115,7 @@ function syncAgentChatPolling() {
 }
 
 function agentChatProjectId() {
-  return agentChatProjectOverrideId || primaryMemberProjectId() || null;
-}
-
-function agentChatProjectOptions() {
-  const projects = Object.values(state.lab?.projectsById || {})
-    .filter((project) => project?.id && !isCompositeVirtualId(project.id) && !project.is_composite);
-  const knownIds = new Set(projects.map((project) => project.id));
-  for (const group of state.lab?.grouped?.groups || []) {
-    for (const composite of group.composites || []) {
-      const members = state.lab?.projectsById?.[compositeVirtualId(composite.id)]?.members || [];
-      for (const id of composite.member_ids || []) {
-        if (knownIds.has(id)) continue;
-        const member = members.find((item) => item.project_id === id);
-        projects.push({ id, title: member?.title || id });
-        knownIds.add(id);
-      }
-    }
-  }
-  if (!projects.length && state.project?.id && !isCompositeVirtualId(state.project.id)) {
-    projects.push(state.project);
-  }
-  const currentId = agentChatProjectId();
-  if (currentId && !projects.some((project) => project.id === currentId)) {
-    const member = state.project?.members?.find((item) => item.project_id === currentId);
-    projects.push({ id: currentId, title: member?.title || currentId });
-  }
-  return projects.sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id, "ru"));
+  return primaryMemberProjectId() || null;
 }
 
 function resizeAgentChatInput() {
@@ -8148,30 +8125,8 @@ function resizeAgentChatInput() {
   input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
 }
 
-function setAgentChatProjectMenu(open) {
-  const menu = document.getElementById("agent-chat-project-menu");
-  if (!menu) return;
-  menu.hidden = !open;
-  document.getElementById("agent-chat-project")?.setAttribute("aria-expanded", String(open));
-  if (open) {
-    const search = document.getElementById("agent-chat-project-search");
-    search.value = "";
-    renderAgentChatProjectOptions();
-    search.focus();
-  }
-}
-
-function renderAgentChatProjectOptions() {
-  const host = document.getElementById("agent-chat-project-options");
-  if (!host) return;
-  const query = document.getElementById("agent-chat-project-search")?.value.trim().toLocaleLowerCase() || "";
-  const projects = agentChatProjectOptions().filter((project) => `${project.title} ${project.id}`.toLocaleLowerCase().includes(query));
-  host.innerHTML = projects.map((project) => `<button type="button" data-chat-project="${escapeHtml(project.id)}" aria-pressed="${project.id === agentChatProjectId()}">${escapeHtml(project.title || project.id)}</button>`).join("") || '<p>Проекты не найдены</p>';
-}
-
 function updateAgentChatScope() {
   const el = document.getElementById("agent-chat-scope");
-  const projectEl = document.getElementById("agent-chat-project");
   const selectedId = agentChatProjectId();
   if (selectedId !== agentChatDisplayedProjectId) {
     agentChatDisplayedProjectId = selectedId;
@@ -8179,14 +8134,9 @@ function updateAgentChatScope() {
     renderAgentChatLog();
     const activity = document.getElementById("agent-chat-activity");
     if (activity) activity.textContent = "";
-  }
-  if (projectEl) {
-    const projects = agentChatProjectOptions();
-    const selected = projects.find((project) => project.id === selectedId);
-    document.getElementById("agent-chat-project-name").textContent = selected?.title || selected?.id || "Выберите проект";
-    projectEl.disabled = !projects.length;
-    projectEl.title = selected?.title || "Выберите проект";
-    renderAgentChatProjectOptions();
+    if (!document.getElementById("agent-chat-panel")?.classList.contains("hidden")) {
+      void refreshAgentChat({ scrollToBottom: true });
+    }
   }
   if (!el) return;
   const { label } = agentChatContext();
@@ -8204,7 +8154,6 @@ function toggleAgentChatPanel(open) {
   const workspace = document.getElementById("workspace");
   if (!panel) return;
   const show = open ?? panel.classList.contains("hidden");
-  setAgentChatProjectMenu(false);
   panel.classList.toggle("hidden", !show);
   workspace?.classList.toggle("is-chat-open", show);
   document.body.classList.toggle("chat-open", show);
@@ -8214,7 +8163,6 @@ function toggleAgentChatPanel(open) {
   trigger?.setAttribute("aria-label", show ? "Свернуть чат" : "Открыть чат");
   if (trigger) trigger.title = show ? "Свернуть чат" : "Открыть чат";
   if (show) {
-    agentChatProjectOverrideId = primaryMemberProjectId() || null;
     void refreshAppSettings();
     void refreshCliAgents();
     updateAgentChatScope();
@@ -9050,31 +8998,6 @@ function initAgentChat() {
   document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
     toggleAgentChatPanel();
     void refreshAppSettings();
-  });
-  const picker = document.querySelector(".agent-chat-project-picker");
-  document.getElementById("agent-chat-project")?.addEventListener("click", () => {
-    const open = document.getElementById("agent-chat-project-menu").hidden;
-    setAgentChatProjectMenu(open);
-  });
-  document.getElementById("agent-chat-project-search")?.addEventListener("input", renderAgentChatProjectOptions);
-  document.getElementById("agent-chat-project-options")?.addEventListener("click", (e) => {
-    const option = e.target.closest("[data-chat-project]");
-    if (!option) return;
-    agentChatProjectOverrideId = option.dataset.chatProject;
-    updateAgentChatScope();
-    setAgentChatProjectMenu(false);
-    document.getElementById("agent-chat-project").focus();
-    setAgentChatFormStatus("");
-    void refreshAgentChat({ scrollToBottom: true });
-  });
-  document.addEventListener("click", (e) => {
-    if (!picker?.contains(e.target)) setAgentChatProjectMenu(false);
-  });
-  picker?.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      setAgentChatProjectMenu(false);
-      document.getElementById("agent-chat-project").focus();
-    }
   });
   document.getElementById("agent-chat-form")?.addEventListener("submit", (e) => {
     void submitAgentQuestion(e);

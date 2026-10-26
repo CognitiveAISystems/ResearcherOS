@@ -3,7 +3,7 @@ name: Desktop Windows and Linux
 on:
   workflow_dispatch:
   push:
-    branches: [codex/desktop-windows-linux]
+    branches: [main, codex/desktop-windows-linux]
   pull_request:
     paths:
       - ".github/workflows/desktop-cross-platform.yml"
@@ -22,7 +22,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, ubuntu-24.04]
+        # Build against the oldest supported glibc, then test this same artifact
+        # on newer Ubuntu releases below.
+        os: [windows-2022, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -82,3 +84,30 @@ jobs:
             desktop/dist/*.exe
             desktop/dist/*.AppImage
           if-no-files-found: error
+
+  linux-compatibility:
+    needs: desktop
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ResearcherOS-ubuntu-22.04
+          path: linux-artifact
+      - name: Check the released AppImage on this Ubuntu version
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage="$(find linux-artifact -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          chmod +x "$appimage"
+          (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null)
+          node desktop/verify-server.cjs "$RUNNER_TEMP/squashfs-root/resources/server/researchos-server"
+          RESEARCHOS_SMOKE_TEST=1 xvfb-run -a timeout 75 "$RUNNER_TEMP/squashfs-root/AppRun" --no-sandbox

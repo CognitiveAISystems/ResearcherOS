@@ -68,6 +68,12 @@ Download the installers from that workflow's artifacts. This is an automated
 smoke check; installation, onboarding, Git integration, and updates still need
 manual checks on a user desktop before release.
 
+Build the Linux package on Ubuntu 22.04 (glibc 2.35) or an equivalent baseline,
+not on a newer distribution. AppImage does not bundle glibc: a Python runtime
+built on Ubuntu 24.04 can fail before startup on Ubuntu/Pop!_OS 22.04. CI builds
+on Ubuntu 22.04 and tests that same AppImage on Ubuntu 22.04 and 24.04. The Linux
+package targets Intel/AMD x86_64; ARM needs a separate build.
+
 For a local build on Windows or Linux, install Python 3.12, Node.js 22, and Git.
 From the repository root, install `requirements.txt` and `pyinstaller==6.16.0`,
 then run `python desktop/build_server.py`. In `desktop/`, run `npm ci` and either

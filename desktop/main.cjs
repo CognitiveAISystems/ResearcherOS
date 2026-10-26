@@ -156,6 +156,11 @@ app.whenReady().then(async () => {
     });
     createWindow(await startServer());
   } catch (error) {
+    if (process.env.RESEARCHOS_SMOKE_TEST === '1') {
+      console.error(error);
+      app.exit(1);
+      return;
+    }
     dialog.showErrorBox('Не удалось запустить ResearcherOS', String(error.message || error));
     app.quit();
   }

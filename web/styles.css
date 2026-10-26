@@ -2522,6 +2522,12 @@ body.hub-readonly .project-list__pull {
   cursor: pointer;
 }
 
+.lab-project-frame.is-active {
+  border-radius: 24px;
+  box-shadow: var(--glow-purple), inset 0 0 24px var(--select-glow);
+  outline: 1px solid var(--select-glow);
+}
+
 .lab-project-frame + .node-wrap,
 .nodes-layer > .node-wrap {
   z-index: 1;
@@ -9442,33 +9448,6 @@ textarea.inline-edit-field {
   font-weight: 700;
   margin: 0;
   color: var(--text);
-}
-
-.agent-chat-project {
-  display: block;
-  width: 100%;
-  margin: 0.3rem 0 0;
-  padding: 0.28rem 1.4rem 0.28rem 0.4rem;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--surface-modal);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
-  text-overflow: ellipsis;
-}
-
-.agent-chat-project:hover,
-.agent-chat-project:focus-visible {
-  border-color: var(--border);
-  color: var(--text);
-}
-
-.agent-chat-project:focus-visible {
-  outline: 2px solid var(--purple);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px var(--select-glow);
 }
 
 .agent-chat-close {
@@ -16619,18 +16598,7 @@ button.kb-doc {
 
 /* Chat project popover and unified composer. */
 .agent-chat-header { align-items: flex-start; }
-.agent-chat-project-picker { position: relative; margin-top: 0.6rem; }
-.agent-chat-project { display: flex; align-items: center; gap: 0.45rem; margin: 0; min-height: 38px; padding: 0.45rem 0.6rem; border-color: var(--border); background: var(--surface-muted-btn); text-align: left; }
-.agent-chat-project-caption { color: var(--muted); font-size: 0.7rem; }
-#agent-chat-project-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
-.agent-chat-project-menu { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 20; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-modal); box-shadow: 0 8px 24px var(--shadow-heavy); }
-.agent-chat-project-menu[hidden] { display: none; }
-#agent-chat-project-search { box-sizing: border-box; width: 100%; padding: 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-input); color: var(--text); font: inherit; font-size: 0.8rem; }
-.agent-chat-project-options { max-height: min(300px, 40vh); overflow-y: auto; overscroll-behavior: contain; margin-top: 6px; }
-.agent-chat-project-options button { display: block; width: 100%; padding: 10px; border: 0; border-radius: 8px; text-align: left; font: inherit; font-size: 0.8rem; line-height: 1.45; overflow-wrap: anywhere; background: transparent; color: var(--text); cursor: pointer; }
-.agent-chat-project-options button:hover, .agent-chat-project-options button[aria-pressed="true"] { background: var(--surface-muted-btn-hover); }
-.agent-chat-project-options button:focus-visible, #agent-chat-project-search:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
-.agent-chat-project-options p { padding: 0.5rem; font-size: 0.8rem; color: var(--muted); }
+
 .agent-chat-close { flex-basis: 36px; width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; }
 .agent-chat-close svg { width: 22px; height: 22px; stroke-width: 1.6; }
 .agent-chat-form { display: block; border-top: 0; padding: 0.75rem 1rem 1rem; }
