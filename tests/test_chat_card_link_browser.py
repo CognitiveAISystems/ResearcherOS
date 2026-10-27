@@ -1,5 +1,6 @@
 """Card-chat links navigate from the main screen and remain usable after reload."""
 from pathlib import Path
+import asyncio
 from urllib.parse import parse_qs, urlparse
 
 from playwright.async_api import async_playwright
@@ -58,14 +59,28 @@ async def smoke(url):
         # A changed map selection must not change the message's card target.
         await page.locator('.lab-project-frame[data-project-id=comparison]').focus()
         await page.keyboard.press('Enter')
-        await link.focus()
-        await page.keyboard.press('Enter')
+        await page.locator('.lab-project-frame[data-project-id=comparison][aria-pressed=true]').wait_for()
+        await link.press('Enter')
         await page.locator('#card-report-modal:not(.hidden)').wait_for()
         assert await page.locator('#card-report-card-title').inner_text() == 'Проверка чатов'
-        assert await page.locator('#card-report-card-title').evaluate('el=>el===document.activeElement')
+        await page.wait_for_function('document.getElementById("card-report-card-title")===document.activeElement')
         await page.keyboard.press('Escape')
         await page.locator('#card-report-modal').wait_for(state='hidden')
         await page.wait_for_function('document.activeElement?.matches("#agent-chat-log [data-chat-card-link]")')
+
+        async def slow_report(route):
+            await asyncio.sleep(.5)
+            await route.continue_()
+
+        await page.route('**/api/projects/demo/boards/board/cards/card/report', slow_report)
+        await link.click()
+        await page.locator('#card-report-modal:not(.hidden)').wait_for()
+        await page.keyboard.press('Escape')
+        await page.wait_for_function('document.activeElement?.matches("#agent-chat-log [data-chat-card-link]")')
+        await page.wait_for_timeout(800)
+        assert await page.locator('#card-report-modal').is_hidden()
+        assert await link.evaluate('el=>el===document.activeElement')
+        await page.unroute('**/api/projects/demo/boards/board/cards/card/report', slow_report)
 
         # Moving the chat preserves the originating card on historical messages.
         response = await page.request.patch(url+f'api/agent-conversations/{card_chat["id"]}', data={'project_id':None})

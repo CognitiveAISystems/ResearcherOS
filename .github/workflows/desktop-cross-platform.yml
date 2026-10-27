@@ -3,7 +3,8 @@ name: Desktop Windows and Linux
 on:
   workflow_dispatch:
   push:
-    branches: [main, codex/desktop-windows-linux]
+    branches: [main, go_beta, codex/desktop-windows-linux]
+    paths-ignore: ["installers/**"]
   pull_request:
     paths:
       - ".github/workflows/desktop-cross-platform.yml"

@@ -3129,6 +3129,7 @@ async function refreshReportInterviewActivity() {
 }
 function renderReportInterview() {
   const log = document.getElementById("report-interview-log");
+  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? document.activeElement.closest("article")?.dataset.id : null;
   const nearBottom = agentChatLogNearBottom(log);
   log.replaceChildren();
   if (!reportInterviewItems.length) {
@@ -3191,6 +3192,7 @@ function renderReportInterview() {
     }
     log.append(article);
   }
+  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink)}"] [data-chat-card-link]`)?.focus({ preventScroll: true });
   if (nearBottom) log.scrollTop = log.scrollHeight;
 }
 async function sendReportInterview(event) {
@@ -8044,8 +8046,9 @@ async function openChatCard(params, trigger = null) {
     if (!board || !matches(board)) board = Object.values(state.project.boards || {}).find(matches);
     if (!board) throw new Error("Card not found");
     const fromMain = document.getElementById("card-report-modal").classList.contains("hidden");
-    await openCardReport(getBoardCard(board, cardId), board);
     if (fromMain) reportCardLinkTrigger = trigger?.closest("article")?.dataset.id || null;
+    await openCardReport(getBoardCard(board, cardId), board);
+    if (state.reportCardId !== cardId || document.getElementById("card-report-modal").classList.contains("hidden")) return;
     const title = document.getElementById("card-report-card-title");
     title.tabIndex = -1;
     title.focus();
@@ -8057,6 +8060,7 @@ async function openChatCard(params, trigger = null) {
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
+  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? document.activeElement.closest("article")?.dataset.id : null;
   clearInlineLoaderHints(log);
   const stickToBottom = scrollToBottom || agentChatLogNearBottom(log);
   const prevScrollTop = log.scrollTop;
@@ -8100,6 +8104,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       );
     })
     .join("");
+  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink)}"] [data-chat-card-link]`)?.focus({ preventScroll: true });
   refreshInlineLoaderHints(log);
   if (stickToBottom) {
     log.scrollTop = log.scrollHeight;
@@ -9235,6 +9240,8 @@ function initUnifiedNavigation() {
 async function syncWorkspaceChatContext() {
   if (isHubMode() || !mainConversations) return;
   const visible = id => !document.getElementById(id).classList.contains("hidden");
+  const returnTo = !visible("card-report-modal") ? reportCardLinkTrigger : null;
+  if (returnTo) reportCardLinkTrigger = null;
   let scope = null, title = "";
   if (visible("card-report-modal") && state.reportCardId) {
     scope = {project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId};
@@ -9262,9 +9269,8 @@ async function syncWorkspaceChatContext() {
   } else if (leaving) toggleAgentChatPanel(workspace.dataset.contextPreviousChatOpen === "true");
   if (changed) { renderUnifiedNavigation(); agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
   else renderUnifiedNavigation();
-  if (reportCardLinkTrigger && !visible("card-report-modal")) {
-    const link = document.querySelector(`#agent-chat-log [data-id="${CSS.escape(reportCardLinkTrigger)}"] [data-chat-card-link]`);
-    reportCardLinkTrigger = null;
+  if (returnTo) {
+    const link = document.querySelector(`#agent-chat-log [data-id="${CSS.escape(returnTo)}"] [data-chat-card-link]`);
     (link || document.getElementById("agent-chat-input"))?.focus({ preventScroll: true });
   }
 }
