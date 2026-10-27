@@ -2942,6 +2942,7 @@ function hideModal(id) {
 
 let reportBlockEditor;
 let reportLinkedReadOnly = false;
+let reportCardLinkTrigger = null;
 let reportAutoSaveTimer;
 let reportInterviewTimer;
 let reportInterviewItems = [];
@@ -3154,6 +3155,7 @@ function renderReportInterview() {
       agentChatDeliveryHtml(item) +
       `</div>` +
       answerHtml +
+      agentChatCardLinkHtml(item, cardConversations?.row) +
       `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>`;
     if (item.proposal) {
       const details = document.createElement("details");
@@ -8020,6 +8022,38 @@ async function chooseAgentChatContext(event) {
   }
 }
 
+function agentChatCardLinkHtml(item, conversation) {
+  const scope = item.card_id ? item : conversation;
+  if (!scope?.project_id || !scope.board_id || !scope.card_id) return "";
+  const params = new URLSearchParams({ project: scope.project_id, board: scope.board_id, card: scope.card_id });
+  if (new URLSearchParams(location.search).has("desktop")) params.set("desktop", "1");
+  return `<p class="agent-chat-card-source"><a class="agent-chat-card-link" data-chat-card-link href="?${escapeHtml(params.toString())}">Открыть карточку</a></p>`;
+}
+
+async function openChatCard(params, trigger = null) {
+  const projectId = params.get("project"), cardId = params.get("card");
+  if (!projectId || !params.get("board") || !cardId) return;
+  if (await saveCardReport() === false) return;
+  try {
+    const grouped = state.lab?.grouped;
+    const target = resolveRequestedBranchId(projectId, grouped)
+      ? resolvePreferredProjectId(projectId, grouped, state.lab.projectsById) : projectId;
+    await focusLabProject(target, { reload: true });
+    const matches = board => boardWriteProjectId(board) === projectId && board.cards.some(card => card.id === cardId);
+    let board = getBoard(state.project, params.get("board"));
+    if (!board || !matches(board)) board = Object.values(state.project.boards || {}).find(matches);
+    if (!board) throw new Error("Card not found");
+    const fromMain = document.getElementById("card-report-modal").classList.contains("hidden");
+    await openCardReport(getBoardCard(board, cardId), board);
+    if (fromMain) reportCardLinkTrigger = trigger?.closest("article")?.dataset.id || null;
+    const title = document.getElementById("card-report-card-title");
+    title.tabIndex = -1;
+    title.focus();
+  } catch {
+    setStatus("Не удалось открыть карточку. Проверьте, что дерево подключено, а карточка не удалена.", true);
+  }
+}
+
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
@@ -8060,6 +8094,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         `</div>`) +
         answerHtml +
         agentChatContextSuggestionsHtml(item) +
+        agentChatCardLinkHtml(item, mainConversations?.row) +
         `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>` +
         `</article>`
       );
@@ -9227,6 +9262,11 @@ async function syncWorkspaceChatContext() {
   } else if (leaving) toggleAgentChatPanel(workspace.dataset.contextPreviousChatOpen === "true");
   if (changed) { renderUnifiedNavigation(); agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
   else renderUnifiedNavigation();
+  if (reportCardLinkTrigger && !visible("card-report-modal")) {
+    const link = document.querySelector(`#agent-chat-log [data-id="${CSS.escape(reportCardLinkTrigger)}"] [data-chat-card-link]`);
+    reportCardLinkTrigger = null;
+    (link || document.getElementById("agent-chat-input"))?.focus({ preventScroll: true });
+  }
 }
 
 function renderUnifiedNavigation(controller = mainConversations) {
@@ -9330,6 +9370,14 @@ function initConversationLists() {
 
 function initAgentChat() {
   initConversationLists();
+  for (const id of ["agent-chat-log", "report-interview-log"]) {
+    document.getElementById(id).addEventListener("click", event => {
+      const link = event.target.closest("[data-chat-card-link]");
+      if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      void openChatCard(new URL(link.href).searchParams, link);
+    });
+  }
   document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
@@ -12788,6 +12836,8 @@ async function init() {
     updateAgentChatScope();
     void refreshAgentChat();
     maybeOpenPaperFromDeepLink();
+    const cardParams = new URLSearchParams(location.search);
+    if (cardParams.has("card")) await openChatCard(cardParams);
   } catch (err) {
     console.error("ResearcherOS init failed:", err);
     setStatus(

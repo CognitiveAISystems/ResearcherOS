@@ -9418,6 +9418,20 @@ textarea.inline-edit-field {
   margin-top: 0.35rem;
 }
 
+.agent-chat-card-source {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+}
+
+.agent-chat-card-link {
+  display: inline-block;
+  padding-block: 4px;
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
 .agent-chat-q-row {
   display: flex;
   align-items: flex-start;
