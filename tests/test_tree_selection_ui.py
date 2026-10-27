@@ -182,15 +182,12 @@ def test_tree_selection_browser():
             page.locator('.node-wrap[data-project-id="beta"] .map-node.problem').click()
             selected("beta")
             page.keyboard.press("Escape")
-            page.locator("#btn-zoom-fit-project").click()
-            page.wait_for_timeout(450)
             selected("beta")
             page.locator("#mindmap").screenshot(path=str(out / "tree-selection-detail.png"))
             page.set_viewport_size({"width": 1280, "height": 900})
             page.wait_for_timeout(350)
             # Spatial attention may choose another tree when the overview is refitted.
             selected(page.locator(".lab-tree-edges.is-active").get_attribute("data-project-id"))
-            page.locator("#btn-zoom-fit-lab").click()
             page.locator('.node-wrap[data-project-id="alpha"] .map-node.problem').click()
             selected("alpha")
             assert not errors, errors
