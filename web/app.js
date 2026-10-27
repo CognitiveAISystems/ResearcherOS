@@ -2942,7 +2942,6 @@ function hideModal(id) {
 
 let reportBlockEditor;
 let reportLinkedReadOnly = false;
-let reportCardLinkTrigger = null;
 let reportAutoSaveTimer;
 let reportInterviewTimer;
 let reportInterviewItems = [];
@@ -3415,6 +3414,10 @@ function closeCardReport() {
   clearInterval(reportContentPollTimer);
   reportContentPollTimer = null;
   hideModal("card-report-modal");
+  if (!document.getElementById("kanban-modal").classList.contains("hidden")) {
+    const cardButton = document.querySelector(`#kanban-board [data-card-id="${CSS.escape(state.reportCardId)}"] .card-expand-report`);
+    (cardButton || document.getElementById("kanban-filters-toggle"))?.focus({ preventScroll: true });
+  }
   state.reportCardId = null;
   state.reportBoardId = null;
   state.reportProjectId = null;
@@ -8032,7 +8035,7 @@ function agentChatCardLinkHtml(item, conversation) {
   return `<p class="agent-chat-card-source"><a class="agent-chat-card-link" data-chat-card-link href="?${escapeHtml(params.toString())}">Открыть карточку</a></p>`;
 }
 
-async function openChatCard(params, trigger = null) {
+async function openChatCard(params) {
   const projectId = params.get("project"), cardId = params.get("card");
   if (!projectId || !params.get("board") || !cardId) return;
   if (await saveCardReport() === false) return;
@@ -8044,9 +8047,9 @@ async function openChatCard(params, trigger = null) {
     const matches = board => boardWriteProjectId(board) === projectId && board.cards.some(card => card.id === cardId);
     let board = getBoard(state.project, params.get("board"));
     if (!board || !matches(board)) board = Object.values(state.project.boards || {}).find(matches);
-    if (!board) throw new Error("Card not found");
-    const fromMain = document.getElementById("card-report-modal").classList.contains("hidden");
-    if (fromMain) reportCardLinkTrigger = trigger?.closest("article")?.dataset.id || null;
+    const node = board && state.project.nodes.find(node => node.id === board.owner_node_id);
+    if (!node) throw new Error("Card not found");
+    openKanbanModal(node);
     await openCardReport(getBoardCard(board, cardId), board);
     if (state.reportCardId !== cardId || document.getElementById("card-report-modal").classList.contains("hidden")) return;
     const title = document.getElementById("card-report-card-title");
@@ -9240,8 +9243,6 @@ function initUnifiedNavigation() {
 async function syncWorkspaceChatContext() {
   if (isHubMode() || !mainConversations) return;
   const visible = id => !document.getElementById(id).classList.contains("hidden");
-  const returnTo = !visible("card-report-modal") ? reportCardLinkTrigger : null;
-  if (returnTo) reportCardLinkTrigger = null;
   let scope = null, title = "";
   if (visible("card-report-modal") && state.reportCardId) {
     scope = {project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId};
@@ -9269,10 +9270,6 @@ async function syncWorkspaceChatContext() {
   } else if (leaving) toggleAgentChatPanel(workspace.dataset.contextPreviousChatOpen === "true");
   if (changed) { renderUnifiedNavigation(); agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
   else renderUnifiedNavigation();
-  if (returnTo) {
-    const link = document.querySelector(`#agent-chat-log [data-id="${CSS.escape(returnTo)}"] [data-chat-card-link]`);
-    (link || document.getElementById("agent-chat-input"))?.focus({ preventScroll: true });
-  }
 }
 
 function renderUnifiedNavigation(controller = mainConversations) {
@@ -9381,7 +9378,7 @@ function initAgentChat() {
       const link = event.target.closest("[data-chat-card-link]");
       if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      void openChatCard(new URL(link.href).searchParams, link);
+      void openChatCard(new URL(link.href).searchParams);
     });
   }
   document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));

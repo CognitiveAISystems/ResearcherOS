@@ -66,7 +66,13 @@ async def smoke(url):
         await page.wait_for_function('document.getElementById("card-report-card-title")===document.activeElement')
         await page.keyboard.press('Escape')
         await page.locator('#card-report-modal').wait_for(state='hidden')
-        await page.wait_for_function('document.activeElement?.matches("#agent-chat-log [data-chat-card-link]")')
+        await page.locator('#kanban-modal:not(.hidden)').wait_for()
+        assert await page.locator('#kanban-board [data-card-id=card] .card-title-display').inner_text() == 'Проверка чатов'
+        await page.wait_for_function('document.activeElement?.matches("#kanban-board [data-card-id=card] .card-expand-report")')
+        await page.screenshot(path=str(output/'kanban-return.png'))
+        await page.locator('#kanban-modal .modal-close').click()
+        await page.locator('#kanban-modal').wait_for(state='hidden')
+        await link.wait_for(state='visible')
 
         async def slow_report(route):
             await asyncio.sleep(.5)
@@ -76,10 +82,13 @@ async def smoke(url):
         await link.click()
         await page.locator('#card-report-modal:not(.hidden)').wait_for()
         await page.keyboard.press('Escape')
-        await page.wait_for_function('document.activeElement?.matches("#agent-chat-log [data-chat-card-link]")')
+        await page.wait_for_function('document.activeElement?.matches("#kanban-board [data-card-id=card] .card-expand-report")')
         await page.wait_for_timeout(800)
         assert await page.locator('#card-report-modal').is_hidden()
-        assert await link.evaluate('el=>el===document.activeElement')
+        assert await page.locator('#kanban-modal').is_visible()
+        assert await page.locator('#kanban-board [data-card-id=card] .card-expand-report').evaluate('el=>el===document.activeElement')
+        await page.locator('#kanban-modal .modal-close').click()
+        await page.locator('#kanban-modal').wait_for(state='hidden')
         await page.unroute('**/api/projects/demo/boards/board/cards/card/report', slow_report)
 
         # Moving the chat preserves the originating card on historical messages.
@@ -90,6 +99,8 @@ async def smoke(url):
         await link.click()
         await page.locator('#card-report-modal:not(.hidden)').wait_for()
         await page.keyboard.press('Escape')
+        await page.locator('#kanban-modal:not(.hidden)').wait_for()
+        await page.locator('#kanban-modal .modal-close').click()
 
         copied = await browser.new_page()
         copied.on('pageerror', lambda error: errors.append(str(error)))
@@ -98,6 +109,9 @@ async def smoke(url):
         assert await copied.locator('#card-report-card-title').inner_text() == 'Проверка чатов'
         await copied.reload(wait_until='networkidle')
         await copied.locator('#card-report-modal:not(.hidden)').wait_for()
+        await copied.keyboard.press('Escape')
+        await copied.locator('#kanban-modal:not(.hidden)').wait_for()
+        assert await copied.locator('#kanban-board [data-card-id=card] .card-title-display').inner_text() == 'Проверка чатов'
         await copied.close()
 
         # A deleted card must not open a similarly identified card in another tree.
@@ -110,7 +124,7 @@ async def smoke(url):
         await missing.close()
         assert not errors, errors
         await browser.close()
-    print('PASS: card link, keyboard/focus, cross-tree selection, moved-chat history, copied link/reload, deleted card, both themes')
+    print('PASS: card link, underlying kanban, keyboard/focus, cross-tree selection, moved-chat history, copied link/reload, deleted card, both themes')
 
 
 if __name__ == '__main__':
