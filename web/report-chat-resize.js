@@ -36,11 +36,14 @@ export function attachMainChatResize(panel, api) {
   const handle = document.createElement('div');
   handle.className = 'main-chat-resize'; handle.tabIndex = 0;
   handle.setAttribute('role', 'separator'); handle.setAttribute('aria-orientation', 'vertical');
-  handle.setAttribute('aria-label', 'Ширина чата'); handle.setAttribute('aria-controls', panel.id);
+  handle.setAttribute('aria-label', 'Ширина панели чатов');
+  handle.title = 'Потяните границу, чтобы изменить ширину. Двойной щелчок — стандартная ширина.'; handle.setAttribute('aria-controls', panel.id);
   panel.append(handle);
-  let preferred = 960, drag, edited = false;
-  const minimum = () => Math.min(640, workspace.clientWidth - 180);
-  const maximum = () => Math.max(minimum(), workspace.clientWidth - 180);
+  const compact = workspace.classList.contains("compact-chat");
+  const defaultWidth = compact ? 400 : 960;
+  let preferred = defaultWidth, drag, edited = false;
+  const minimum = () => Math.min(compact ? 340 : 640, workspace.clientWidth - 180);
+  const maximum = () => Math.max(minimum(), Math.min(compact ? 720 : Infinity, workspace.clientWidth - 180));
   const width = () => panel.getBoundingClientRect().width;
   const render = () => {
     const next = Math.round(Math.max(minimum(), Math.min(maximum(), preferred)));
@@ -71,10 +74,10 @@ export function attachMainChatResize(panel, api) {
     preferred = event.key === 'Home' ? minimum() : event.key === 'End' ? maximum() : width() + (event.key === 'ArrowLeft' ? 24 : -24) * direction;
     render(); save();
   });
-  handle.addEventListener('dblclick', () => { preferred = 960; render(); save(); });
+  handle.addEventListener('dblclick', () => { preferred = defaultWidth; render(); save(); });
   new ResizeObserver(render).observe(workspace);
   api.getSettings().then(settings => {
-    if (!edited && !drag && Number.isFinite(settings.chat_panel_width)) { preferred = settings.chat_panel_width; render(); }
+    if (!edited && !drag && Number.isFinite(settings.chat_panel_width)) { preferred = compact && settings.chat_panel_width === 960 ? defaultWidth : settings.chat_panel_width; render(); }
   }).catch(() => {});
   render();
 }

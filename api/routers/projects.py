@@ -180,6 +180,7 @@ def patch_card(
                 tags=tuple(body.tags) if body.tags is not None else None,
                 depends_on=tuple(body.depends_on) if body.depends_on is not None else None,
                 pinned=body.pinned,
+                favorite=body.favorite,
             ),
         )
     except project_commands.EntityNotFoundError as e:

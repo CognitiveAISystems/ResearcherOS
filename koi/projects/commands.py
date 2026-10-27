@@ -85,6 +85,7 @@ class UpdateCardCommand:
     tags: Optional[tuple[str, ...]] = None
     depends_on: Optional[tuple[str, ...]] = None
     pinned: Optional[bool] = None
+    favorite: Optional[bool] = None
 
 
 def _require_project(project_id: str) -> Project:
@@ -354,6 +355,10 @@ def update_card(
         if pinned != bool(card.pinned):
             card.pinned = pinned
             pin_changed = True
+    favorite_changed = False
+    if command.favorite is not None and command.favorite != card.favorite:
+        card.favorite = command.favorite
+        favorite_changed = True
 
     if touched:
         now = card_now_iso()
@@ -376,6 +381,9 @@ def update_card(
     elif pin_changed:
         verb = "закреплена" if card.pinned else "откреплена"
         _enqueue_sync(project_id, "kanban_updated", f"{verb} карточка {card.title}")
+    elif favorite_changed:
+        verb = "добавлена в избранное" if card.favorite else "убрана из избранного"
+        _enqueue_sync(project_id, "kanban_updated", f"карточка {card.title}: {verb}")
 
     if command.title is not None and command.title != old_title:
         card_reports.rename_report_for_card(project, board_id, card_id, card.title)

@@ -40,6 +40,7 @@ class AgentChatItem(TypedDict, total=False):
     status: AgentChatStatus
     answer: Optional[str]
     processing_at: Optional[str]
+    processing_pid: Optional[int]
     answered_at: Optional[str]
     answer_kind: Optional[AnswerKind]
     purpose: str
@@ -50,6 +51,9 @@ class AgentChatItem(TypedDict, total=False):
     review_passed: bool
     cli_agent: Optional[str]
     conversation_id: Optional[str]
+    context_suggestions: Optional[dict]
+    git_snapshot: Optional[str]
+    git_notice_version: Optional[int]
 
 
 def _load() -> list[AgentChatItem]:
@@ -85,6 +89,7 @@ def _normalize(item: dict) -> AgentChatItem:
         "status": item.get("status") or "pending",
         "answer": item.get("answer") or None,
         "processing_at": item.get("processing_at") or None,
+        "processing_pid": item.get("processing_pid"),
         "answered_at": item.get("answered_at") or None,
         "answer_kind": item.get("answer_kind") or None,
         "purpose": item.get("purpose", "agent"),
@@ -94,6 +99,9 @@ def _normalize(item: dict) -> AgentChatItem:
         "proposal": item.get("proposal"),
         "review_passed": bool(item.get("review_passed", False)),
         "conversation_id": item.get("conversation_id"),
+        "context_suggestions": item.get("context_suggestions"),
+        "git_snapshot": item.get("git_snapshot"),
+        "git_notice_version": item.get("git_notice_version"),
     }
     cli_agent = item.get("cli_agent") or None
     if cli_agent:
@@ -138,6 +146,8 @@ def enqueue_question(
     report_markdown: str = "",
     cli_agent: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    git_snapshot: Optional[str] = None,
+    git_notice_version: Optional[int] = None,
 ) -> AgentChatItem:
     text = question.strip()
     if not text:
@@ -147,6 +157,8 @@ def enqueue_question(
         "id": f"aq-{uuid4().hex[:10]}",
         "project_id": project_id,
         "conversation_id": conversation_id,
+        "git_snapshot": git_snapshot,
+        "git_notice_version": git_notice_version,
         "question": text,
         "purpose": purpose,
         "board_id": board_id,
@@ -197,10 +209,32 @@ def mark_processing(item_id: str) -> AgentChatItem:
         if status != "processing":
             item["status"] = "processing"
             item["processing_at"] = datetime.now(timezone.utc).isoformat()
-            _save(items)
             _note_inbox(item_id, "Агент взял вопрос в работу.")
+        item["processing_pid"] = os.getpid()
+        _save(items)
         return item
     raise KeyError(f"Queue item not found: {item_id}")
+
+
+@_locked
+def clear_processing_pid(item_id: str) -> None:
+    items = _load()
+    for item in items:
+        if item["id"] == item_id and item.get("processing_pid") == os.getpid():
+            item.pop("processing_pid", None)
+            _save(items)
+            return
+
+
+def agent_active(item: AgentChatItem) -> bool:
+    pid = item.get("processing_pid")
+    if item["status"] != "processing" or not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 @_locked
@@ -219,6 +253,12 @@ def submit_answer(
         if item["id"] != item_id:
             continue
         item["status"] = "answered"
+        if item["project_id"] is None and answer_kind == "normal":
+            from koi.agent_chat.context_routing import parse_reply
+            from koi.agent_chat.conversations import find
+            chat = find(item.get("conversation_id")) or {}
+            text, suggestions = parse_reply(text, program_id=chat.get("program_id"))
+            item["context_suggestions"] = None if chat.get("context_suggestions_dismissed") else suggestions
         if item.get("purpose") in ("report_grill", "grill_me"):
             from koi.adapters.report_grill_reply import parse_reply
             item["review_passed"] = review_passed
@@ -231,6 +271,17 @@ def submit_answer(
         _note_inbox(item_id, "Ответ опубликован в чате.")
         return item
     raise KeyError(f"Queue item not found: {item_id}")
+
+
+@_locked
+def resolve_context_suggestions(item_id: str) -> None:
+    items = _load()
+    for item in items:
+        if item["id"] == item_id and item.get("context_suggestions"):
+            item["context_suggestions"]["resolved"] = True
+            _save(items)
+            return
+    raise KeyError(item_id)
 
 
 def _note_inbox(item_id: str, message: str) -> None:

@@ -309,7 +309,7 @@ def check():
         meta=yaml.safe_load(source[1]);meta['programs']=[{'id':'agents','title':'Исследования агентов'}]
         (research/'project.md').write_text('---\n'+yaml.safe_dump(meta,allow_unicode=True)+'---'+source[2])
         extra=t/'comparison/koi-structure';extra.mkdir(parents=True)
-        (extra/'project.md').write_text('---\nid: comparison\ntitle: Языковые и зрительные модели плохо планируют в новых средах\nprograms:\n- id: agents\n  title: Исследования агентов\n---\n\n# problem: Сравнение результатов\n')
+        (extra/'project.md').write_text('---\nid: comparison\ntitle: Языковые и зрительные модели плохо планируют в новых средах\nprograms:\n- id: agents\n  title: Исследования агентов\n---\n\n# problem: comparison-root\n\nСравнение результатов\n')
         (extra/'research.json').write_text('{"version":1,"questions":[]}')
         pm.rescan_projects()
         from koi.agent_chat import conversations

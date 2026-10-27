@@ -51,13 +51,14 @@ def migrate_legacy_kanban_owners(project: Project) -> bool:
 
 
 def kanban_md_needs_upgrade(text: str) -> bool:
-    """True when project.md has kanban tables still on the 3-column schema."""
+    """True when project.md still has a legacy kanban column."""
     for line in text.splitlines():
         stripped = line.strip().lower()
         if not stripped.startswith("|"):
             continue
         if "backlog" in stripped and "running" in stripped and "done" in stripped:
-            return "successful" not in stripped
+            if "successful" in stripped or "planned" in stripped:
+                return True
     return False
 
 

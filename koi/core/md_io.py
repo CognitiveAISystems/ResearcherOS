@@ -25,10 +25,13 @@ from koi.core.models import (
 
 
 def normalize_kanban_board(board: KanbanBoard) -> KanbanBoard:
-    """Drop legacy ``planned`` column; move its cards to backlog."""
+    """Normalize legacy columns, preserving successful cards as favorites."""
     for card in board.cards:
         if card.column_id == LEGACY_COLUMN_PLANNED:
             card.column_id = "backlog"
+        elif card.column_id == "successful":
+            card.column_id = "done"
+            card.favorite = True
     default_by_id = {c.id: c for c in DEFAULT_KANBAN_COLUMNS}
     existing = {c.id: c for c in board.columns if c.id != LEGACY_COLUMN_PLANNED}
     board.columns = [
@@ -145,7 +148,7 @@ _PINNED_TRUE = {"1", "true", "yes", "on"}
 
 def _parse_card_comment(
     meta: str,
-) -> tuple[Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool]:
+) -> tuple[Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool, bool]:
     card_id: Optional[str] = None
     desc = ""
     tags: list[str] = []
@@ -153,6 +156,7 @@ def _parse_card_comment(
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     pinned = False
+    favorite = False
 
     id_m = re.search(r"\bid:(\S+)", meta)
     if id_m:
@@ -179,10 +183,13 @@ def _parse_card_comment(
     pinned_m = re.search(r"\bpinned:([^\s]+)", meta)
     if pinned_m:
         pinned = pinned_m.group(1).strip().lower() in _PINNED_TRUE
+    favorite_m = re.search(r"\bfavorite:([^\s]+)", meta)
+    if favorite_m:
+        favorite = favorite_m.group(1).strip().lower() in _PINNED_TRUE
 
     meta_for_desc = meta
     for m in sorted(
-        (m for m in (deps_m, tags_m, created_m, updated_m, pinned_m) if m),
+        (m for m in (deps_m, tags_m, created_m, updated_m, pinned_m, favorite_m) if m),
         key=lambda m: m.start(),
         reverse=True,
     ):
@@ -192,23 +199,23 @@ def _parse_card_comment(
     if desc_m:
         desc = _decode_card_desc(desc_m.group(1).strip())
 
-    return card_id, desc, tags, depends_on, created_at, updated_at, pinned
+    return card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite
 
 
 def _parse_card_cell(
     raw: str,
-) -> tuple[str, Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool]:
+) -> tuple[str, Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool, bool]:
     m = CARD_META_RE.match(raw)
     if not m:
-        return raw.strip(), None, "", [], [], None, None, False
+        return raw.strip(), None, "", [], [], None, None, False, False
     title = m.group(1).strip()
     comment = m.group(2)
     if not comment:
-        return title, None, "", [], [], None, None, False
-    card_id, desc, tags, depends_on, created_at, updated_at, pinned = _parse_card_comment(
+        return title, None, "", [], [], None, None, False, False
+    card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite = _parse_card_comment(
         comment
     )
-    return title, card_id, desc, tags, depends_on, created_at, updated_at, pinned
+    return title, card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -299,7 +306,7 @@ def _parse_kanban_table(lines: list[str], board_id: str, owner_node_id: str) -> 
         for col_id, raw in zip(header_cells, cells):
             if not raw or raw in ("—", "-", ""):
                 continue
-            title, card_id, desc, tags, depends_on, created_at, updated_at, pinned = (
+            title, card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite = (
                 _parse_card_cell(raw)
             )
             cards.append(
@@ -314,6 +321,7 @@ def _parse_kanban_table(lines: list[str], board_id: str, owner_node_id: str) -> 
                     created_at=created_at,
                     updated_at=updated_at,
                     pinned=pinned,
+                    favorite=favorite,
                 )
             )
 
@@ -452,6 +460,8 @@ def _format_card(cell: ExperimentCard) -> str:
         parts.append(f"id:{cell.id}")
     if cell.pinned:
         parts.append("pinned:1")
+    if cell.favorite:
+        parts.append("favorite:1")
     if cell.created_at:
         parts.append(f"created:{cell.created_at}")
     if cell.updated_at:

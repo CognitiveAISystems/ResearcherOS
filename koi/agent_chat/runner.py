@@ -15,7 +15,7 @@ from koi.adapters.agent_backends import backend_status, cli_agents, run_agent
 from koi.agent_chat.cli import build_context
 from koi.agent_chat.auto import try_auto_answer
 from koi.agent_chat.formatting import ANSWER_FORMAT_INSTRUCTIONS, no_cursor_key_warning
-from koi.adapters.agent_chat_queue import find_item, list_pending, mark_processing, submit_answer
+from koi.adapters.agent_chat_queue import find_item, list_pending, mark_processing, clear_processing_pid, submit_answer
 from koi.agent_chat.activity import record
 from koi.adapters.settings_store import is_api_agent_mode, is_cursor_manual_agent_mode, load_env_file
 from koi.adapters.workspace import get_workspace
@@ -29,13 +29,15 @@ _ws = get_workspace()
 def _sdk_prompt(item_id: str) -> str:
     ctx = build_context(item_id)
     if "project_id" in ctx and ctx["project_id"] is None:
+        from koi.agent_chat.context_routing import INSTRUCTIONS
         return (
-            "Ты агент ResearcherOS. Этот чат не привязан к проекту. Запрос может касаться "
-            "всех исследований рабочего пространства. В контексте дан список проектов и пути "
+            "Ты агент ResearcherOS. Дерево для этого чата ещё не выбрано. "
+            + ("Программа уже выбрана; работай только с деревьями этой программы. " if ctx.get("program_id") else
+               "Запрос может касаться всех исследований рабочего пространства. ")
+            + "В контексте дан список проектов и пути "
             "к их исследовательским материалам. Изучи нужные research.json и отчёты, "
             "ссылайся на найденные результаты. Не приписывай вопрос текущему проекту интерфейса. "
-            "Перед изменением файлов прочитай AGENTS.md соответствующего проекта. "
-            + ("Не меняй файлы. " if ctx.get("purpose") == "question" else "")
+            + INSTRUCTIONS + "\n"
             + "Ответь по-русски.\n\nКонтекст:\n" + json.dumps(ctx, ensure_ascii=False, indent=2)
         )
     if ctx.get("purpose") in ("report_grill", "grill_me"):
@@ -230,18 +232,28 @@ def _review_grill_proposal(item_id: str, proposal: dict[str, str], *, local_mode
 
 
 def process_item(item_id: str) -> bool:
+    try:
+        return _process_item(item_id)
+    finally:
+        clear_processing_pid(item_id)
+
+
+def _process_item(item_id: str) -> bool:
     """Auto-answer or LLM agent (claude/cursor). Returns True if answer saved."""
     item = find_item(item_id)
     if item is None or item.get("status") == "answered":
         return False
+
+    if item.get("purpose") in ("git_notice", "git_chat"):
+        from koi.agent_chat.git_changes import process
+        return process(item)
 
     load_env_file()  # ключи из KOI/.env (настройки UI) — не перетирает уже заданные
     local_mode = not is_api_agent_mode() and not is_cursor_manual_agent_mode()
     if is_cursor_manual_agent_mode():
         return False
 
-    if local_mode:
-        mark_processing(item_id)
+    mark_processing(item_id)
 
     general_chat = item.get("purpose", "agent") in ("agent", "prose", "run")
     chosen = (item.get("cli_agent") or "").strip().lower() or None
@@ -283,12 +295,13 @@ def process_item(item_id: str) -> bool:
         )
     try:
         prompt = _sdk_prompt(item_id)
-        local_kwargs = {"mode": None, "force": True} if general_chat else {}
+        allow_edits = general_chat and item.get("project_id") is not None
+        local_kwargs = {"mode": None, "force": True} if allow_edits else {}
         if chosen:
             local_kwargs["cli_agent"] = chosen
         text, backend = (
             _run_local_agent(prompt, item_id, **local_kwargs) if local_mode
-            else run_agent(prompt, cwd=_ws.agent_cwd(), allow_edits=general_chat)
+            else run_agent(prompt, cwd=_ws.agent_cwd(), allow_edits=allow_edits)
         )
     except Exception as exc:
         if local_mode:

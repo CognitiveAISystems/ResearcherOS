@@ -205,4 +205,4 @@ Ingest сам переносит карточку в done — но **до ingest
 - **koi-report-review** — качество отчёта и подзадач (критик 3)
 - **koi-done-research** — после done: question/narrative в research.json
 - **koi-prose-style** — человекочитаемые формулировки в отчёте
-- **koi-project-sync** — commit/push `projects/` после значимых изменений
+- **koi-project-sync** — предложить синхронизацию после значимых изменений; выполнять Git-действия по поручению человека

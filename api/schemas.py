@@ -61,6 +61,7 @@ class UpdateCardBody(BaseModel):
     tags: Optional[list[str]] = None
     depends_on: Optional[list[str]] = None
     pinned: Optional[bool] = None
+    favorite: Optional[bool] = None
 
 
 class CreateCardBody(BaseModel):
@@ -186,6 +187,10 @@ class LiteratureSelectionBody(BaseModel):
     papers: list[LiteratureSelectionPaper] = Field(default_factory=list, max_length=400)
 
 
+class ConversationReadBody(BaseModel):
+    answer_id: str = Field(min_length=1)
+
+
 class AgentChatBody(BaseModel):
     project_id: Optional[str] = Field(default=None, min_length=1)
     question: str = Field(min_length=1)
@@ -197,6 +202,7 @@ class AgentChatBody(BaseModel):
     report_markdown: str = ""
     cli_agent: Optional[str] = None
     conversation_id: Optional[str] = None
+    git_snapshot: Optional[str] = None
 
 
 class ConversationScopeBody(BaseModel):
@@ -208,6 +214,13 @@ class ConversationScopeBody(BaseModel):
 class ConversationCreateBody(ConversationScopeBody):
     title: str = Field(default="Новый чат", min_length=1, max_length=80)
     backend: Optional[str] = None
+    program_id: Optional[str] = Field(default=None, min_length=1)
+    focus_project_id: Optional[str] = Field(default=None, min_length=1)
+
+
+class ConversationContextChoiceBody(BaseModel):
+    item_id: str = Field(min_length=1)
+    option: Optional[int] = Field(default=None, ge=0, le=1)
 
 
 class PermissionBody(BaseModel):

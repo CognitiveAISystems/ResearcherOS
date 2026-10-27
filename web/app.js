@@ -1,4 +1,5 @@
 import { ChatConversations } from "./chat-conversations.js";
+import { ResearchChatNavigation } from "./research-chat-navigation.js";
 import { attachReportChatResize, attachMainChatResize } from "./report-chat-resize.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
@@ -300,6 +301,7 @@ let state = {
   kanbanNodeId: null,
   kanbanDisabledTagFilters: [],
   kanbanDateFilter: "all",
+  kanbanFavoritesOnly: false,
   questionsNodeId: null,
   reportCardId: null,
   reportBoardId: null,
@@ -2943,7 +2945,7 @@ let reportLinkedReadOnly = false;
 let reportAutoSaveTimer;
 let reportInterviewTimer;
 let reportInterviewItems = [];
-let mainConversations, cardConversations;
+let mainConversations, cardConversations, researchChatNavigation;
 let reportInterviewSignature = "";
 let reportInterviewSending = false;
 let reportLastSyncedContent = null;
@@ -3136,6 +3138,7 @@ function renderReportInterview() {
     const isProcessing = item.status === "processing";
     const article = document.createElement("article");
     article.className = `agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}`;
+    article.dataset.id = item.id;
     const stuck = reportInterviewStuck(item);
     const answerBody = item.purpose === "grill_me" || item.purpose === "report_grill"
       ? formatReportGrillAnswer(item.answer || "")
@@ -5043,6 +5046,7 @@ function openKanbanModal(node) {
 
   state.kanbanDisabledTagFilters = loadKanbanDisabledTagFilters(state.project?.id, board.id);
   state.kanbanDateFilter = loadKanbanDateFilter(state.project?.id, board.id);
+  state.kanbanFavoritesOnly = loadKanbanFavoritesFilter(state.project?.id, board.id);
 
   document.getElementById("kanban-modal-type").textContent =
     TYPE_LABELS[node.node_type];
@@ -5315,6 +5319,17 @@ function bindKanbanCardEvents(boardEl, board, context = {}) {
       );
     });
 
+    cardEl.querySelector(".card-favorite")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const button = e.currentTarget;
+      button.disabled = true;
+      const c = getBoardCard(state.project.boards[board.id] || board, cardId) || card;
+      await persistCard(board, cardId, { favorite: !c.favorite }, { rerenderKanban: true });
+      button.disabled = false;
+      (boardEl.querySelector(`.kanban-card[data-card-id="${cardId}"] .card-favorite`) ||
+        document.getElementById("kanban-filters-toggle"))?.focus({ preventScroll: true });
+    });
+
     cardEl.querySelector(".card-copy-path")?.addEventListener("click", (e) => {
       e.stopPropagation();
       const c =
@@ -5508,8 +5523,23 @@ function reconcileKanbanDisabledTagFilters(board, project = state.project) {
   return disabled;
 }
 
+function loadKanbanFavoritesFilter(projectId, boardId) {
+  try {
+    return localStorage.getItem(`koi-kanban-favorites:${projectId}:${boardId}`) === "true";
+  } catch { return false; }
+}
+
+function saveKanbanFavoritesFilter(projectId, boardId, enabled) {
+  try {
+    const key = `koi-kanban-favorites:${projectId}:${boardId}`;
+    if (enabled) localStorage.setItem(key, "true");
+    else localStorage.removeItem(key);
+  } catch { /* ignore quota */ }
+}
+
 function hasActiveKanbanFilters() {
   return Boolean(
+    state.kanbanFavoritesOnly ||
     (state.kanbanDateFilter && state.kanbanDateFilter !== "all") ||
       (state.kanbanDisabledTagFilters || []).length
   );
@@ -5599,6 +5629,7 @@ function cardMatchesKanbanTagFilter(card, disabledFilters) {
 }
 
 function cardMatchesKanbanFilters(card, disabledFilters = state.kanbanDisabledTagFilters) {
+  if (state.kanbanFavoritesOnly && card.column_id === "done" && !card.favorite) return false;
   if (!cardMatchesKanbanTagFilter(card, disabledFilters)) return false;
   if (!cardWithinDateWindow(card, state.kanbanDateFilter || "all")) return false;
   return true;
@@ -5634,7 +5665,7 @@ function renderKanbanDateFilter(project, board) {
 function syncKanbanFilterChrome(project, board) {
   const clearBtn = document.getElementById("kanban-filters-clear");
   const active = hasActiveKanbanFilters();
-  const count = (state.kanbanDateFilter && state.kanbanDateFilter !== "all" ? 1 : 0) + (state.kanbanDisabledTagFilters || []).length;
+  const count = Number(state.kanbanFavoritesOnly) + (state.kanbanDateFilter && state.kanbanDateFilter !== "all" ? 1 : 0) + (state.kanbanDisabledTagFilters || []).length;
   const badge = document.getElementById("kanban-filter-count");
   badge.hidden = !count; badge.textContent = String(count);
   document.getElementById("kanban-filters-toggle").classList.toggle("is-filtering", active);
@@ -5647,10 +5678,12 @@ function syncKanbanFilterChrome(project, board) {
       const b = node ? getBoardForNode(state.project, node) : board;
       if (!b) return;
       state.kanbanDateFilter = "all";
+      state.kanbanFavoritesOnly = false;
       state.kanbanDisabledTagFilters = [];
       const pid = boardWriteProjectId(b);
       if (pid && b.id) {
         saveKanbanDateFilter(pid, b.id, "all");
+        saveKanbanFavoritesFilter(pid, b.id, false);
         saveKanbanDisabledTagFilters(pid, b.id, []);
       }
       rerenderKanbanAfterFilters(b);
@@ -5719,6 +5752,14 @@ function renderKanbanBoardFilters(project, board) {
   const windowId = focused?.dataset.window;
   const tag = focused?.dataset.tag;
   renderKanbanDateFilter(project, board);
+  const favorites = document.getElementById("kanban-favorites-filter");
+  favorites.classList.toggle("is-active", state.kanbanFavoritesOnly);
+  favorites.setAttribute("aria-pressed", String(state.kanbanFavoritesOnly));
+  favorites.onclick = () => {
+    state.kanbanFavoritesOnly = !state.kanbanFavoritesOnly;
+    saveKanbanFavoritesFilter(project.id, board.id, state.kanbanFavoritesOnly);
+    rerenderKanbanAfterFilters(board);
+  };
   renderKanbanTagFilter(project, board);
   syncKanbanFilterChrome(project, board);
   if (windowId || tag) [...document.querySelectorAll('#kanban-board-filters button')]
@@ -6298,6 +6339,18 @@ function kanbanCardPinControlHtml(card, { map = false } = {}) {
   return `<button type="button" class="card-pin" title="${label}" aria-label="${label}" aria-pressed="${pinned ? "true" : "false"}">${kanbanCardPinIconHtml()}</button>`;
 }
 
+function kanbanCardFavoriteIconHtml() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3-5.6-3-5.6 3 1.1-6.3L3 9.6l6.2-.9Z"/></svg>`;
+}
+
+function kanbanCardFavoriteControlHtml(card, { map = false } = {}) {
+  if (map) return card.favorite
+    ? `<span class="card-favorite-mark" aria-label="В избранном" title="В избранном">${kanbanCardFavoriteIconHtml()}</span>`
+    : "";
+  const label = card.favorite ? "Убрать из избранного" : "Добавить в избранное";
+  return `<button type="button" class="card-favorite" aria-pressed="${Boolean(card.favorite)}" aria-label="${label}" title="${label}">${kanbanCardFavoriteIconHtml()}</button>`;
+}
+
 function syncKanbanCardLiveInspect(cardEl, card, reportContent = "") {
   if (!cardEl || card.column_id !== "running") return false;
   if (cardEl.querySelector(".card-live-inspect")) return false;
@@ -6358,6 +6411,7 @@ function kanbanCardHtml(c, col, variant = "modal") {
               <input type="text" class="card-title-input inline-edit-field hidden" />`;
   const pinned = cardIsPinned(c);
   const pinControl = kanbanCardPinControlHtml(c, { map });
+  const favoriteControl = kanbanCardFavoriteControlHtml(c, { map });
   return `
         <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
           <div class="kanban-card-head">
@@ -6371,8 +6425,8 @@ function kanbanCardHtml(c, col, variant = "modal") {
               }>${escapeHtml(displayDesc)}</p>
               <textarea class="card-desc-input inline-edit-field hidden" rows="3"></textarea>
             </div>
-            ${pinControl || deleteBtn
-              ? `<div class="kanban-card-head-tools">${pinControl}${deleteBtn}</div>`
+            ${favoriteControl
+              ? `<div class="kanban-card-head-tools">${favoriteControl}</div>`
               : ""}
           </div>
           ${todoProgress}
@@ -6381,6 +6435,7 @@ function kanbanCardHtml(c, col, variant = "modal") {
             ${cardTagsRowHtml(c.tags, { readOnly: isHubMode(), kanban: !isHubMode() })}
             ${kanbanCardTimeHtml(c)}
             <div class="kanban-card-actions">
+              ${pinControl}${deleteBtn}
               ${copyBtn}
               <button type="button" class="card-expand-report card-action-btn" title="Открыть отчёт" aria-label="Открыть отчёт">
                 <svg class="card-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M10 14L21 3M21 14v7h-7"/></svg>
@@ -7295,6 +7350,7 @@ function setActiveProjectInList(id) {
   document.querySelectorAll(".nodes-layer .node-wrap[data-project-id]").forEach((wrap) => {
     wrap.classList.toggle("is-active-tree", wrap.dataset.projectId === id);
   });
+  researchChatNavigation?.render(mainConversations);
   const selectedBranch = state.literatureBranchId;
   document.querySelectorAll(".project-list__btn").forEach((btn) => {
     const isComposite =
@@ -7503,6 +7559,11 @@ function initProjectsSidebar() {
     const nav = e.target.closest("[data-archive-nav]");
     if (!nav) return;
     projectsArchiveOpen = nav.dataset.archiveNav === "open";
+    const workspace = document.getElementById("workspace");
+    if (workspace.classList.contains("compact-chat")) {
+      toggleAgentChatPanel(false);
+      workspace.classList.toggle("is-managing-trees", projectsArchiveOpen);
+    }
     void loadProjectList(state.project?.id);
   });
 
@@ -7916,13 +7977,58 @@ function agentChatLogNearBottom(log) {
   return log.scrollHeight - log.scrollTop - log.clientHeight <= AGENT_CHAT_SCROLL_THRESHOLD;
 }
 
+function agentChatContextSuggestionsHtml(item) {
+  const proposal = item.context_suggestions;
+  if (item.status !== "answered" || !proposal?.options?.length || proposal.resolved || mainConversations.row?.project_id || mainConversations.row?.context_suggestions_dismissed) return "";
+  const buttons = proposal.options.map((option, index) =>
+    `<button type="button" class="btn agent-chat-context-option" data-context-option="${index}">` +
+    `<span>Программа: ${escapeHtml(option.program_title)}</span>` +
+    `<strong>Дерево: ${escapeHtml(option.tree_title)}</strong>` +
+    (option.method_title ? `<span>Метод: ${escapeHtml(option.method_title)}</span>` : "") +
+    `<span class="agent-chat-context-action">${proposal.awaiting_selection ? "Выбрать и продолжить" : "Связать чат"} →</span></button>`
+  ).join("");
+  return `<section class="agent-chat-context-suggestions" aria-label="Предложенные контексты">` +
+    `<p>${proposal.awaiting_selection ? "Где продолжить работу?" : "Похоже, вопрос относится к…"}</p>` + buttons +
+    `<button type="button" class="btn agent-chat-context-dismiss" data-context-option="general">${mainConversations.row?.program_id ? "Без привязки к дереву" : "Оставить общим"}</button>` +
+    `<p role="status" data-context-error></p></section>`;
+}
+
+async function chooseAgentChatContext(event) {
+  const button = event.target.closest('[data-context-option]');
+  if (!button) return;
+  const box = button.closest('.agent-chat-context-suggestions');
+  const cid = mainConversations.row?.id;
+  if (!cid || box.dataset.busy) return;
+  box.dataset.busy = "true";
+  box.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const data = await KoiApi.chooseConversationContext(cid, {
+      item_id: button.closest('[data-id]').dataset.id,
+      option: button.dataset.contextOption === "general" ? null : Number(button.dataset.contextOption),
+    });
+    if (cid !== mainConversations.row?.id) return;
+    mainConversations.row = data.item;
+    await researchChatNavigation.focusConversation(data.item);
+    await refreshAgentChat({scrollToBottom: true});
+    document.getElementById('agent-chat-input').focus();
+  } catch (error) {
+    if (box.isConnected) {
+      box.querySelector('[data-context-error]').textContent = error.message;
+      delete box.dataset.busy;
+      box.querySelectorAll('button').forEach(b => b.disabled = false);
+    }
+  }
+}
+
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
   clearInlineLoaderHints(log);
   const stickToBottom = scrollToBottom || agentChatLogNearBottom(log);
   const prevScrollTop = log.scrollTop;
-  const items = [...agentChatItems].reverse();
+  const gitChat = mainConversations?.row?.kind === "git_sync";
+  const items = [...agentChatItems].reverse().filter(item =>
+    !gitChat || item.purpose !== "git_notice" || item.git_notice_version >= 3);
   if (!items.length) {
     log.innerHTML = '<div class="agent-chat-empty"><p>Обсудите проект или дайте агенту задачу.</p></div>';
     return;
@@ -7943,15 +8049,17 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         answerHtml =
           `<div class="agent-chat-reply agent-chat-reply--pending" role="status">${escapeHtml(pendingLabel)}</div>`;
       } else {
-        answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(item.answer || "")}</div>`;
+        const answer = gitChat ? (item.answer || "").replace(/(?:^|\n)Изменённые файлы:[\s\S]*/, "").trim() : item.answer;
+        answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(answer || "")}</div>`;
       }
       return (
         `<article class="agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}" data-id="${escapeHtml(item.id)}">` +
-        `<div class="agent-chat-q-row">` +
+        (item.purpose === "git_notice" ? "" : `<div class="agent-chat-q-row">` +
         `<p class="agent-chat-q">${escapeHtml(item.question)}</p>` +
         agentChatDeliveryHtml(item) +
-        `</div>` +
+        `</div>`) +
         answerHtml +
+        agentChatContextSuggestionsHtml(item) +
         `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>` +
         `</article>`
       );
@@ -8084,6 +8192,10 @@ function toggleAgentChatPanel(open) {
   const workspace = document.getElementById("workspace");
   if (!panel) return;
   const show = open ?? !workspace?.classList.contains("is-chat-open");
+  if (workspace?.classList.contains("compact-chat")) {
+    panel.querySelector(".conversation-sidebar").inert = show;
+    panel.querySelector(".conversation-content").inert = !show;
+  }
   if (show) workspace?.classList.remove("is-sidebar-hidden");
   panel.classList.toggle("hidden", !show && !workspace?.classList.contains("unified-navigation"));
   workspace?.classList.toggle("is-chat-open", show);
@@ -8099,7 +8211,8 @@ function toggleAgentChatPanel(open) {
   } else {
     syncAgentChatPolling();
   }
-  scheduleMindmapRender();
+  // The two chat views share geometry; keep the map camera where the reader left it.
+  if (!workspace?.classList.contains("compact-chat")) scheduleMindmapRender();
 }
 
 function setAgentChatFormStatus(message = "", kind = "") {
@@ -8290,6 +8403,7 @@ async function submitAgentQuestion(e) {
       conversation_id: cid,
       board_id: conversation.board_id,
       card_id: conversation.card_id,
+      git_snapshot: conversation.git_snapshot,
       question: command.question,
       purpose: conversation.card_id ? command.purpose : command.purpose === "question" ? "question" : "agent",
       report_markdown: conversation.card_id === state.reportCardId ? document.getElementById("card-report-editor").value : undefined,
@@ -8376,7 +8490,6 @@ async function refreshAppSettings() {
 let syncStatus = null;
 let syncPollTimer = null;
 let rqDiscoveryPollTimer = null;
-const SYNC_POLL_MS = 30 * 60 * 1000;
 const RQ_DISCOVERY_POLL_MS = 4000;
 const RQ_DISCOVERY_AUTO_MS = 60 * 1000;
 const PROJECT_DISCOVERY_POLL_MS = 3000;
@@ -8833,15 +8946,11 @@ function initSync() {
   document.getElementById("btn-sync")?.addEventListener("click", () => {
     void runProjectSync();
   });
-  // Cached refs first (instant badges), then a live fetch in the background.
-  void refreshSyncStatus({ fetch: false }).then(() => {
-    void refreshSyncStatus({ fetch: true });
-  });
+  // Automatic remote checks belong to the daily/done scheduler.
+  void refreshSyncStatus({ fetch: false });
   void checkPendingRqDiscoveries();
   if (syncPollTimer) clearInterval(syncPollTimer);
-  syncPollTimer = setInterval(() => {
-    void refreshSyncStatus({ fetch: true });
-  }, SYNC_POLL_MS);
+  syncPollTimer = null;
   if (rqDiscoveryPollTimer) clearInterval(rqDiscoveryPollTimer);
   rqDiscoveryPollTimer = setInterval(() => {
     void checkPendingRqDiscoveries();
@@ -8940,7 +9049,7 @@ function initUnifiedNavigation() {
   localStorage.removeItem(LAB_HIDDEN_TREES_KEY);
   if (state.lab) state.lab.hiddenTreeIds = new Set();
   const workspace = document.getElementById("workspace");
-  workspace.classList.add("unified-navigation");
+  workspace.classList.add("unified-navigation", "compact-chat");
   document.body.classList.add("navigation-left", "unified-workspace");
   const header = document.querySelector(".topbar");
   new ResizeObserver(() => {
@@ -8965,12 +9074,13 @@ function initUnifiedNavigation() {
   toolbar.parentElement.prepend(document.querySelector(".topbar-start"));
   document.getElementById("agent-chat-panel").classList.remove("hidden");
   syncWorkspaceSidebarToggle(true);
-  sidebar.setAttribute("aria-label", "Проекты и чаты");
+  sidebar.setAttribute("aria-label", "Навигация по исследованиям");
   const heading = document.createElement("h2"); heading.className = "unified-navigation-title";
-  heading.textContent = "Проекты и чаты";
+  heading.textContent = "Управление деревьями";
   const navigationHeading = document.createElement("div"); navigationHeading.className = "unified-navigation-heading";
-  navigationHeading.append(heading, layout.querySelector("[data-current-project]"));
-  const actions = document.createElement("div"); actions.className = "unified-navigation-actions";
+  navigationHeading.append(heading);
+  layout.querySelector("[data-current-project]").remove();
+  const actions = document.createElement("div"); actions.className = "unified-navigation-actions research-tree-actions";
   const archive = document.getElementById("projects-archive-bar");
   const createProject = document.getElementById("btn-new-project");
   createProject.className = "btn conversation-create";
@@ -8978,32 +9088,62 @@ function initUnifiedNavigation() {
   createProject.title = "Создать дерево исследований";
   createProject.setAttribute("aria-label", "Создать дерево исследований");
   createProject.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="5" rx="1.5"/><rect x="2" y="17" width="6" height="5" rx="1.5"/><rect x="16" y="17" width="6" height="5" rx="1.5"/><path d="M12 7v5M5 17v-5h14v5"/></svg>');
-  const createChat = document.createElement("button");
-  createChat.type = "button"; createChat.className = "btn conversation-create";
-  createChat.dataset.newChat = ""; createChat.dataset.globalChat = "";
-  createChat.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>Новый общий чат';
-  const move = document.createElement("button");
-  move.type = "button"; move.className = "btn conversation-create conversation-move-accessible";
-  move.dataset.moveChat = ""; move.textContent = "Перенести чат";
-  actions.append(createProject, createChat, move);
-  const global = document.createElement("section"); global.className = "unified-global-chats conversation-group";
-  const globalTitle = document.createElement("h3");
-  globalTitle.innerHTML = '<button type="button" class="unified-global-toggle unified-project-toggle" data-chat-project-toggle="global" aria-expanded="true" aria-controls="unified-global-chats"><span>Без проекта</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>';
-  globalTitle.dataset.chatDrop = ""; globalTitle.dataset.projectId = "";
-  const globalChats = document.createElement("div"); globalChats.id = "unified-global-chats"; globalChats.className = "unified-project-chats";
-  global.append(globalTitle, globalChats);
+  actions.append(createProject, archive);
   const list = document.getElementById("project-list");
   const chats = document.createElement("div"); chats.className = "unified-chat-navigation";
-  chats.append(archive, global, list);
-  const contextFilter = document.createElement("button"); contextFilter.type = "button";
-  contextFilter.className = "conversation-context-filter"; contextFilter.hidden = true;
-  contextFilter.onclick = () => {
-    mainConversations.currentProjectOnly = !mainConversations.currentProjectOnly;
-    mainConversations.epoch++;
-    mainConversations.filterTrigger.setAttribute("aria-pressed", String(mainConversations.currentProjectOnly));
-    void mainConversations.changed({open: false});
+  chats.append(list);
+  const management = document.createElement("div"); management.className = "research-tree-management";
+  management.append(navigationHeading, actions, chats);
+  sidebar.replaceChildren(management);
+  const openList = () => {
+    workspace.classList.remove("is-chat-list-hidden", "is-managing-trees");
+    toggleAgentChatPanel(false);
   };
-  sidebar.replaceChildren(navigationHeading, contextFilter, actions, chats);
+  researchChatNavigation = new ResearchChatNavigation({ sidebar,
+    rail: layout.querySelector(".conversation-rail"),
+    activeTree: () => state.project?.id,
+    groups: () => {
+      const grouped = state.lab?.grouped;
+      const groups = [...(grouped?.groups || [])];
+      if (grouped?.ungrouped?.length) groups.push({id: "ungrouped", title: "Без программы", projects: grouped.ungrouped});
+      const hidden = hiddenCompositeMemberIds(grouped);
+      const programs = groups.map((group, index) => ({ id: group.id || "program-" + index, title: group.title,
+        trees: programLayoutItems(group, hidden).filter(tree => !isTreeArchived(tree.id)).map(tree => ({ ...tree,
+          projectIds: tree.kind === "composite" ? [...(group.composites.find(c => compositeVirtualId(c.id) === tree.id)?.member_ids || [])].sort((a, b) => Number(b === state.literatureBranchId) - Number(a === state.literatureBranchId)) : [tree.id]
+        }))
+      })).filter(group => group.trees.length);
+      const trees = [...new Map(programs.flatMap(group => group.trees).map(tree => [tree.id, tree])).values()];
+      return [...programs, {id: "all", title: "Все чаты", icon: "all", trees}, {id: "global", title: "Общие чаты", icon: "chat", trees: []}];
+    },
+    chooseTree: id => {
+      if (id === "global") return;
+      if (state.lab?.projectsById?.[id]) return focusLabProject(id, {animate: true});
+      if (isCompositeVirtualId(id)) return switchComposite(id.slice("composite:".length));
+      return switchProject(id);
+    }, openList, collapse: toggleWorkspaceSidebar
+  });
+  researchChatNavigation.host.append(actions);
+  for (const type of ["pointerdown", "wheel"]) document.getElementById("mindmap-viewport").addEventListener(type, () => {
+    researchChatNavigation.followActive = true;
+  }, {passive: true});
+  const manage = document.createElement("button"); manage.type = "button";
+  manage.className = "conversation-icon-button research-manage";
+  manage.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>'; manage.title = "Управление деревьями"; manage.setAttribute("aria-label", "Управление деревьями");
+  manage.setAttribute("aria-pressed", "false");
+  manage.onclick = () => {
+    const show = !workspace.classList.contains("is-managing-trees"); openList();
+    workspace.classList.toggle("is-managing-trees", show); manage.setAttribute("aria-pressed", String(show));
+    renderUnifiedNavigation();
+  };
+  layout.querySelector(".conversation-rail").insertBefore(manage, themeToggle);
+  const chatHeader = panel.querySelector(".agent-chat-header");
+  const back = document.getElementById("btn-chat-collapse"); back.setAttribute("aria-label", "Вернуться к чатам"); back.title = "Вернуться к чатам";
+  chatHeader.prepend(back);
+  const newChat = document.createElement("button"); newChat.type = "button"; newChat.className = "conversation-icon-button research-chat-new";
+  newChat.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>'; newChat.title = "Новый чат"; newChat.setAttribute("aria-label", "Новый чат");
+  newChat.onclick = () => void researchChatNavigation.create();
+  chatHeader.append(newChat);
+  panel.querySelector(".conversation-content").inert = !workspace.classList.contains("is-chat-open");
   const positionWorkspace = () => {
     const rect = document.getElementById("agent-chat-panel").getBoundingClientRect();
     document.body.style.setProperty("--workspace-chat-edge", `${rect.width ? rect.right : 0}px`);
@@ -9049,21 +9189,11 @@ function initUnifiedNavigation() {
   }, true);
 
   sidebar.addEventListener("click", event => {
-    const toggle = event.target.closest("[data-chat-project-toggle]");
-    if (!toggle) {
-      if (event.target.closest(".project-list__btn") && window.matchMedia("(max-width: 700px)").matches) mainConversations.showNavigation(false);
-      return;
-    }
-    const key = toggle.dataset.chatProjectToggle;
-    const open = toggle.getAttribute("aria-expanded") !== "true";
-    if (open) mainConversations.collapsedProjects.delete(key);
-    else mainConversations.collapsedProjects.add(key);
-    const item = toggle.closest(".project-list__item, .unified-global-chats");
-    item.querySelector(":scope > .unified-project-chats").hidden = !open;
-    const branches = item.querySelector(":scope > .project-list--branches");
-    if (branches) branches.hidden = !open;
-    toggle.setAttribute("aria-expanded", String(open));
-    if (key !== "global") toggle.setAttribute("aria-label", open ? "Скрыть чаты проекта" : "Показать чаты проекта");
+    const toggle = event.target.closest("[data-tree-branches]");
+    if (!toggle) return;
+    const branches = toggle.closest(".project-list__item").querySelector(":scope > .project-list--branches");
+    branches.hidden = !branches.hidden;
+    toggle.setAttribute("aria-expanded", String(!branches.hidden));
   });
 }
 
@@ -9092,40 +9222,25 @@ async function syncWorkspaceChatContext() {
   if (scope) mainConversations.collapsedProjects.delete(scope.project_id);
   const changed = mainConversations.setContext(scope);
   if (scope && changed) {
-    workspace.classList.remove("is-chat-list-hidden");
+    workspace.classList.remove("is-chat-list-hidden", "is-managing-trees");
     toggleAgentChatPanel(false);
   } else if (leaving) toggleAgentChatPanel(workspace.dataset.contextPreviousChatOpen === "true");
-  if (changed) { agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
+  if (changed) { renderUnifiedNavigation(); agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
   else renderUnifiedNavigation();
 }
 
 function renderUnifiedNavigation(controller = mainConversations) {
   const sidebar = controller?.sidebar;
-  const global = sidebar?.querySelector("#unified-global-chats");
-  if (!global || controller.dragging) return;
+  if (researchChatNavigation && controller) researchChatNavigation.render(controller);
+  if (!sidebar || controller.dragging) return;
+  const managing = sidebar.closest(".workspace").classList.contains("is-managing-trees");
+  const actions = sidebar.querySelector(".research-tree-actions");
+  const host = managing ? sidebar.querySelector(".research-tree-management") : researchChatNavigation.host;
+  if (actions.parentElement !== host) host.append(actions);
+  sidebar.closest(".conversation-layout").querySelector(".research-manage").setAttribute("aria-pressed", String(managing));
   const active = sidebar.contains(document.activeElement) ? document.activeElement : null;
   const focusKey = active?.dataset.focusKey;
   const scroll = sidebar.scrollTop;
-  const filter = sidebar.querySelector(".conversation-context-filter");
-  filter.hidden = !controller.contextScope;
-  if (controller.contextScope) {
-    filter.textContent = (controller.currentProjectOnly ? (controller.contextScope.card_id ? "Чаты карточки" : "Чаты метода") : "Все чаты") + " · " + controller.contextTitle;
-    filter.setAttribute("aria-pressed", String(controller.currentProjectOnly));
-  }
-  const create = sidebar.querySelector("[data-global-chat]");
-  create.lastChild.textContent = controller.contextScope ? "Новый чат" : "Новый общий чат";
-  const entry = row => {
-    const button = controller.entry(row);
-    const scope = document.createElement("small"); scope.className = "unified-chat-scope";
-    scope.textContent = row.card_id ? "Чат карточки" : row.board_id ? "Чаты метода" : row.project_id ? "Чат проекта" : "Общий чат";
-    button.querySelector(".conversation-entry-text").append(scope);
-    return button;
-  };
-  sidebar.querySelector("[data-move-chat]").disabled = !controller.row || Boolean(controller.row.pending);
-  global.replaceChildren(...controller.rows.filter(row => !row.project_id && !controller.currentProjectOnly).map(entry));
-  global.closest(".unified-global-chats").hidden = projectsArchiveOpen || Boolean(controller.contextScope && controller.currentProjectOnly);
-  global.hidden = controller.collapsedProjects.has("global");
-  sidebar.querySelector('[data-chat-project-toggle="global"]').setAttribute("aria-expanded", String(!global.hidden));
   const composites = (state.lab?.grouped?.groups || []).flatMap(group => group.composites || []);
   const list = document.getElementById("project-list");
   for (const title of list.querySelectorAll(".project-list__btn")) {
@@ -9134,8 +9249,6 @@ function renderUnifiedNavigation(controller = mainConversations) {
     item.classList.add("conversation-group");
     const composite = composites.find(c => c.id === title.dataset.compositeId);
     const pid = title.dataset.projectId || title.dataset.branchId || (composite?.member_ids?.length === 1 ? composite.member_ids[0] : null);
-    const ids = pid ? [pid] : (composite?.member_ids || []);
-    item.hidden = Boolean(controller.contextScope && controller.currentProjectOnly && !ids.includes(controller.contextScope.project_id));
     const key = title.dataset.compositeId ? "composite:" + title.dataset.compositeId : pid;
     if (!title.querySelector(".unified-tree-title")) {
       const text = document.createElement("span"); text.className = "unified-tree-title";
@@ -9144,7 +9257,6 @@ function renderUnifiedNavigation(controller = mainConversations) {
       title.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="5" rx="1.5"/><rect x="2" y="17" width="6" height="5" rx="1.5"/><rect x="16" y="17" width="6" height="5" rx="1.5"/><path d="M12 7v5M5 17v-5h14v5"/></svg>');
     }
     title.title = title.textContent.trim();
-    if (pid) { title.dataset.chatDrop = ""; title.dataset.projectId = pid; }
     // Tree visibility is controlled through the archive, not a second eye toggle.
     row.querySelectorAll('.project-list__eye,.project-list__archive').forEach(button => button.remove());
     if (!title.dataset.branchId && !row.querySelector('[data-tree-menu]')) {
@@ -9176,62 +9288,16 @@ function renderUnifiedNavigation(controller = mainConversations) {
       row.append(trigger, menu);
     }
 
-    const chatProjectId = pid || (ids.includes(state.literatureBranchId) ? state.literatureBranchId : ids[0]);
-    if (chatProjectId) {
-      let compose = row.querySelector('[data-tree-new-chat]');
-      if (!compose) {
-        compose = document.createElement('button'); compose.type = 'button';
-        compose.className = 'unified-tree-compose';
-        compose.setAttribute('aria-label', 'Новый чат'); compose.title = 'Новый чат';
-        compose.dataset.focusKey = 'new-chat-' + key;
-        compose.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>';
-        row.insertBefore(compose, row.querySelector('[data-tree-menu]') || row.querySelector('[data-chat-project-toggle]'));
-      }
-      compose.dataset.treeNewChat = chatProjectId;
-      compose.onclick = () => {
-        controller.collapsedProjects.delete(key); controller.collapsedProjects.delete(chatProjectId);
-        void controller.newChat({project_id: chatProjectId});
-      };
-    }
-    let chats = item.querySelector(":scope > .unified-project-chats");
-    if (!chats) {
-      chats = document.createElement("div"); chats.className = "unified-project-chats";
-      item.append(chats);
-    }
-    // Multi-repository composites show conversations below their real repository branches.
-    const rows = controller.rows.filter(chat => ids.includes(chat.project_id) &&
-      (projectsArchiveOpen || !controller.currentProjectOnly || chat.project_id === (controller.contextScope?.project_id || primaryMemberProjectId())));
-    const displayed = composite?.member_ids?.length > 1 ? [] : rows;
-    const signature = JSON.stringify([displayed, controller.row?.id]);
-    if (chats.dataset.signature !== signature) {
-      chats.dataset.signature = signature;
-      chats.replaceChildren(...displayed.map(entry));
-    }
-    let toggle = row.querySelector("[data-chat-project-toggle]");
-    if (!toggle) {
-      toggle = document.createElement("button"); toggle.type = "button";
-      toggle.className = "unified-project-toggle"; toggle.dataset.chatProjectToggle = key;
-      toggle.dataset.focusKey = "toggle-" + key;
-      toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
-      row.append(toggle);
-    }
-    if (!controller.navigationGroups.has(key)) {
-      controller.navigationGroups.add(key);
-      controller.collapsedProjects.add(key);
-    }
-    const open = !controller.collapsedProjects.has(key);
-    const hasBranches = Boolean(item.querySelector(":scope > .project-list--branches"));
-    toggle.hidden = !displayed.length && !hasBranches;
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.setAttribute("aria-label", open ? "Скрыть чаты проекта" : "Показать чаты проекта");
-    chats.hidden = !open;
     const branches = item.querySelector(":scope > .project-list--branches");
-    if (branches) branches.hidden = !open;
-    item.classList.toggle("has-active-chat", rows.some(chat => chat.id === controller.row?.id));
+    if (branches && !row.querySelector("[data-tree-branches]")) {
+      const toggle = document.createElement("button"); toggle.type = "button";
+      toggle.className = "unified-project-toggle"; toggle.dataset.treeBranches = key;
+      toggle.setAttribute("aria-label", "Ветки дерева");
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
+      branches.hidden = true; row.append(toggle);
+    }
   }
-  if (controller.contextScope && controller.currentProjectOnly) {
-    for (const group of list.querySelectorAll(".program-group")) group.hidden = ![...group.querySelectorAll(".project-list__item")].some(item => !item.hidden);
-  } else list.querySelectorAll(".program-group").forEach(group => group.hidden = false);
   sidebar.scrollTop = scroll;
   if (focusKey && !active?.isConnected) [...sidebar.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === focusKey)?.focus({preventScroll: true});
 }
@@ -9240,6 +9306,7 @@ function initConversationLists() {
   initUnifiedNavigation();
   const projectName = id => state.lab?.projectsById?.[id]?.title || id;
   mainConversations = new ChatConversations({ api: KoiApi, main: true,
+    titleForScope: isHubMode() ? null : scope => researchChatNavigation?.groups().flatMap(g => g.trees).find(t => scope?.project_id && t.projectIds.includes(scope.project_id))?.title || researchChatNavigation?.groups().find(g => g.id === scope?.program_id)?.title || (scope?.project_id ? projectName(scope.project_id) : "Общий чат"),
     renderNavigation: isHubMode() ? null : renderUnifiedNavigation,
     sidebar: document.getElementById("agent-chat-conversations"),
     controls: document.getElementById("agent-chat-controls"),
@@ -9263,6 +9330,7 @@ function initConversationLists() {
 
 function initAgentChat() {
   initConversationLists();
+  document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {
@@ -9272,9 +9340,10 @@ function initAgentChat() {
   });
   void refreshCliAgents();
   document.getElementById("btn-chat-collapse")?.addEventListener("click", () => {
+    document.getElementById("workspace").classList.remove("is-chat-list-hidden");
     toggleAgentChatPanel(false);
     const selected = document.querySelector('#agent-chat-conversations [aria-pressed="true"]');
-    (selected?.offsetParent ? selected : document.getElementById('btn-agent-chat'))?.focus();
+    (selected?.offsetParent ? selected : document.querySelector('.research-program[aria-pressed="true"]') || document.getElementById('btn-agent-chat'))?.focus();
   });
   document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
     toggleWorkspaceSidebar();

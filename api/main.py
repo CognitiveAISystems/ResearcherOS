@@ -53,6 +53,9 @@ def _startup() -> None:
         if item.get("conversation_id") and item.get("status") in ("pending", "processing"):
             submit_answer(item["id"], "Запуск прерван перезапуском приложения. Продолжите работу новым сообщением.", answer_kind="warning")
     start_project_discovery_watch()
+    from koi.agent_chat.git_changes import start as start_git_changes
+
+    start_git_changes()
     from koi.projects.done_research_auto import kick_recent
 
     kick_recent()
@@ -66,6 +69,9 @@ def _shutdown() -> None:
     from koi.adapters.project_discovery_watch import stop_project_discovery_watch
 
     stop_project_discovery_watch()
+    from koi.agent_chat.git_changes import stop as stop_git_changes
+
+    stop_git_changes()
     from koi.paper.collaboration.session import shutdown_all_sessions
 
     shutdown_all_sessions()

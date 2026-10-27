@@ -90,16 +90,36 @@ def build_context(item_id: str) -> dict:
     if item is None:
         raise SystemExit(f"Queue item not found: {item_id}")
 
+    if item.get("purpose") in ("git_notice", "git_chat"):
+        from koi.agent_chat.git_changes import POLICY, snapshot, _summary, _diff, get_mount
+        mount = get_mount(item["project_id"])
+        if mount is None:
+            raise SystemExit("Дерево больше не подключено к рабочему пространству.")
+        state = snapshot(mount)
+        return {"queue_id": item_id, "project_id": item["project_id"], "purpose": item["purpose"],
+                "user_question": item["question"], "git_instructions": POLICY,
+                "git_snapshot": state["token"], "summary": _summary(state), "diff": _diff(mount, state)}
+
     if item["project_id"] is None:
         from koi.adapters.repository import list_projects
-        from koi.agent_chat.conversations import messages
+        from koi.agent_chat.conversations import messages, find
+        from koi.agent_chat.context_routing import catalog, for_program, INSTRUCTIONS
+        conversation = find(item["conversation_id"]) or {}
+        program_id = conversation.get("program_id")
+        contexts = for_program(catalog(), program_id)
+        allowed = {p["project_id"] for p in contexts}
         return {
             "queue_id": item["id"], "project_id": None,
             "purpose": item.get("purpose", "agent"), "user_question": item["question"],
             "workspace_root": str(_ws.agent_cwd()),
+            "program_id": program_id,
+            "context_catalog": contexts,
+            "context_routing_instructions": INSTRUCTIONS,
+            "context_suggestions_dismissed": conversation.get("context_suggestions_dismissed", False),
             "projects": [{**p, "research_root": str(koi_root(p["id"])),
                           "research_database_path": str(research_path(p["id"])),
-                          "code_root": str(code_root(p["id"]))} for p in list_projects()],
+                          "code_root": str(code_root(p["id"]))} for p in list_projects()
+                         if not program_id or p["id"] in allowed],
             "history": [{"user": h["question"], "assistant": h.get("answer")}
                         for h in reversed(messages(item["conversation_id"]))
                         if h["enqueued_at"] < item["enqueued_at"]],
@@ -115,7 +135,8 @@ def build_context(item_id: str) -> dict:
     scope_method = None
     scope_node = None
 
-    method_id = item.get("method_id")
+    board = next((b for b in project.boards if b.id == item.get("board_id")), None)
+    method_id = item.get("method_id") or (board.owner_node_id if board else None)
     if method_id:
         method = next((n for n in project.nodes if n.id == method_id), None)
         if method:
@@ -125,7 +146,7 @@ def build_context(item_id: str) -> dict:
                 "description": method.description,
             }
 
-    node_id = item.get("node_id")
+    node_id = item.get("node_id") or (method_id if board else None)
     if node_id:
         node = next((n for n in project.nodes if n.id == node_id), None)
         if node:

@@ -52,6 +52,66 @@ def test_conversation_history_survives_pruning_and_concurrent_writes(state):
     assert chats.find(one["id"])["id"] == one["id"]
 
 
+def test_working_is_separate_from_unread_and_read_state_survives_reload(state):
+    chat = chats.create("a")
+    item = queue.enqueue_question("a", "Проверка", conversation_id=chat["id"])
+    assert not chats.find(chat["id"])["unread"]
+    queue.mark_processing(item["id"])
+    assert chats.find(chat["id"])["agent_active"]
+    assert not chats.find(chat["id"])["unread"]
+    queue.submit_answer(item["id"], "Готово")
+    row = chats.find(chat["id"])
+    assert row["unread"] and not row["agent_active"]
+    assert row["latest_answer_id"] == item["id"]
+    chats.mark_read(chat["id"], item["id"])
+    assert not chats.list_conversations()[0]["unread"]
+    assert json.loads(chats.PATH.read_text())[0]["read_through"] == queue.find_item(item["id"])["answered_at"]
+
+
+def test_read_receipt_does_not_consume_newer_or_other_chat_answer(state):
+    one, two = chats.create("a"), chats.create("a")
+    first = queue.enqueue_question("a", "Первый", conversation_id=one["id"])
+    queue.submit_answer(first["id"], "Первый ответ")
+    second = queue.enqueue_question("a", "Второй", conversation_id=one["id"])
+    queue.submit_answer(second["id"], "Новый ответ")
+    chats.mark_read(one["id"], first["id"])
+    assert chats.find(one["id"])["unread"]
+    with pytest.raises(ValueError):
+        chats.mark_read(two["id"], second["id"])
+    chats.mark_read(one["id"], second["id"])
+    chats.mark_read(one["id"], first["id"])
+    assert not chats.find(one["id"])["unread"]
+
+
+def test_unread_rollout_baselines_old_history_only_once_including_legacy(state):
+    chat = chats.create("a")
+    old = queue.enqueue_question("a", "Старое", conversation_id=chat["id"])
+    legacy = queue.enqueue_question("a", "Старая переписка")
+    queue.submit_answer(old["id"], "Старый ответ")
+    queue.submit_answer(legacy["id"], "Старый ответ")
+    stored = chats._load()
+    stored[0].pop("read_through")
+    chats._save(stored)
+    assert not any(row["unread"] for row in chats.list_conversations())
+    for cid in (chat["id"], chats.legacy_id(legacy)):
+        new = queue.enqueue_question("a", "Продолжение", conversation_id=cid)
+        queue.submit_answer(new["id"], "Новый ответ")
+        assert chats.find(cid)["unread"]
+
+
+def test_read_api_rejects_answer_from_another_conversation(state, monkeypatch):
+    from api.routers import agents
+    from api.schemas import ConversationReadBody
+    monkeypatch.setattr(agents, "load_project", lambda *_a, **_kw: SimpleNamespace(boards=[]))
+    one, two = chats.create("a"), chats.create("a")
+    item = queue.enqueue_question("a", "Вопрос", conversation_id=one["id"])
+    queue.submit_answer(item["id"], "Ответ")
+    with pytest.raises(HTTPException) as error:
+        agents.mark_conversation_read(two["id"], ConversationReadBody(answer_id=item["id"]))
+    assert error.value.status_code == 400
+    assert not agents.mark_conversation_read(one["id"], ConversationReadBody(answer_id=item["id"]))["item"]["unread"]
+
+
 def test_api_conflict_is_per_chat_and_rejects_cross_scope(state, monkeypatch):
     from api.routers import agents
     from api.schemas import AgentChatBody
@@ -251,6 +311,8 @@ def test_restart_interrupts_cli_turn_and_keeps_history(state, monkeypatch):
     from koi.adapters import project_discovery_watch, settings_store
     from koi.projects import done_research_auto
     from koi.agent_chat import setup_pipeline
+    from koi.agent_chat import git_changes
+    monkeypatch.setattr(git_changes, "start", lambda: None)
     monkeypatch.setattr(settings_store, "load_env_file", lambda: None)
     monkeypatch.setattr(project_discovery_watch, "start_project_discovery_watch", lambda: None)
     monkeypatch.setattr(done_research_auto, "kick_recent", lambda: None)
@@ -310,3 +372,201 @@ def test_delete_pending_conversation_is_rejected_without_data_loss(state):
     assert error.value.status_code == 409
     assert chats.find(chat["id"]) is not None
     assert chats.messages(chat["id"])[0]["id"] == item["id"]
+
+
+@pytest.fixture
+def routing(state, monkeypatch):
+    from koi.agent_chat import context_routing
+    from api.routers import agents
+    from koi.core.models import Project, Node, NodeType, KanbanBoard
+    project = Project(id='a', title='BP35', nodes=[Node(id='m', project_id='a', node_type=NodeType.METHOD, title='Память агента')], boards=[KanbanBoard(id='b', owner_node_id='m')])
+    monkeypatch.setattr(context_routing, 'catalog', lambda: [
+        {'project_id': 'a', 'tree_title': 'BP35', 'program_ids': ['agents'], 'program_titles': ['Morpheus'],
+         'methods': [{'board_id': 'b', 'method_id': 'm', 'method_title': 'Память агента'}]},
+        {'project_id': 'other', 'tree_title': 'Другая игра', 'program_ids': [], 'program_titles': [], 'methods': []}])
+    monkeypatch.setattr(agents, 'load_project', lambda pid, **kw: project if pid == 'a' else None)
+    monkeypatch.setattr(agents, 'get_agent_chat_mode', lambda: 'local')
+    monkeypatch.setattr(agents, 'cli_agents', lambda: [])
+    return context_routing
+
+
+def routing_answer(options=None, awaiting=True):
+    return 'Сначала выберите контекст.\n```research_context\n' + json.dumps({
+        'awaiting_selection': awaiting,
+        'options': options if options is not None else [{'project_id': 'a', 'board_id': 'b'}],
+    }) + '\n```'
+
+
+def test_context_options_validated_persisted_and_private(routing):
+    chat = chats.create()
+    item = queue.enqueue_question(None, 'Поставь эксперимент BP35', conversation_id=chat['id'])
+    reply = queue.submit_answer(item['id'], routing_answer([
+        {'project_id': 'a', 'board_id': 'b', 'tree_title': '<script>fake</script>'},
+        {'project_id': 'other', 'board_id': 'b'},
+    ]))
+    assert reply['answer'] == 'Сначала выберите контекст.'
+    options = queue.find_item(item['id'])['context_suggestions']['options']
+    assert len(options) == 1 and options[0]['tree_title'] == 'BP35'
+    assert options[0]['method_title'] == 'Память агента'
+    assert chats.find(chat['id'])['project_id'] is None
+    assert routing.parse_reply('Обычный общий ответ') == ('Обычный общий ответ', None)
+    assert routing.parse_reply('Ответ\n```research_context\n{bad json}\n```') == ('Ответ', None)
+    for candidate in [{'project_id': []}, {'project_id': 'missing'}, {'project_id': 'a', 'board_id': 'missing'}]:
+        assert routing.parse_reply(routing_answer([candidate]))[1] is None
+
+
+def test_context_choice_resumes_only_after_explicit_selection(routing):
+    from api.routers import agents
+    from api.schemas import ConversationContextChoiceBody
+    chat = chats.create()
+    first = queue.enqueue_question(None, 'Поставь эксперимент BP35', conversation_id=chat['id'])
+    queue.submit_answer(first['id'], routing_answer())
+    tasks = BackgroundTasks()
+    choice = ConversationContextChoiceBody(item_id=first['id'], option=0)
+    moved = agents.choose_conversation_context(chat['id'], choice, tasks)['item']
+    assert moved['project_id'] == 'a' and moved['board_id'] == 'b'
+    history = chats.messages(chat['id'])
+    assert len(history) == 2 and history[0]['question'] == first['question']
+    assert history[0]['project_id'] == 'a' and history[0]['board_id'] == 'b'
+    assert history[0]['method_id'] == 'm' and history[0]['node_id'] == 'm'
+    assert history[0]['status'] == 'pending' and len(tasks.tasks) == 1
+    assert queue.find_item(first['id'])['context_suggestions']['resolved']
+    with pytest.raises(HTTPException) as error:
+        agents.choose_conversation_context(chat['id'], choice, BackgroundTasks())
+    assert error.value.status_code == 409 and len(chats.messages(chat['id'])) == 2
+
+
+def test_context_choice_keeps_general_and_does_not_repeat(routing):
+    from api.routers import agents
+    from api.schemas import ConversationContextChoiceBody
+    from koi.agent_chat import cli
+    chat = chats.create()
+    first = queue.enqueue_question(None, 'Что известно про BP35?', conversation_id=chat['id'])
+    queue.submit_answer(first['id'], routing_answer(awaiting=False))
+    tasks = BackgroundTasks()
+    agents.choose_conversation_context(chat['id'], ConversationContextChoiceBody(item_id=first['id']), tasks)
+    assert not tasks.tasks and chats.find(chat['id'])['project_id'] is None
+    second = queue.enqueue_question(None, 'Продолжим общий разговор', conversation_id=chat['id'])
+    assert cli.build_context(second['id'])['context_suggestions_dismissed'] is True
+    assert queue.submit_answer(second['id'], routing_answer())['context_suggestions'] is None
+
+
+def test_context_choice_rejects_cross_chat_pending_and_invalid(routing):
+    from api.routers import agents
+    from api.schemas import ConversationContextChoiceBody
+    chat, other = chats.create(), chats.create()
+    first = queue.enqueue_question(None, 'BP35', conversation_id=chat['id'])
+    queue.submit_answer(first['id'], routing_answer(awaiting=False))
+    choice = ConversationContextChoiceBody(item_id=first['id'], option=0)
+    with pytest.raises(HTTPException) as error:
+        agents.choose_conversation_context(other['id'], choice, BackgroundTasks())
+    assert error.value.status_code == 404
+    with pytest.raises(HTTPException):
+        agents.choose_conversation_context(chat['id'], ConversationContextChoiceBody(item_id=first['id'], option=1), BackgroundTasks())
+    pending = queue.enqueue_question(None, 'Ещё вопрос', conversation_id=chat['id'])
+    with pytest.raises(HTTPException) as error:
+        agents.choose_conversation_context(chat['id'], choice, BackgroundTasks())
+    assert error.value.status_code == 409
+    queue.submit_answer(pending['id'], 'Ответ')
+    agents.choose_conversation_context(chat['id'], choice, BackgroundTasks())
+    assert len(chats.messages(chat['id'])) == 2  # informational reply only moves, never reruns
+
+
+def test_context_choice_rolls_back_when_continuation_cannot_start(routing, monkeypatch):
+    from api.routers import agents
+    from api.schemas import ConversationContextChoiceBody
+    chat = chats.create()
+    item = queue.enqueue_question(None, 'Поставь эксперимент BP35', conversation_id=chat['id'])
+    queue.submit_answer(item['id'], routing_answer())
+    def unavailable(*_args, **_kwargs):
+        raise HTTPException(400, 'Агент недоступен')
+    monkeypatch.setattr(agents, 'post_agent_chat', unavailable)
+    with pytest.raises(HTTPException):
+        agents.choose_conversation_context(chat['id'], ConversationContextChoiceBody(item_id=item['id'], option=0), BackgroundTasks())
+    assert chats.find(chat['id'])['project_id'] is None
+    assert len(chats.messages(chat['id'])) == 1
+    assert not queue.find_item(item['id'])['context_suggestions'].get('resolved')
+
+
+def test_program_chat_remembers_program_without_binding_tree(routing, monkeypatch):
+    from api.routers import agents
+    from api.schemas import ConversationCreateBody, ConversationContextChoiceBody
+    from koi.agent_chat import cli
+    from koi.adapters import repository
+    monkeypatch.setattr(repository, 'list_projects', lambda: [])
+    chat = agents.create_conversation(ConversationCreateBody(program_id='agents', focus_project_id='a'))['item']
+    assert chat['project_id'] is None and chat['program_id'] == 'agents' and chat['focus_project_id'] == 'a'
+    item = queue.enqueue_question(None, 'Эксперимент BP35', conversation_id=chat['id'])
+    context = cli.build_context(item['id'])
+    assert context['program_id'] == 'agents'
+    assert [r['project_id'] for r in context['context_catalog']] == ['a']
+    answered = queue.submit_answer(item['id'], routing_answer([{'project_id': 'a', 'board_id': 'b'}, {'project_id': 'other'}]))
+    assert len(answered['context_suggestions']['options']) == 1
+    tasks = BackgroundTasks()
+    moved = agents.choose_conversation_context(chat['id'], ConversationContextChoiceBody(item_id=item['id'], option=0), tasks)['item']
+    assert moved['project_id'] == 'a' and moved['program_id'] == 'agents'
+    assert moved['focus_project_id'] is None and len(tasks.tasks) == 1
+
+
+def test_program_chat_rejects_invalid_membership_and_stale_suggestions(routing, monkeypatch):
+    from api.routers import agents
+    from api.schemas import ConversationCreateBody, ConversationContextChoiceBody
+    original_load = agents.load_project
+    monkeypatch.setattr(agents, 'load_project', lambda pid, **kw: SimpleNamespace(boards=[]) if pid == 'other' else original_load(pid, **kw))
+    for body in [ConversationCreateBody(program_id='missing'),
+                 ConversationCreateBody(program_id='agents', focus_project_id='other'),
+                 ConversationCreateBody(program_id='agents', project_id='other'),
+                 ConversationCreateBody(focus_project_id='a')]:
+        with pytest.raises(HTTPException) as error:
+            agents.create_conversation(body)
+        assert error.value.status_code == 400
+    chat = chats.create(program_id='agents')
+    item = queue.enqueue_question(None, 'BP35', conversation_id=chat['id'])
+    queue.submit_answer(item['id'], routing_answer())
+    # A persisted suggestion must still belong to the program when it is chosen.
+    chats.update(chat['id'], program_id='ungrouped')
+    with pytest.raises(HTTPException) as error:
+        agents.choose_conversation_context(chat['id'], ConversationContextChoiceBody(item_id=item['id'], option=0), BackgroundTasks())
+    assert error.value.status_code == 400 and chats.find(chat['id'])['project_id'] is None
+
+
+def test_activity_requires_processing_owner_and_ignores_waiting(state, monkeypatch):
+    chat = chats.create('a')
+    item = queue.enqueue_question('a', 'Вопрос', conversation_id=chat['id'])
+    assert chats.find(chat['id'])['pending']
+    assert not chats.find(chat['id'])['agent_active']
+    queue.mark_processing(item['id'])
+    assert chats.find(chat['id'])['agent_active']
+    queue.clear_processing_pid(item['id'])
+    assert not chats.find(chat['id'])['agent_active']
+    queue.mark_processing(item['id'])
+    real_kill = queue.os.kill
+    def dead_owner(pid, signal):
+        if pid == queue.os.getpid():
+            raise ProcessLookupError()
+        return real_kill(pid, signal)
+    monkeypatch.setattr(queue.os, 'kill', dead_owner)
+    assert not chats.find(chat['id'])['agent_active']
+    queue.submit_answer(item['id'], 'Ответ')
+    assert not chats.find(chat['id'])['agent_active']
+
+
+@pytest.mark.parametrize('failed', [False, True])
+def test_runner_releases_activity_on_answer_and_error(state, monkeypatch, failed):
+    from koi.agent_chat import runner
+    chat = chats.create('a')
+    item = queue.enqueue_question('a', 'Вопрос', conversation_id=chat['id'], cli_agent='codex')
+    monkeypatch.setattr(runner, 'load_env_file', lambda: None)
+    monkeypatch.setattr(runner, 'is_api_agent_mode', lambda: False)
+    monkeypatch.setattr(runner, 'is_cursor_manual_agent_mode', lambda: False)
+    monkeypatch.setattr(runner, 'cli_agents', lambda: [{'id':'codex', 'label':'Codex', 'available':True}])
+    monkeypatch.setattr(runner, '_sdk_prompt', lambda _: 'Вопрос')
+    def answer(*args, **kwargs):
+        assert chats.find(chat['id'])['agent_active']
+        if failed:
+            raise RuntimeError('test agent error')
+        return 'Ответ', 'Codex'
+    monkeypatch.setattr(runner, '_run_local_agent', answer)
+    assert runner.process_item(item['id'])
+    assert not chats.find(chat['id'])['agent_active']
+    assert queue.find_item(item['id']).get('processing_pid') is None

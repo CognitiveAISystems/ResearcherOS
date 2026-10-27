@@ -314,6 +314,25 @@ def test_update_card_toggles_pinned_without_touching_updated_at(
     ]
 
 
+def test_update_card_toggles_favorite_independently(
+    project: Project,
+    command_context: dict[str, list],
+) -> None:
+    card = project.boards[0].cards[0]
+    card.pinned = True
+    card.updated_at = "2026-01-01T00:00:00Z"
+    for favorite in (True, False):
+        project_commands.update_card(
+            "demo", "board-method", "card-a",
+            project_commands.UpdateCardCommand(favorite=favorite),
+        )
+        assert card.favorite is favorite
+        assert card.column_id == "backlog"
+        assert card.pinned is True
+        assert card.updated_at == "2026-01-01T00:00:00Z"
+    assert len(command_context["sync"]) == 2
+
+
 def test_delete_card_removes_incoming_dependencies(
     project: Project,
     command_context: dict[str, list],

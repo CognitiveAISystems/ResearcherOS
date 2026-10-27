@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Optional
@@ -177,6 +178,13 @@ def save_project(project: Project) -> Path:
         write_project_knowledge(project)
     except Exception:  # noqa: BLE001 — KB is a derived artifact, not source of truth
         pass
+    if getattr(mount, "git_repo", False):
+        from koi.agent_chat.git_changes import on_project_saved
+
+        try:
+            on_project_saved(before, project)
+        except OSError:
+            logging.getLogger(__name__).warning("Could not schedule research Git check for %s", project.id)
     return path
 
 

@@ -15,8 +15,8 @@ function icon(name) {
 
 /* Conversation selection belongs to ResearcherOS, independently of ACP sessions. */
 export class ChatConversations {
-  constructor({ api, sidebar, controls, scope, input, changed, projectName, main = false, renderNavigation }) {
-    Object.assign(this, { api, sidebar, controls, scope, input, changed, projectName, main, renderNavigation });
+  constructor({ api, sidebar, controls, scope, input, changed, projectName, main = false, renderNavigation, titleForScope }) {
+    Object.assign(this, { api, sidebar, controls, scope, input, changed, projectName, main, renderNavigation, titleForScope });
     this.row = null;
     this.rows = [];
     this.projects = [];
@@ -27,6 +27,19 @@ export class ChatConversations {
     this.navigationGroups = new Set(["global"]);
     this.contextScope = null; this.contextSelections = new Map();
     this.layout = sidebar.closest(".conversation-layout");
+    this.log = this.layout.querySelector('.agent-chat-log');
+    try { document.documentElement.dataset.chatBlink = localStorage.getItem('researchos-chat-blink') || 'on'; } catch { /* Private storage. */ }
+    this.log?.addEventListener('scroll', () => this.scheduleRead(), {passive: true});
+    window.addEventListener('focus', () => this.scheduleRead());
+    window.addEventListener('blur', () => this.scheduleRead());
+    document.addEventListener('visibilitychange', () => this.scheduleRead());
+    if (this.log) new MutationObserver(() => this.scheduleRead()).observe(this.log, {childList: true, subtree: true});
+    window.addEventListener('conversation-read', event => {
+      const row = event.detail;
+      this.rows = this.rows.map(r => r.id === row.id ? row : r);
+      if (this.row?.id === row.id) this.row = row;
+      this.render(this.live);
+    });
     this.sendButton = this.input.form?.querySelector('.agent-chat-send');
     this.sendIcon = this.sendButton?.innerHTML;
     this.sendLabel = this.sendButton?.getAttribute('aria-label');
@@ -84,9 +97,10 @@ export class ChatConversations {
       if (event.target.closest("[data-move-chat]")) void this.moveChat();
     });
     sidebar.addEventListener("dragstart", event => {
+      if (this.main && this.contextScope) { event.preventDefault(); return; }
       const entry = event.target.closest("[data-conversation]");
       const row = this.rows.find(r => r.id === entry?.dataset.conversation);
-      if (!row || row.pending) { event.preventDefault(); return; }
+      if (!row || row.pending || row.kind === "git_sync") { event.preventDefault(); return; }
       this.dragging = true;
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("application/x-researcheros-chat", row.id);
@@ -115,6 +129,7 @@ export class ChatConversations {
     });
     sidebar.addEventListener("dragend", () => this.clearDropTargets());
     sidebar.addEventListener("drop", async event => {
+      if (this.main && this.contextScope) { event.preventDefault(); return; }
       const target = event.target.closest("[data-chat-drop]");
       const cid = event.dataTransfer.getData("application/x-researcheros-chat");
       if (!target || !cid) return;
@@ -187,6 +202,7 @@ export class ChatConversations {
     this.currentProjectOnly = Boolean(scope);
     this.filterTrigger?.setAttribute("aria-pressed", String(this.currentProjectOnly));
     this.row = this.contextSelections.get(JSON.stringify(scope)) || null;
+    if (!this.acceptsScope(this.row)) this.row = null;
     this.live = null; this.epoch++; this.sidebarSignature = null;
     this.input.value = this.drafts.get(this.row?.id || this.draftKey()) || "";
     this.syncSendButton();
@@ -197,8 +213,13 @@ export class ChatConversations {
     this.drafts.set(this.row?.id || this.draftKey(), this.input.value);
   }
 
+  acceptsScope(scope) {
+    const context = this.main && this.contextScope;
+    return !context || ['project_id', 'board_id', 'card_id'].every(key => !context[key] || scope?.[key] === context[key]);
+  }
+
   async select(row) {
-    if (!row) return;
+    if (!row || !this.acceptsScope(row)) return;
     this.showNavigation(false);
     if (this.row?.id === row.id) { if (this.main) await this.changed(); this.input.focus(); return; }
     this.rememberDraft();
@@ -212,6 +233,7 @@ export class ChatConversations {
 
   async newChat(scopeOverride) {
     try {
+      if (scopeOverride && !this.acceptsScope(scopeOverride)) return;
       if (this.main && scopeOverride && (scopeOverride.project_id === null || scopeOverride.project_id !== this.scope().project_id)) {
         this.currentProjectOnly = false; this.filterTrigger?.setAttribute("aria-pressed", "false");
         this.epoch++;
@@ -231,8 +253,10 @@ export class ChatConversations {
   }
 
   async ensure() {
+    if (this.row && !this.acceptsScope(this.row)) throw new Error('Этот чат не относится к открытой карточке или методу.');
     if (!this.row) {
       const data = await this.api.createConversation(this.creationScope());
+      if (!this.acceptsScope(data.item)) throw new Error('Контекст изменился. Повторите отправку в открытой карточке.');
       this.row = data.item;
       this.epoch++;
     }
@@ -261,14 +285,10 @@ export class ChatConversations {
       this.projectsLoadedAt = Date.now();
     }
     const data = await this.api.listConversations(this.main
-      ? (this.currentProjectOnly && !this.renderNavigation ? { project_id: scope.project_id } : {}) : scope);
+      ? this.contextScope || (this.currentProjectOnly && !this.renderNavigation ? { project_id: scope.project_id } : {}) : scope);
     if (epoch !== this.epoch || scopeKey !== JSON.stringify(this.scope())) return null;
     this.rows = data.items || [];
-    if (this.main && this.contextScope && this.currentProjectOnly) {
-      const context = this.contextScope;
-      this.rows = this.rows.filter(row => row.project_id === context.project_id &&
-        (!context.board_id || row.board_id === context.board_id) && (!context.card_id || row.card_id === context.card_id));
-    }
+    this.rows = this.rows.filter(row => this.acceptsScope(row));
     if (this.row && !this.rows.some(r => r.id === this.row.id)) {
       this.rememberDraft(); this.row = null; this.input.value = "";
     }
@@ -279,7 +299,7 @@ export class ChatConversations {
     if (this.row) {
       this.row = this.rows.find(r => r.id === this.row.id) || this.row;
       const detail = await this.api.getConversation(this.row.id);
-      if (epoch !== this.epoch || scopeKey !== JSON.stringify(this.scope()) || detail.conversation.id !== this.row?.id) return null;
+      if (epoch !== this.epoch || scopeKey !== JSON.stringify(this.scope()) || detail.conversation.id !== this.row?.id || !this.acceptsScope(detail.conversation)) return null;
       this.render(detail.live);
       return detail;
     }
@@ -305,22 +325,64 @@ export class ChatConversations {
     }
   }
 
+  status(row) {
+    return [row.unread ? 'Новый ответ' : '', row.agent_active ? 'Агент отвечает…' : row.pending ? 'Ожидает агента' : ''].filter(Boolean).join(' · ');
+  }
+
+  visibleReply() {
+    if (!this.row?.unread || !this.log || document.hidden || !document.hasFocus() || getComputedStyle(this.log).visibility !== 'visible') return null;
+    const reply = this.log.querySelector(`[data-id="${CSS.escape(this.row.latest_answer_id || '')}"] .agent-chat-reply`);
+    if (!reply) return null;
+    const area = this.log.getBoundingClientRect(), rect = reply.getBoundingClientRect();
+    const exposed = document.elementFromPoint((area.left + area.right) / 2, Math.min(rect.bottom, area.bottom) - 2);
+    return area.height > 0 && rect.bottom <= area.bottom + 2 && rect.bottom > area.top && this.log.contains(exposed) ? this.row.latest_answer_id : null;
+  }
+
+  scheduleRead() {
+    const id = this.visibleReply(), cid = this.row?.id;
+    const previous = this.controls.querySelector('.conversation-new-reply');
+    const offscreen = this.row?.unread && !id && this.log && getComputedStyle(this.log).visibility === 'visible' && this.log.getBoundingClientRect().height > 0;
+    if (offscreen && !previous) {
+      const jump = document.createElement('button'); jump.type = 'button'; jump.className = 'btn conversation-new-reply';
+      jump.textContent = 'Новый ответ ↓';
+      jump.onclick = () => { this.log.scrollTop = this.log.scrollHeight; this.scheduleRead(); };
+      this.controls.append(jump);
+    } else if (!offscreen) previous?.remove();
+    const candidate = id ? `${cid}/${id}` : null;
+    if (candidate && candidate === this.readCandidate && this.readTimer) return;
+    clearTimeout(this.readTimer);
+    this.readCandidate = candidate;
+    if (!id || !this.api.markConversationRead) return;
+    this.readTimer = setTimeout(async () => {
+      this.readTimer = null;
+      if (this.row?.id !== cid || this.visibleReply() !== id || this.readRequest) return;
+      this.readRequest = true;
+      try {
+        const result = await this.api.markConversationRead(cid, id);
+        window.dispatchEvent(new CustomEvent('conversation-read', {detail: result.item}));
+      } catch { /* Keep unread until the next successful acknowledgement. */ }
+      finally { this.readRequest = false; }
+    }, 800);
+  }
+
   render(live) {
     this.live = live;
     this.syncSendButton();
+    if (this.log) this.log.dataset.conversation = this.row?.id || '';
     const heading = this.layout.querySelector("[data-conversation-title]");
     const subtitle = this.layout.querySelector("[data-conversation-context]");
-    if (heading) heading.textContent = this.row?.title || "Новый чат";
     const scope = this.row || this.contextScope;
+    if (heading) heading.textContent = this.titleForScope ? this.titleForScope(scope) : this.row?.title || "Новый чат";
     if (subtitle) subtitle.textContent = this.main
       ? [scope?.project_id ? this.projectName(scope.project_id) : "Без проекта", scope?.card_id ? "Карточка" : scope?.board_id ? "Метод" : ""].filter(Boolean).join(" · ")
       : "Чат карточки";
-    const signature = JSON.stringify([this.rows, this.row?.id, this.currentProjectOnly, this.projects]);
+    const signature = JSON.stringify([this.rows, this.row?.id, this.currentProjectOnly, this.projects, this.main ? new Date().toDateString() : null]);
     if (signature !== this.sidebarSignature && !this.dragging) {
       this.sidebarSignature = signature;
       this.renderSidebar();
     }
-    const controlsSignature = JSON.stringify(live ? [live.cancelled, live.permission] : null);
+    const controlsSignature = JSON.stringify([live ? [live.cancelled, live.permission] : null,
+      this.row?.id, this.row?.kind, this.row?.pending, this.row?.git_snapshot, this.row?.unread, this.row?.latest_answer_id]);
     if (controlsSignature === this.controlsSignature) return;
     this.controlsSignature = controlsSignature;
     const focusedOption = this.controls.contains(document.activeElement) ? document.activeElement.dataset.permissionOption : null;
@@ -346,6 +408,7 @@ export class ChatConversations {
         }
       }
     }
+    if (this.log) requestAnimationFrame(() => this.scheduleRead());
   }
 
   renderSidebar() {
@@ -359,7 +422,7 @@ export class ChatConversations {
     create.dataset.newChat = ""; create.dataset.focusKey = "new";
     create.append(icon("compose"), this.main && !this.currentProjectOnly ? "Новый общий чат" : "Новый чат");
     this.sidebar.append(create);
-    if (this.row) {
+    if (this.row && this.row.kind !== "git_sync") {
       const move = document.createElement("button");
       move.type = "button"; move.className = "btn conversation-create conversation-move-accessible";
       move.dataset.moveChat = ""; move.dataset.focusKey = "move";
@@ -405,6 +468,7 @@ export class ChatConversations {
   }
 
   async moveChat() {
+    if (this.main && this.contextScope) return;
     const row = this.row;
     if (!row || row.pending) return;
     const trigger = this.sidebar.querySelector("[data-move-chat]");
@@ -502,18 +566,22 @@ export class ChatConversations {
     const button = document.createElement("button");
     button.type = "button"; button.className = "conversation-entry";
     button.dataset.conversation = row.id; button.dataset.focusKey = row.id;
-    button.draggable = !row.pending;
+    button.draggable = !row.pending && row.kind !== "git_sync";
     button.setAttribute("aria-pressed", String(row.id === this.row?.id));
-    button.title = row.title;
+    button.classList.toggle('has-unread', Boolean(row.unread));
+    button.classList.toggle('has-activity', Boolean(row.agent_active));
+    button.title = [row.title, this.status(row)].filter(Boolean).join(' · ');
+    button.setAttribute('aria-label', button.title);
     const title = document.createElement("span"); title.className = "conversation-entry-title";
     title.textContent = row.title;
     const text = document.createElement("span"); text.className = "conversation-entry-text";
     text.append(title);
-    if (row.pending) {
+    if (this.status(row) && !this.renderNavigation) {
       const status = document.createElement("small"); status.className = "conversation-entry-status";
-      status.textContent = "В работе"; text.append(status);
+      status.textContent = this.status(row); text.append(status);
     }
     button.append(icon(row.card_id ? "card" : "chat"), text);
+    const dot = document.createElement('span'); dot.className = 'chat-status-dot'; dot.setAttribute('aria-hidden', 'true'); button.append(dot);
     if (!this.api.deleteConversation) return button;
     const wrapper = document.createElement('div'); wrapper.className = 'conversation-entry-row';
     const trigger = document.createElement('button'); trigger.type = 'button';
@@ -528,13 +596,26 @@ export class ChatConversations {
     if (row.pending) remove.title = 'Дождитесь завершения ответа перед удалением чата';
     remove.onclick = () => { menu.hidePopover(); this.confirmDelete(row, trigger); };
     menu.append(remove);
+    const blink = document.createElement('button'); blink.type = 'button'; blink.className = 'conversation-delete-action';
+    blink.onclick = () => {
+      const value = document.documentElement.dataset.chatBlink === 'off' ? 'on' : 'off';
+      document.documentElement.dataset.chatBlink = value;
+      try { localStorage.setItem('researchos-chat-blink', value); } catch { /* Private storage. */ }
+      menu.hidePopover(); trigger.focus();
+    };
+    menu.append(blink);
     menu.addEventListener('beforetoggle', event => {
       if (event.newState !== 'open') return;
+      blink.textContent = document.documentElement.dataset.chatBlink === 'off' ? 'Включить мигание' : 'Отключить мигание';
       const rect = trigger.getBoundingClientRect();
       menu.style.left = `${Math.max(8, Math.min(innerWidth - 208, rect.right - 200))}px`;
       menu.style.top = `${Math.max(8, Math.min(innerHeight - 64, rect.bottom + 4))}px`;
     });
-    menu.addEventListener('toggle', event => { if (event.newState === 'open' && !remove.disabled) remove.focus(); });
+    menu.addEventListener('toggle', event => {
+      if (event.newState !== 'open') return;
+      menu.style.top = `${Math.max(8, Math.min(parseFloat(menu.style.top), innerHeight - menu.getBoundingClientRect().height - 8))}px`;
+      (remove.disabled ? blink : remove).focus();
+    });
     wrapper.append(button, trigger, menu);
     return wrapper;
   }

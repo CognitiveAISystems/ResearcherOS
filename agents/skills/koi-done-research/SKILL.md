@@ -130,4 +130,4 @@ KOI/.venv/bin/python -m koi.projects.done_research_cli complete \
 - Отчёты: **koi-report-review**
 - Dev-сервер: `koi-dev-server` (8010 + 8080)
 - Визуальная проверка выводов: `koi-visual-qa`
-- После сохранения вывода: **koi-project-sync** — commit + push `projects/`
+- После сохранения вывода: **koi-project-sync** — предложить синхронизацию; коммит и отправка только по поручению человека

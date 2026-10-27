@@ -38,7 +38,8 @@ def _save(rows):
 
 def list_conversations(project_id=None, board_id=None, card_id=None):
     with LOCK:
-        rows = {r["id"]: {**r, "pending": False} for r in _load()}
+        stored = _load()
+        rows = {r["id"]: {**r, "pending": False, "agent_active": False} for r in stored}
         for item in sorted(queue._load(), key=lambda i: i["enqueued_at"]):
             cid = item_conversation(item)
             if cid not in rows:
@@ -48,6 +49,25 @@ def list_conversations(project_id=None, board_id=None, card_id=None):
                     "backend": item.get("cli_agent")}
             rows[cid]["updated_at"] = item.get("answered_at") or item["enqueued_at"]
             rows[cid]["pending"] = rows[cid].get("pending", False) or item["status"] != "answered"
+            rows[cid]["agent_active"] = rows[cid].get("agent_active", False) or queue.agent_active(item)
+            if item["status"] == "answered" and item.get("answered_at") and not (
+                item.get("purpose") == "git_notice" and (item.get("git_notice_version") or 0) < 3
+            ):
+                if item["answered_at"] > rows[cid].get("latest_answer_at", ""):
+                    rows[cid].update(latest_answer_at=item["answered_at"], latest_answer_id=item["id"])
+        # Establish a baseline once, so installing unread tracking does not light up old history.
+        migrated = False
+        for row in rows.values():
+            if "read_through" not in row:
+                saved = next((r for r in stored if r["id"] == row["id"]), None)
+                if saved is None:
+                    saved = {k: v for k, v in row.items() if k not in ("pending", "agent_active", "latest_answer_at", "latest_answer_id")}
+                    stored.append(saved)
+                row["read_through"] = saved["read_through"] = row.get("latest_answer_at", "")
+                migrated = True
+            row["unread"] = row.get("latest_answer_at", "") > row["read_through"]
+        if migrated:
+            _save(stored)
         return sorted((r for r in rows.values()
             if (project_id is None or r["project_id"] == project_id)
             and (board_id is None or r.get("board_id") == board_id)
@@ -59,12 +79,15 @@ def find(cid):
     return next((r for r in list_conversations() if r["id"] == cid), None)
 
 
-def create(project_id=None, board_id=None, card_id=None, title="Новый чат", backend=None):
+def create(project_id=None, board_id=None, card_id=None, title="Новый чат", backend=None,
+           *, program_id=None, focus_project_id=None):
     with LOCK:
         rows = _load()
         row = {"id": "chat-" + uuid4().hex, "project_id": project_id,
                "board_id": board_id, "card_id": card_id, "title": title[:80],
-               "backend": backend, "created_at": datetime.now(timezone.utc).isoformat()}
+               "backend": backend, "created_at": datetime.now(timezone.utc).isoformat(), "read_through": ""}
+        if program_id:
+            row.update(program_id=program_id, focus_project_id=focus_project_id)
         rows.append(row)
         _save(rows)
         return row
@@ -86,6 +109,20 @@ def update(cid, **fields):
 def messages(cid):
     return sorted((i for i in queue._load() if item_conversation(i) == cid),
                   key=lambda i: i["enqueued_at"], reverse=True)
+
+
+@queue._locked
+def mark_read(cid, answer_id):
+    """Acknowledge only the answer actually displayed, never a later concurrent reply."""
+    with LOCK:
+        row = find(cid)
+        if row is None:
+            raise KeyError(cid)
+        answer = next((i for i in messages(cid) if i["id"] == answer_id and i["status"] == "answered"), None)
+        if not answer or not answer.get("answered_at"):
+            raise ValueError("Answer not found in this chat")
+        update(cid, read_through=max(row.get("read_through", ""), answer["answered_at"]))
+        return find(cid)
 
 
 @queue._locked

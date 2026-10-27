@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -23,6 +25,14 @@ TEMPLATE_PATH = get_workspace().experiment_report_template
 MAX_BASENAME = 120
 ASSETS_DIR = "assets"
 MAX_ASSET_BYTES = 10 * 1024 * 1024
+# ponytail: serialize index transactions in this server; use file locks if multiple servers share a workspace.
+_INDEX_LOCK = threading.RLock()
+
+
+@contextmanager
+def _index_locked():
+    with _INDEX_LOCK:
+        yield
 
 MIME_TO_EXT = {
     "image/png": ".png",
@@ -77,10 +87,12 @@ def load_index(project_id: str) -> dict[str, str]:
 
 def save_index(project_id: str, index: dict[str, str]) -> None:
     path = _index_path(project_id)
-    path.write_text(
-        json.dumps(index, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    temporary = path.with_name(f".{INDEX_NAME}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _unique_card_filename(used_in_folder: set[str], title: str) -> str:
@@ -148,6 +160,7 @@ def _migrate_flat_entry(
     index[card_id] = new_rel
 
 
+@_index_locked()
 def ensure_card_report(
     project: Project, board_id: str, card_id: str, card_title: str
 ) -> Path:
@@ -165,6 +178,7 @@ def ensure_card_report(
     return path
 
 
+@_index_locked()
 def sync_reports_for_project(project: Project) -> int:
     """Ensure reports under reports/<hypothesis>/; migrate legacy flat files."""
     project_id = project.id
@@ -516,6 +530,7 @@ def write_report(
     return _report_meta(project_id, card_id, rel, path)
 
 
+@_index_locked()
 def rename_report_for_card(
     project: Project, board_id: str, card_id: str, new_title: str
 ) -> None:
@@ -552,6 +567,7 @@ def rename_report_for_card(
     save_index(project_id, index)
 
 
+@_index_locked()
 def delete_report(project_id: str, card_id: str) -> None:
     index = load_index(project_id)
     rel = index.pop(card_id, None)

@@ -85,6 +85,7 @@ class ExperimentCard(BaseModel):
     created_at: Optional[str] = None  # ISO-8601 UTC, set on create
     updated_at: Optional[str] = None  # ISO-8601 UTC, bumped on every card update
     pinned: bool = False  # stay at the top of the kanban column
+    favorite: bool = False
 
 
 class KanbanBoard(BaseModel):
@@ -109,7 +110,6 @@ DEFAULT_KANBAN_COLUMNS = [
     KanbanColumn(id="backlog", title="Backlog", order=0),
     KanbanColumn(id="running", title="Running", order=1),
     KanbanColumn(id="done", title="Done", order=2),
-    KanbanColumn(id="successful", title="Успешные", order=3),
 ]
 
 KANBAN_CONCLUSION_COLUMN_IDS = frozenset({"done", "successful"})

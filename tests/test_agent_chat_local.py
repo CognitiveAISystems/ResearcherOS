@@ -171,3 +171,24 @@ def test_queue_keeps_chosen_cli(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(queue, "QUEUE_PATH", tmp_path / "chat.json")
     item = queue.enqueue_question("demo", "Что известно?", cli_agent="claude")
     assert queue.find_item(item["id"])["cli_agent"] == "claude"
+
+
+def test_unassigned_chat_uses_read_only_mode_before_selection(monkeypatch):
+    item = {'id': 'aq-global', 'project_id': None, 'question': 'Создай эксперимент BP35', 'status': 'pending', 'purpose': 'agent'}
+    monkeypatch.setattr(runner, 'find_item', lambda _id: item)
+    monkeypatch.setattr(runner, 'is_cursor_manual_agent_mode', lambda: False)
+    monkeypatch.setattr(runner, 'is_api_agent_mode', lambda: False)
+    monkeypatch.setattr(runner, 'find_agent_bin', lambda: Path('/usr/bin/agent'))
+    monkeypatch.setattr(runner, 'mark_processing', lambda _id: None)
+    monkeypatch.setattr(runner, 'record', lambda *_args: None)
+    monkeypatch.setattr(runner, 'build_context', lambda _id: {'project_id': None, 'user_question': item['question']})
+    calls = []
+    monkeypatch.setattr(runner, '_run_local_agent', lambda _prompt, _id, **kw: calls.append(kw) or ('Выберите проект', 'Cursor CLI'))
+    monkeypatch.setattr(runner, 'submit_answer', lambda *_args: None)
+    assert runner.process_item(item['id']) and calls == [{}]
+    prompt = runner._sdk_prompt(item['id'])
+    assert 'не запускай эксперименты' in prompt and 'research_context' in prompt
+    monkeypatch.setattr(runner, 'is_api_agent_mode', lambda: True)
+    monkeypatch.setattr(runner, 'backend_status', lambda: {'codex': {'available': True}})
+    monkeypatch.setattr(runner, 'run_agent', lambda _prompt, **kw: calls.append(kw) or ('Выберите проект', 'codex'))
+    assert runner.process_item(item['id']) and calls[-1]['allow_edits'] is False

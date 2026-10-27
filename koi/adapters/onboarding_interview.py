@@ -697,7 +697,7 @@ def _project_markdown(state: dict[str, Any]) -> str:
     for node in nodes:
         lines.extend([f"{'#' * levels[node['type']]} {node['type']}: {node['id']}", "", node["title"], "", node["description"], ""])
         if node["type"] == "method":
-            lines.extend([f"<!-- koi:kanban board-{node['id']} -->", "| backlog | running | done | successful |", "| --- | --- | --- | --- |", "|  |  |  |  |", ""])
+            lines.extend([f"<!-- koi:kanban board-{node['id']} -->", "| backlog | running | done |", "| --- | --- | --- |", "|  |  |  |", ""])
     content = "\n".join(lines).rstrip() + "\n"
     parsed = parse_project_md(content, project_id=repo.name)
     if len(parsed.nodes) != len(nodes):
