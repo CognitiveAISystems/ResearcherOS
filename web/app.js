@@ -238,22 +238,7 @@ const TYPE_ORDER = {
 const PROBLEM_MIN_W = 200;
 const PROBLEM_MAX_W = 300;
 const PROBLEM_MIN_H = 72;
-const PROBLEM_MAX_H = 110;
 const EXP_SIZE = 48;
-const ADD_NODE_SIZE = { w: 80, h: 80, round: "50%" };
-
-function addSlotId(parentId) {
-  return `__add__${parentId}`;
-}
-
-function isAddSlot(id) {
-  return typeof id === "string" && id.startsWith("__add__");
-}
-
-function addNodeSize() {
-  return ADD_NODE_SIZE;
-}
-
 function canShowAddButton(node) {
   return (
     node.node_type === "problem" ||
@@ -390,7 +375,7 @@ function computeNodeSize(node) {
       Math.min(PROBLEM_MAX_W, Math.max(PROBLEM_MIN_W, textW + m.padX * 2 + 8))
     );
     const ph = Math.ceil(
-      Math.min(PROBLEM_MAX_H, Math.max(PROBLEM_MIN_H, h))
+      Math.max(PROBLEM_MIN_H, h + 24)
     );
     return { w: pw, h: ph, round: "50%", shape: "oval", lines };
   }
@@ -1692,9 +1677,6 @@ function buildDepthY(root) {
   const maxH = {};
   function walk(n, d) {
     maxH[d] = Math.max(maxH[d] || 0, halfH(n));
-    if (shouldShowAddSlot(n)) {
-      maxH[d + 1] = Math.max(maxH[d + 1] || 0, addNodeSize().h / 2 + 4);
-    }
     (n.children || []).forEach((c) => walk(c, d + 1));
   }
   walk(root, 0);
@@ -1711,66 +1693,30 @@ function buildDepthY(root) {
 
 function subtreeWidth(node) {
   const kids = node.children || [];
-  const addW = shouldShowAddSlot(node) ? addNodeSize().w : 0;
-  if (!kids.length) return Math.max(nodeSize(node).w, addW);
-  let total = 0;
-  kids.forEach((child, i) => {
-    if (i > 0) total += LAYOUT.hGap;
-    total += subtreeWidth(child);
-  });
-  if (shouldShowAddSlot(node)) {
-    total += LAYOUT.hGap + addW;
-  }
-  return Math.max(nodeSize(node).w, total);
+  const childrenWidth = kids.reduce((width, child) => width + subtreeWidth(child), 0)
+    + Math.max(0, kids.length - 1) * LAYOUT.hGap;
+  return Math.max(nodeSize(node).w, childrenWidth);
 }
 
-/**
- * Top-down tree: problem on top, children spread horizontally below.
- */
+/** Only research nodes participate in layout; editing controls stay attached. */
 function layoutTopDown(node, depth, xLeft, yByDepth, positions) {
   const kids = node.children || [];
-  const showAdd = shouldShowAddSlot(node);
-  const childDepth = depth + 1;
-  const childY = yByDepth[childDepth];
-
-  if (!kids.length && !showAdd) {
-    const w = nodeSize(node).w;
-    positions[node.id] = { x: xLeft + w / 2, y: yByDepth[depth], node };
-    return xLeft + w;
-  }
-
-  let cursor = xLeft;
+  const width = subtreeWidth(node);
+  const childrenWidth = kids.reduce((sum, child) => sum + subtreeWidth(child), 0)
+    + Math.max(0, kids.length - 1) * LAYOUT.hGap;
+  let cursor = xLeft + (width - childrenWidth) / 2;
   const centers = [];
-
   kids.forEach((child, i) => {
     if (i > 0) cursor += LAYOUT.hGap;
-    cursor = layoutTopDown(child, childDepth, cursor, yByDepth, positions);
+    cursor = layoutTopDown(child, depth + 1, cursor, yByDepth, positions);
     centers.push(positions[child.id].x);
   });
-
-  if (showAdd) {
-    if (kids.length) cursor += LAYOUT.hGap;
-    const s = addNodeSize();
-    const aid = addSlotId(node.id);
-    positions[aid] = {
-      x: cursor + s.w / 2,
-      y: childY,
-      isAdd: true,
-      parentNode: node,
-    };
-    centers.push(positions[aid].x);
-    cursor += s.w;
-  }
-
   positions[node.id] = {
-    x:
-      centers.length > 0
-        ? (centers[0] + centers[centers.length - 1]) / 2
-        : xLeft + nodeSize(node).w / 2,
+    x: centers.length ? (centers[0] + centers[centers.length - 1]) / 2 : xLeft + width / 2,
     y: yByDepth[depth],
     node,
   };
-  return cursor;
+  return xLeft + width;
 }
 
 function collectDescendants(nodeId, nodes) {
@@ -1804,22 +1750,11 @@ function enforceVerticalOrder(positions) {
       shiftSubtree(n.id, 0, needTop - cb.top, positions);
     }
   }
-  for (const [id, pos] of Object.entries(positions)) {
-    if (!pos.isAdd || !pos.parentNode) continue;
-    const pPos = positions[pos.parentNode.id];
-    if (!pPos) continue;
-    const pb = bboxFromPos(pPos, pos.parentNode);
-    const cb = bboxFromPos(pos, null);
-    const needTop = pb.bottom + LAYOUT.vGap;
-    if (cb.top < needTop - 2) {
-      pos.y += needTop - cb.top;
-    }
-  }
 }
 
 function bboxFromPos(pos, node) {
-  const s = pos.isAdd ? addNodeSize() : nodeSize(node);
-  const below = node && !pos.isAdd ? kanbanBelowExtra(node) : 0;
+  const s = nodeSize(node);
+  const below = node ? kanbanBelowExtra(node) : 0;
   return {
     left: pos.x - s.w / 2,
     right: pos.x + s.w / 2,
@@ -1844,7 +1779,6 @@ function bboxesOverlap(a, b, margin = 14) {
 }
 
 function isParentChild(idA, idB) {
-  if (isAddSlot(idA) || isAddSlot(idB)) return true;
   const a = state.project.nodes.find((n) => n.id === idA);
   const b = state.project.nodes.find((n) => n.id === idB);
   if (!a || !b) return false;
@@ -1920,13 +1854,13 @@ function boundaryPoint(fromX, fromY, toX, toY, size) {
     return { x: fromX + ux * rad, y: fromY + uy * rad };
   }
   if (isOval) {
-    const a = size.w / 2 - 6;
-    const b = size.h / 2 - 6;
+    const a = size.w / 2;
+    const b = size.h / 2;
     const t = 1 / Math.sqrt((ux / a) ** 2 + (uy / b) ** 2);
     return { x: fromX + ux * t, y: fromY + uy * t };
   }
-  const hw = size.w / 2 - 6;
-  const hh = size.h / 2 - 6;
+  const hw = size.w / 2;
+  const hh = size.h / 2;
   const scale = Math.min(
     Math.abs(ux) > 1e-6 ? hw / Math.abs(ux) : Infinity,
     Math.abs(uy) > 1e-6 ? hh / Math.abs(uy) : Infinity
@@ -1955,7 +1889,7 @@ function renderEdges(svg, positions, width, height) {
       </marker>
     </defs>`;
 
-  const drawEdge = (from, to, fs, ts, dashed = false) => {
+  const drawEdge = (from, to, fs, ts) => {
     if (!from || !to) return;
     const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
     const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
@@ -1972,10 +1906,10 @@ function renderEdges(svg, positions, width, height) {
     const my = (y1 + y2) / 2;
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-    path.setAttribute("class", dashed ? "edge edge-add" : "edge");
+    path.setAttribute("class", "edge");
     path.setAttribute("stroke", "url(#edge-grad)");
     path.setAttribute("filter", "url(#edge-glow)");
-    if (!dashed) path.setAttribute("marker-end", "url(#arrow)");
+    path.setAttribute("marker-end", "url(#arrow)");
     svg.appendChild(path);
   };
 
@@ -1991,23 +1925,13 @@ function renderEdges(svg, positions, width, height) {
     );
   });
 
-  for (const [id, pos] of Object.entries(positions)) {
-    if (!pos.isAdd || !pos.parentNode) continue;
-    drawEdge(
-      positions[pos.parentNode.id],
-      pos,
-      nodeSize(pos.parentNode),
-      addNodeSize(),
-      true
-    );
-  }
 }
 
 const LAB_LAYOUT = {
   programGap: 56,
   programHeader: 40,
   projectGap: 48,
-  framePad: 20,
+  framePad: 36,
 };
 
 function withProject(project, fn) {
@@ -2434,7 +2358,6 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
   wrap.className = "node-wrap" + (hasKanban ? " has-kanban-wrap" : "");
   wrap.dataset.nodeId = node.id;
   wrap.dataset.projectId = project.id;
-  wrap.classList.toggle("is-active-project", project.id === state.project?.id);
   wrap.style.left = `${pos.x}px`;
   if (hasKanban) {
     wrap.style.top = `${pos.y - size.h / 2}px`;
@@ -2477,12 +2400,10 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
     wireResearchQuestionBadge(wrap, qBtn);
   }
 
-  mountNodeTypeHelp(wrap, node.node_type);
-
+  mountNodeActions(wrap, project, node, activateProject, size.w);
   if (hasKanban) {
     appendKanbanBelow(wrap, node, project);
   }
-  appendNodeDeleteButton(wrap, project, node);
   mountNodePageIcons(wrap, project, node, activateProject);
   wireNodeWorkersHover(wrap, project, node);
   state.nodeSizes = savedSizes;
@@ -2498,21 +2419,12 @@ function renderLabEdges(svg, placements, worldW, worldH) {
   svg.style.height = `${worldH}px`;
   svg.innerHTML = `
     <defs>
-      <linearGradient id="edge-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${worldW}" y2="0">
-        <stop offset="0%" stop-color="#ff6bcb"/>
-        <stop offset="50%" stop-color="#7b5cff"/>
-        <stop offset="100%" stop-color="#3de8ff"/>
-      </linearGradient>
-      <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="2" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3de8ff"/>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
       </marker>
     </defs>`;
 
-  const drawEdge = (from, to, fs, ts, dashed = false) => {
+  const drawEdge = (group, from, to, fs, ts) => {
     if (!from || !to) return;
     const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
     const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
@@ -2529,14 +2441,17 @@ function renderLabEdges(svg, placements, worldW, worldH) {
     const my = (y1 + y2) / 2;
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-    path.setAttribute("class", dashed ? "edge edge-add" : "edge");
-    path.setAttribute("stroke", "url(#edge-grad)");
-    path.setAttribute("filter", "url(#edge-glow)");
-    if (!dashed) path.setAttribute("marker-end", "url(#arrow)");
-    svg.appendChild(path);
+    path.setAttribute("class", "edge");
+    path.setAttribute("marker-end", "url(#arrow)");
+    group.appendChild(path);
   };
 
   for (const placement of placements) {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("lab-tree-edges");
+    group.dataset.projectId = placement.project.id;
+    group.style.transformOrigin = `${placement.region.x + placement.region.width / 2}px ${placement.region.y + placement.region.height / 2}px`;
+    svg.appendChild(group);
     const savedProject = state.project;
     const savedSizes = state.nodeSizes;
     state.project = placement.project;
@@ -2548,22 +2463,13 @@ function renderLabEdges(svg, placements, worldW, worldH) {
         const parent = placement.project.nodes.find((x) => x.id === n.parent_id);
         if (!parent || !isVisualNode(parent)) return;
         drawEdge(
+          group,
           positions[n.parent_id],
           positions[n.id],
           nodeSize(parent),
           nodeSize(n)
         );
       });
-      for (const [id, pos] of Object.entries(positions)) {
-        if (!pos.isAdd || !pos.parentNode) continue;
-        drawEdge(
-          positions[pos.parentNode.id],
-          pos,
-          nodeSize(pos.parentNode),
-          addNodeSize(),
-          true
-        );
-      }
     } finally {
       state.project = savedProject;
       state.nodeSizes = savedSizes;
@@ -2634,33 +2540,24 @@ function renderLabMindmap(options = {}) {
     layer.appendChild(frame);
 
     const { positions, project, nodeSizes } = placement;
+    const nodeGroup = document.createElement("div");
+    nodeGroup.className = "lab-project-nodes";
+    nodeGroup.dataset.projectId = project.id;
+    nodeGroup.style.width = `${worldW}px`;
+    nodeGroup.style.height = `${worldH}px`;
+    nodeGroup.style.transformOrigin = `${region.x + region.width / 2}px ${region.y + region.height / 2}px`;
+    layer.appendChild(nodeGroup);
     project.nodes.forEach((n) => {
       if (!isVisualNode(n)) return;
       const pos = positions[n.id];
       if (!pos) return;
-      mountMapNode(pos, layer, project, n, nodeSizes);
+      mountMapNode(pos, nodeGroup, project, n, nodeSizes);
     });
 
-    for (const [, pos] of Object.entries(positions)) {
-      if (!pos.isAdd || !pos.parentNode) continue;
-      const labels = state.meta?.labels || TYPE_LABELS;
-      mountAddNodeButton({
-        pos,
-        parent: pos.parentNode,
-        projectId: project.id,
-        labels,
-        allowedTypes: allowedChildTypes(pos.parentNode.node_type),
-        readOnly: isHubMode(),
-        onOpen: (parent) => {
-          state.project = project;
-          openAddChildModal(parent);
-        },
-        mount: (addWrap) => layer.appendChild(addWrap),
-      });
-    }
   }
 
   renderLabEdges(svg, visiblePlacements, worldW, worldH);
+  setActiveProjectInList(state.project?.id);
 
   ensureLabCamera();
   if (labCamera) {
@@ -3005,28 +2902,14 @@ function renderMindmap(options = {}) {
       core.appendChild(qBtn);
       wireResearchQuestionBadge(wrap, qBtn);
     }
-    mountNodeTypeHelp(wrap, n.node_type);
+    mountNodeActions(wrap, state.project, n, () => {}, size.w);
     if (hasKanban) appendKanbanBelow(wrap, n);
-    appendNodeDeleteButton(wrap, state.project, n);
     mountNodePageIcons(wrap, state.project, n);
     wireNodeWorkersHover(wrap, state.project, n);
   });
 
   updateLayerExtent();
 
-  for (const [id, pos] of Object.entries(positions)) {
-    if (!pos.isAdd || !pos.parentNode) continue;
-    const labels = state.meta?.labels || TYPE_LABELS;
-    mountAddNodeButton({
-      pos,
-      parent: pos.parentNode,
-      labels,
-      allowedTypes: allowedChildTypes(pos.parentNode.node_type),
-      readOnly: isHubMode(),
-      onOpen: openAddChildModal,
-      mount: (addWrap) => layer.appendChild(addWrap),
-    });
-  }
 }
 
 function showModal(id) {
@@ -4549,7 +4432,7 @@ async function requestDeleteNode(node) {
   }
 }
 
-function appendNodeDeleteButton(wrap, project, node) {
+function appendNodeDeleteButton(wrap, project, node, mount = (button) => wrap.appendChild(button)) {
   if (!wrap || !node || node.node_type === "problem" || isHubMode()) return;
   const btn = document.createElement("button");
   btn.type = "button";
@@ -4571,7 +4454,28 @@ function appendNodeDeleteButton(wrap, project, node) {
   });
   btn.addEventListener("pointerdown", (e) => e.stopPropagation());
   btn.addEventListener("mousedown", (e) => e.stopPropagation());
-  wrap.appendChild(btn);
+  mount(btn);
+}
+
+function mountNodeActions(wrap, project, node, activateProject, width) {
+  const actions = document.createElement("div");
+  actions.className = "node-actions";
+  actions.style.setProperty("--node-action-parent-width", `${width}px`);
+  const mount = (button) => actions.appendChild(button);
+  if (shouldShowAddSlot(node)) {
+    mountAddNodeButton({
+      parent: node,
+      labels: state.meta?.labels || TYPE_LABELS,
+      allowedTypes: allowedChildTypes(node.node_type),
+      readOnly: isHubMode(),
+      onOpen: (parent) => { activateProject(); openAddChildModal(parent); },
+      mount,
+    });
+  }
+  mountNodeTypeHelp(wrap, node.node_type, mount);
+  appendNodeDeleteButton(wrap, project, node, mount);
+  if (!actions.children.length) return;
+  wrap.appendChild(actions);
 }
 
 function formatImportance(importance) {
@@ -7381,8 +7285,15 @@ async function loadProjectList(activeId) {
 }
 
 function setActiveProjectInList(id) {
-  document.querySelectorAll(".node-wrap[data-project-id]").forEach((wrap) => {
-    wrap.classList.toggle("is-active-project", wrap.dataset.projectId === id);
+  document.querySelectorAll(".lab-project-frame, .lab-tree-edges, .lab-project-nodes").forEach((el) => {
+    const active = el.dataset.projectId === id;
+    el.classList.toggle("is-active", active);
+    if (el.classList.contains("lab-project-frame")) {
+      el.setAttribute("aria-pressed", String(active));
+    }
+  });
+  document.querySelectorAll(".nodes-layer .node-wrap[data-project-id]").forEach((wrap) => {
+    wrap.classList.toggle("is-active-tree", wrap.dataset.projectId === id);
   });
   const selectedBranch = state.literatureBranchId;
   document.querySelectorAll(".project-list__btn").forEach((btn) => {

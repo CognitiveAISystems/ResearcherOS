@@ -199,19 +199,16 @@ export function openNodeTypeHelp(nodeType) {
 /**
  * «?» в углу карточки узла — открывает полноэкранную подсказку.
  */
-export function mountNodeTypeHelp(wrap, nodeType) {
+export function mountNodeTypeHelp(wrap, nodeType, mount) {
   const help = NODE_TYPE_HELP[nodeType];
   if (!help || !wrap) return;
 
-  const mapEl = wrap.querySelector(".map-node");
-  if (!mapEl || mapEl.querySelector(".node-type-help-trigger")) return;
-
-  mapEl.classList.add("has-type-help");
-
-  const trigger = document.createElement("span");
+  const trigger = document.createElement("button");
+  trigger.type = "button";
   trigger.className = "node-type-help-trigger";
   trigger.title = help.title;
-  trigger.innerHTML = `<span class="node-type-help-q" aria-hidden="true">?</span>`;
+  trigger.setAttribute("aria-label", `Что значит «${help.title}»`);
+  trigger.textContent = "?";
 
   trigger.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -220,119 +217,28 @@ export function mountNodeTypeHelp(wrap, nodeType) {
   });
   trigger.addEventListener("mousedown", (e) => e.stopPropagation());
 
-  mapEl.appendChild(trigger);
+  mount?.(trigger);
 }
 
-function parentWrapSelector(parent, projectId) {
-  const pid = projectId ? `[data-project-id="${projectId}"]` : "";
-  return `.node-wrap[data-node-id="${parent.id}"]${pid}`;
-}
-
-function setAddParentHighlight(parent, projectId, on) {
-  const sel = parentWrapSelector(parent, projectId);
-  document.querySelectorAll(sel).forEach((w) => {
-    w.classList.toggle("is-add-parent-highlight", on);
-  });
-}
-
-function buildAddPreviewGhosts(items) {
-  const ghosts = document.createElement("div");
-  ghosts.className = "add-preview-ghosts";
-  ghosts.setAttribute("aria-hidden", "true");
-  ghosts.innerHTML = items
-    .map(
-      (item) => `
-    <div class="add-preview-ghost add-preview-ghost--${item.type}">
-      <span class="add-preview-ghost-label">${escapeHtml(item.label)}</span>
-      ${item.why ? `<span class="add-preview-ghost-why">${escapeHtml(item.why)}</span>` : ""}
-    </div>`
-    )
-    .join("");
-  return ghosts;
-}
-
-/**
- * Кнопка «+» с подсветкой родителя и превью добавляемых типов.
- * @param {{ readOnly?: boolean }} opts
- */
-export function mountAddNodeButton({
-  pos,
-  parent,
-  projectId,
-  labels,
-  allowedTypes,
-  onOpen,
-  mount,
-  readOnly = false,
-}) {
-  const size = { w: 80, h: 80, round: "50%" };
+/** Compact editing action, attached to its node and excluded from tree layout. */
+export function mountAddNodeButton({ parent, labels, allowedTypes, onOpen, mount, readOnly = false }) {
+  if (readOnly) return null;
   const items = addChildPreviewItems(parent.node_type, allowedTypes, labels);
-  const singleLabel = items.length === 1 ? items[0].label : null;
-  const hubHint = "В Hub нельзя добавлять узлы — только просмотр";
-
-  const el = document.createElement("button");
-  el.type = "button";
-  el.className = "map-node add-node" + (readOnly ? " add-node--readonly" : "");
-  el.dataset.parentId = parent.id;
-  if (readOnly) {
-    el.disabled = true;
-    el.setAttribute("aria-disabled", "true");
-    el.title = hubHint;
-    el.setAttribute("aria-label", hubHint);
-  } else {
-    const ariaLabel =
-      items.length === 1
-        ? `Добавить ${items[0].label.toLowerCase()}`
-        : `Добавить: ${items.map((i) => i.label.toLowerCase()).join(" или ")}`;
-    el.setAttribute("aria-label", ariaLabel);
-  }
-  el.innerHTML = `
-    <span class="node-label add-node-dynamic-label">${singleLabel ? `+ ${singleLabel}` : "Добавить"}</span>
-    <span class="add-plus">+</span>`;
-
-  const addWrap = document.createElement("div");
-  addWrap.className =
-    "node-wrap add-slot-wrap" + (readOnly ? " add-slot-wrap--readonly" : "");
-  if (projectId) addWrap.dataset.projectId = projectId;
-  addWrap.dataset.parentId = parent.id;
-  addWrap.style.left = `${pos.x}px`;
-  addWrap.style.top = `${pos.y}px`;
-  addWrap.style.transform = "translate(-50%, -50%)";
-  if (readOnly) addWrap.title = hubHint;
-
-  addWrap.appendChild(buildAddPreviewGhosts(items));
-
-  el.style.width = `${size.w}px`;
-  el.style.height = `${size.h}px`;
-  el.style.borderRadius = size.round;
-
-  const showPreview = () => {
-    if (readOnly) return;
-    addWrap.classList.add("is-add-preview-active");
-    setAddParentHighlight(parent, projectId, true);
-  };
-  const hidePreview = () => {
-    addWrap.classList.remove("is-add-preview-active");
-    setAddParentHighlight(parent, projectId, false);
-  };
-
-  addWrap.addEventListener("mouseenter", showPreview);
-  addWrap.addEventListener("mouseleave", hidePreview);
-  addWrap.addEventListener("focusin", showPreview);
-  addWrap.addEventListener("focusout", (e) => {
-    if (!addWrap.contains(e.relatedTarget)) hidePreview();
-  });
-
-  el.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (readOnly) return;
-    hidePreview();
+  const label = items.length === 1
+    ? `Добавить узел «${items[0].label}»`
+    : `Добавить: ${items.map((item) => item.label.toLowerCase()).join(" или ")}`;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "node-add";
+  button.dataset.parentId = parent.id;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.textContent = "+";
+  button.addEventListener("pointerdown", (event) => event.stopPropagation());
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
     onOpen(parent);
   });
-
-  addWrap.appendChild(el);
-  if (mount) {
-    mount(addWrap);
-  }
-  return addWrap;
+  mount?.(button);
+  return button;
 }

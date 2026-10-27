@@ -49,7 +49,7 @@ export class MindmapCamera {
       const t = e.target;
       if (
         t.closest?.(
-          ".map-node, .node-delete, .node-type-help-trigger, .project-list__btn, .method-questions-trigger, .kanban-below, .node-kanban-below, .map-kanban-board, .kanban-card, .kanban-col, .method-activity-overlay, .method-activity-overlay-pin, .method-activity-inspect, .method-activity.is-overlay-beacon, .method-activity-stage"
+          ".map-node, .node-actions, .project-list__btn, .method-questions-trigger, .kanban-below, .node-kanban-below, .map-kanban-board, .kanban-card, .kanban-col, .method-activity-overlay, .method-activity-overlay-pin, .method-activity-inspect, .method-activity.is-overlay-beacon, .method-activity-stage"
         )
       ) {
         return;
