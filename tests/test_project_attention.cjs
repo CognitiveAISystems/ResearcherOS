@@ -15,6 +15,12 @@ test('explicit work wins, old history decays and a stable centered tree takes ov
   assert.equal(m.choose('a', { a: 0.05, b: 0.59 }, 240800), 'b');
 });
 
+test('centered middle tree takes focus even while a recently used neighbor is visible', () => {
+  const m = new Model();
+  m.interact('right', { middle: 0.65, right: 1 }, 0);
+  assert.equal(m.choose('right', { left: 0.55, middle: 1, right: 0.84 }, 100), 'middle');
+});
+
 test('fast flyovers, ties, empty space and edge-only nodes keep current context', () => {
   const m = new Model();
   assert.equal(m.choose('a', { b: 0.55 }, 0), 'a');

@@ -51,7 +51,7 @@ export class ProjectAttention {
   choose(currentId, proximity, now) {
     // A clear spatial focus is stronger evidence than previous work elsewhere.
     const spatial = Object.entries(proximity).sort((a, b) => b[1] - a[1]);
-    if (spatial[0]?.[1] >= 0.6 && spatial[0][1] - (spatial[1]?.[1] || 0) >= 0.3) {
+    if (spatial[0]?.[1] >= 0.8 && spatial[0][1] - (spatial[1]?.[1] || 0) >= 0.1) {
       this.reset();
       return spatial[0][0];
     }

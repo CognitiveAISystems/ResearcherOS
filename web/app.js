@@ -2008,7 +2008,7 @@ const LAB_LAYOUT = {
   programGap: 56,
   programHeader: 40,
   projectGap: 48,
-  framePad: 20,
+  framePad: 36,
 };
 
 function withProject(project, fn) {
@@ -2507,21 +2507,12 @@ function renderLabEdges(svg, placements, worldW, worldH) {
   svg.style.height = `${worldH}px`;
   svg.innerHTML = `
     <defs>
-      <linearGradient id="edge-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${worldW}" y2="0">
-        <stop offset="0%" stop-color="#ff6bcb"/>
-        <stop offset="50%" stop-color="#7b5cff"/>
-        <stop offset="100%" stop-color="#3de8ff"/>
-      </linearGradient>
-      <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="2" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3de8ff"/>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
       </marker>
     </defs>`;
 
-  const drawEdge = (from, to, fs, ts, dashed = false) => {
+  const drawEdge = (group, from, to, fs, ts, dashed = false) => {
     if (!from || !to) return;
     const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
     const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
@@ -2539,13 +2530,16 @@ function renderLabEdges(svg, placements, worldW, worldH) {
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
     path.setAttribute("class", dashed ? "edge edge-add" : "edge");
-    path.setAttribute("stroke", "url(#edge-grad)");
-    path.setAttribute("filter", "url(#edge-glow)");
     if (!dashed) path.setAttribute("marker-end", "url(#arrow)");
-    svg.appendChild(path);
+    group.appendChild(path);
   };
 
   for (const placement of placements) {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("lab-tree-edges");
+    group.dataset.projectId = placement.project.id;
+    group.style.transformOrigin = `${placement.region.x + placement.region.width / 2}px ${placement.region.y + placement.region.height / 2}px`;
+    svg.appendChild(group);
     const savedProject = state.project;
     const savedSizes = state.nodeSizes;
     state.project = placement.project;
@@ -2557,6 +2551,7 @@ function renderLabEdges(svg, placements, worldW, worldH) {
         const parent = placement.project.nodes.find((x) => x.id === n.parent_id);
         if (!parent || !isVisualNode(parent)) return;
         drawEdge(
+          group,
           positions[n.parent_id],
           positions[n.id],
           nodeSize(parent),
@@ -2566,6 +2561,7 @@ function renderLabEdges(svg, placements, worldW, worldH) {
       for (const [id, pos] of Object.entries(positions)) {
         if (!pos.isAdd || !pos.parentNode) continue;
         drawEdge(
+          group,
           positions[pos.parentNode.id],
           pos,
           nodeSize(pos.parentNode),
@@ -2629,7 +2625,6 @@ function renderLabMindmap(options = {}) {
     const frame = document.createElement("button");
     frame.type = "button";
     frame.className = "lab-project-frame";
-    frame.classList.toggle("is-active", placement.project.id === state.project?.id);
     frame.dataset.projectId = placement.project.id;
     frame.style.left = `${region.x}px`;
     frame.style.top = `${region.y}px`;
@@ -2644,11 +2639,18 @@ function renderLabMindmap(options = {}) {
     layer.appendChild(frame);
 
     const { positions, project, nodeSizes } = placement;
+    const nodeGroup = document.createElement("div");
+    nodeGroup.className = "lab-project-nodes";
+    nodeGroup.dataset.projectId = project.id;
+    nodeGroup.style.width = `${worldW}px`;
+    nodeGroup.style.height = `${worldH}px`;
+    nodeGroup.style.transformOrigin = `${region.x + region.width / 2}px ${region.y + region.height / 2}px`;
+    layer.appendChild(nodeGroup);
     project.nodes.forEach((n) => {
       if (!isVisualNode(n)) return;
       const pos = positions[n.id];
       if (!pos) return;
-      mountMapNode(pos, layer, project, n, nodeSizes);
+      mountMapNode(pos, nodeGroup, project, n, nodeSizes);
     });
 
     for (const [, pos] of Object.entries(positions)) {
@@ -2665,12 +2667,13 @@ function renderLabMindmap(options = {}) {
           state.project = project;
           openAddChildModal(parent);
         },
-        mount: (addWrap) => layer.appendChild(addWrap),
+        mount: (addWrap) => nodeGroup.appendChild(addWrap),
       });
     }
   }
 
   renderLabEdges(svg, visiblePlacements, worldW, worldH);
+  setActiveProjectInList(state.project?.id);
 
   ensureLabCamera();
   if (labCamera) {
@@ -7376,8 +7379,15 @@ async function loadProjectList(activeId) {
 }
 
 function setActiveProjectInList(id) {
-  document.querySelectorAll(".lab-project-frame").forEach((frame) => {
-    frame.classList.toggle("is-active", frame.dataset.projectId === id);
+  document.querySelectorAll(".lab-project-frame, .lab-tree-edges, .lab-project-nodes").forEach((el) => {
+    const active = el.dataset.projectId === id;
+    el.classList.toggle("is-active", active);
+    if (el.classList.contains("lab-project-frame")) {
+      el.setAttribute("aria-pressed", String(active));
+    }
+  });
+  document.querySelectorAll(".nodes-layer .node-wrap[data-project-id]").forEach((wrap) => {
+    wrap.classList.toggle("is-active-tree", wrap.dataset.projectId === id);
   });
   const selectedBranch = state.literatureBranchId;
   document.querySelectorAll(".project-list__btn").forEach((btn) => {

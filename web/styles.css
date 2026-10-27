@@ -68,6 +68,12 @@
   --logo-filter: drop-shadow(0 0 12px rgba(255, 107, 203, 0.35));
   --mindmap-surface: color-mix(in srgb, var(--bg-elevated) 94%, var(--bg));
 
+  --tree-lift-shadow: rgba(0, 0, 0, 0.38);
+  --tree-lift-shadow-soft: rgba(0, 0, 0, 0.2);
+  --tree-active-stroke: var(--purple);
+  --tree-active-glow: color-mix(in srgb, var(--tree-active-stroke) 40%, transparent);
+  --tree-idle-stroke: color-mix(in srgb, var(--purple) 45%, var(--muted));
+
   /* aliases used by inbox / settings blocks */
   --accent: var(--cyan);
   --text-muted: var(--muted);
@@ -137,6 +143,10 @@
   --node-kanban-text-shadow: none;
   --logo-filter: none;
   --mindmap-surface: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg));
+
+  --tree-lift-shadow: rgba(35, 31, 45, 0.25);
+  --tree-lift-shadow-soft: rgba(35, 31, 45, 0.14);
+  --tree-active-glow: color-mix(in srgb, var(--tree-active-stroke) 22%, transparent);
 
   --accent: var(--cyan);
   --text-muted: var(--muted);
@@ -2368,7 +2378,7 @@ body.hub-readonly .project-list__pull {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 2;
+  z-index: 0;
   pointer-events: none;
   overflow: visible;
 }
@@ -2522,16 +2532,79 @@ body.hub-readonly .project-list__pull {
   cursor: pointer;
 }
 
-.lab-project-frame.is-active {
-  border-radius: 24px;
-  box-shadow: var(--glow-purple), inset 0 0 24px var(--select-glow);
-  outline: 1px solid var(--select-glow);
+.lab-project-frame:focus-visible {
+  outline: 2px dashed var(--text);
+  outline-offset: 4px;
 }
 
-.lab-project-frame + .node-wrap,
-.nodes-layer > .node-wrap {
+.lab-project-nodes {
+  position: absolute;
+  left: 0;
+  top: 0;
   z-index: 1;
+  pointer-events: none;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
+
+.lab-project-nodes .node-wrap {
+  pointer-events: auto;
+}
+
+.lab-project-nodes:not(.is-active) .map-node:not(:focus-visible) {
+  filter: saturate(0.72);
+}
+
+.lab-project-nodes.is-active {
+  z-index: 2;
+  transform: scale(1.07);
+}
+
+.lab-project-nodes.is-active .map-node:not(:focus-visible) {
+  filter: drop-shadow(0 7px 5px var(--tree-lift-shadow)) drop-shadow(0 15px 14px var(--tree-lift-shadow-soft));
+}
+
+.lab-tree-edges {
+  transform-box: view-box;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.lab-tree-edges.is-active {
+  transform: scale(1.07);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-project-nodes,
+  .lab-tree-edges { transition: none; }
+}
+
+.node-wrap.is-active-tree .map-node:focus-visible,
+.node-wrap .map-node:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 7px;
+}
+
+.lab-tree-edges .edge {
+  stroke: var(--tree-idle-stroke);
+  stroke-width: 1.5;
+  opacity: 0.75;
+  filter: none;
+}
+
+.lab-tree-edges.is-active .edge:not(.edge-add) {
+  stroke: var(--tree-active-stroke);
+  stroke-width: 2;
+  opacity: 1;
+  filter: drop-shadow(0 0 2px var(--tree-active-glow));
+}
+
+@media (forced-colors: active) {
+  .lab-tree-edges .edge { stroke: CanvasText; }
+  .lab-tree-edges.is-active .edge:not(.edge-add) { stroke: Highlight; filter: none; }
+  .lab-project-nodes:not(.is-active) .map-node:not(:focus-visible),
+  .lab-project-nodes.is-active .map-node:not(:focus-visible) { filter: none; }
+}
+
+.lab-project-nodes .node-wrap { z-index: 1; }
 
 .edge {
   fill: none;
