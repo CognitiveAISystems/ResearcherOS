@@ -32,6 +32,32 @@ class KoiWebHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_ROOT.resolve()), **kwargs)
 
+    def translate_path(self, path: str) -> str:
+        shared = Path(super().translate_path(path))
+        from koi.adapters.settings_store import load_env_file
+        import os
+        load_env_file()
+        if os.environ.get("KOI_UI_VARIANT") == "light":
+            relative = shared.relative_to(WEB_ROOT.resolve())
+            candidate = WEB_ROOT / "variants" / "light" / relative
+            if candidate.is_file():
+                return str(candidate)
+            if candidate.is_dir() and (candidate / "index.html").is_file():
+                return str(candidate)
+        return str(shared)
+
+    def send_head(self):
+        # The same URL can select another UI after a mode switch. A timestamp
+        # from one variant cannot validate the other variant's response.
+        if "If-Modified-Since" in self.headers:
+            del self.headers["If-Modified-Since"]
+        return super().send_head()
+
+    def end_headers(self) -> None:
+        if not (self.path == API_PREFIX or self.path.startswith(f"{API_PREFIX}/")):
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def log_message(self, fmt, *args):
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 

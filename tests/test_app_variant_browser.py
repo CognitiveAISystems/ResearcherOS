@@ -19,7 +19,7 @@ async def smoke(url):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         await page.route("https://**/*", lambda route: route.abort())
-        await page.goto(url + "?desktop=1", wait_until="networkidle")
+        await page.goto(url + "?desktop=1&project=demo", wait_until="networkidle")
         await page.locator(".lab-project-frame").first.wait_for()
         assert await page.locator("html").get_attribute("data-app-variant") == "chats"
         assert await page.locator(".research-chat-browser").is_visible()
@@ -50,11 +50,15 @@ async def smoke(url):
         assert not await page.locator("#agent-chat-panel").is_visible()
         assert await page.locator(".research-chat-browser").count() == 0
         assert await page.locator("#btn-projects-toggle").is_visible()
+        assert await page.locator("#btn-zoom-in").is_visible()
+        assert await page.locator("#btn-zoom-fit-project").is_visible()
+        assert await page.locator("#btn-agent-chat-welcome").is_visible()
         await page.locator("#btn-agent-chat").click()
         await page.locator("#agent-chat-panel").wait_for(state="visible")
-        assert await page.locator("#agent-chat-input").input_value() == "Черновик для обоих режимов"
-        await page.wait_for_function("document.querySelector('#agent-chat-log').textContent.includes('Общая история для двух режимов')")
-        await page.locator("#btn-chat-collapse").click()
+        assert await page.locator("#agent-chat-title").inner_text() == "Агент проекта"
+        assert await page.locator("#agent-chat-tab-activity").is_visible()
+        await page.locator("#agent-chat-input").fill("Черновик классического интерфейса")
+        await page.locator("#btn-agent-chat").click()
 
         for variant in ("light", "chats"):
             if variant == "chats":
@@ -95,7 +99,11 @@ async def smoke(url):
         # The same report and kanban remain available in both modes.
         for variant in ("light", "chats"):
             await page.request.put(url + "api/settings/agent-chat", data={"ui_variant": variant})
-            await page.goto(url + "?desktop=1&project=demo&board=board&card=card", wait_until="networkidle")
+            await page.goto(url + "?desktop=1&project=demo", wait_until="networkidle")
+            await page.locator('.map-node.method').click()
+            report_button = page.locator('#kanban-board [data-card-id=card] .card-expand-report')
+            await report_button.focus()
+            await page.keyboard.press("Enter")
             await page.locator("#card-report-modal:not(.hidden)").wait_for()
             assert await page.locator("#card-report-card-title").inner_text() == "Проверка чатов"
             await page.locator("#report-agent-fab" if variant == "light" else "[data-research-create]").click()
@@ -119,7 +127,7 @@ async def smoke(url):
         assert initial_ids <= {row["id"] for row in conversations.list_conversations()}
         assert not errors, errors
         await browser.close()
-    print("PASS: settings, keyboard/cancel, Chats → Light → Chats, shared history, drafts and responsive dialog")
+    print("PASS: main's Light controls, settings, keyboard/cancel, Chats → Light → Chats, preserved history/drafts, kanban/reports and responsive dialog")
 
 
 if __name__ == "__main__":
