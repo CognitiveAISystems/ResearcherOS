@@ -418,6 +418,19 @@ function formatAgentChatInline(text) {
 
 function formatAgentChatReply(text) {
   const src = text || "";
+  const stages = /(?:^|\n)```setup-progress[ \t]*\n([\s\S]*?)(?:\n```[ \t]*(?=\n|$)|$)/g;
+  let html = "";
+  let last = 0;
+  for (const match of src.matchAll(stages)) {
+    html += formatAgentChatText(src.slice(last, match.index).replace(/\n+$/, ""));
+    if (match[1].trim()) html += `<div class="agent-chat-progress">${escapeHtml(match[1].trim())}</div>`;
+    last = match.index + match[0].length;
+  }
+  return html + formatAgentChatText(last ? src.slice(last).replace(/^\n+/, "") : src);
+}
+
+function formatAgentChatText(text) {
+  const src = text || "";
   const parts = [];
   let last = 0;
   const codeRe = /`([^`\n]+)`/g;

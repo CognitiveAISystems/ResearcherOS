@@ -9480,6 +9480,18 @@ textarea.inline-edit-field {
   background: var(--code-bg);
 }
 
+.agent-chat-progress {
+  margin-block: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-inline-start: 2px solid var(--purple);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text);
+  font-weight: 500;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .agent-chat-ask {
   margin: 0.7rem 0 0.2rem;
   padding: 0.75rem 0.9rem;

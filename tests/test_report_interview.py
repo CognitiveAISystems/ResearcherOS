@@ -155,7 +155,7 @@ def test_report_starts_with_empty_human_sections():
 
 def test_two_turn_interview_queues_latest_summary_without_exposing_draft(isolated_queue, monkeypatch):
     from koi.agent_chat import setup_pipeline
-    project = SimpleNamespace(id="demo", title="Demo", nodes=[], boards=[SimpleNamespace(id="b", cards=[SimpleNamespace(id="c")])])
+    project = SimpleNamespace(id="demo", title="Demo", nodes=[], boards=[SimpleNamespace(id="b", owner_node_id=None, cards=[SimpleNamespace(id="c")])])
     for module in (agents, cli):
         monkeypatch.setattr(module, "load_project", lambda *a, **kw: project)
     monkeypatch.setattr(cli, "_card_meta", lambda *a: {"card_id":"c", "title":"Experiment"})
