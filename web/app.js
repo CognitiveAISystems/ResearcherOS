@@ -1,5 +1,6 @@
 import { ChatConversations } from "./chat-conversations.js";
 import { ResearchChatNavigation } from "./research-chat-navigation.js";
+import { initAppVariant, usesChatNavigation, preserveVariantDrafts, restoreVariantDrafts } from "./app-variant.js";
 import { attachReportChatResize, attachMainChatResize } from "./report-chat-resize.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
@@ -8015,7 +8016,7 @@ async function chooseAgentChatContext(event) {
     });
     if (cid !== mainConversations.row?.id) return;
     mainConversations.row = data.item;
-    await researchChatNavigation.focusConversation(data.item);
+    await researchChatNavigation?.focusConversation(data.item);
     await refreshAgentChat({scrollToBottom: true});
     document.getElementById('agent-chat-input').focus();
   } catch (error) {
@@ -8217,6 +8218,14 @@ function updateAgentChatScope() {
 
 function syncWorkspaceSidebarToggle() {
   const trigger = document.getElementById("btn-agent-chat");
+  if (!usesChatNavigation()) {
+    const open = document.getElementById("workspace")?.classList.contains("is-chat-open");
+    const label = open ? "Закрыть чат" : "Открыть чат";
+    trigger?.setAttribute("aria-expanded", String(open));
+    trigger?.setAttribute("aria-label", label);
+    if (trigger) trigger.title = label;
+    return;
+  }
   const open = !document.getElementById("workspace")?.classList.contains("is-chat-list-hidden");
   const label = open ? "Свернуть боковую панель" : "Развернуть боковую панель";
   trigger?.setAttribute("aria-expanded", String(open));
@@ -9087,7 +9096,7 @@ function withLiveAnswer(data) {
 }
 
 function initUnifiedNavigation() {
-  if (isHubMode()) return;
+  if (isHubMode() || !usesChatNavigation()) return;
   const sidebar = document.getElementById("agent-chat-conversations");
   localStorage.removeItem(LAB_HIDDEN_TREES_KEY);
   if (state.lab) state.lab.hiddenTreeIds = new Set();
@@ -9113,6 +9122,7 @@ function initUnifiedNavigation() {
   const themeToggle = document.getElementById("btn-theme");
   themeToggle.classList.add("conversation-icon-button");
   layout.querySelector(".conversation-rail").append(themeToggle);
+  layout.querySelector(".conversation-rail").append(document.getElementById("btn-app-variant"));
   document.body.append(toolbar.querySelector(".rq-bell-wrap"));
   toolbar.parentElement.prepend(document.querySelector(".topbar-start"));
   document.getElementById("agent-chat-panel").classList.remove("hidden");
@@ -9241,7 +9251,7 @@ function initUnifiedNavigation() {
 }
 
 async function syncWorkspaceChatContext() {
-  if (isHubMode() || !mainConversations) return;
+  if (isHubMode() || !usesChatNavigation() || !mainConversations) return;
   const visible = id => !document.getElementById(id).classList.contains("hidden");
   let scope = null, title = "";
   if (visible("card-report-modal") && state.reportCardId) {
@@ -9273,6 +9283,7 @@ async function syncWorkspaceChatContext() {
 }
 
 function renderUnifiedNavigation(controller = mainConversations) {
+  if (!researchChatNavigation) return;
   const sidebar = controller?.sidebar;
   if (researchChatNavigation && controller) researchChatNavigation.render(controller);
   if (!sidebar || controller.dragging) return;
@@ -9350,7 +9361,7 @@ function initConversationLists() {
   const projectName = id => state.lab?.projectsById?.[id]?.title || id;
   mainConversations = new ChatConversations({ api: KoiApi, main: true,
     titleForScope: isHubMode() ? null : scope => researchChatNavigation?.groups().flatMap(g => g.trees).find(t => scope?.project_id && t.projectIds.includes(scope.project_id))?.title || researchChatNavigation?.groups().find(g => g.id === scope?.program_id)?.title || (scope?.project_id ? projectName(scope.project_id) : "Общий чат"),
-    renderNavigation: isHubMode() ? null : renderUnifiedNavigation,
+    renderNavigation: isHubMode() || !usesChatNavigation() ? null : renderUnifiedNavigation,
     sidebar: document.getElementById("agent-chat-conversations"),
     controls: document.getElementById("agent-chat-controls"),
     input: document.getElementById("agent-chat-input"),
@@ -9368,11 +9379,13 @@ function initConversationLists() {
     input: document.getElementById("report-interview-input"),
     scope: () => ({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId }),
     changed: async () => { reportInterviewItems = []; reportInterviewSignature = ""; renderReportInterview(); await refreshReportInterview(); }, projectName });
+  restoreVariantDrafts({ main: mainConversations, card: cardConversations });
   void refreshAgentChat();
 }
 
 function initAgentChat() {
   initConversationLists();
+  if (!usesChatNavigation()) attachMainChatResize(document.getElementById("agent-chat-panel"), KoiApi);
   for (const id of ["agent-chat-log", "report-interview-log"]) {
     document.getElementById(id).addEventListener("click", event => {
       const link = event.target.closest("[data-chat-card-link]");
@@ -9397,7 +9410,8 @@ function initAgentChat() {
     (selected?.offsetParent ? selected : document.querySelector('.research-program[aria-pressed="true"]') || document.getElementById('btn-agent-chat'))?.focus();
   });
   document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
-    toggleWorkspaceSidebar();
+    if (usesChatNavigation()) toggleWorkspaceSidebar();
+    else toggleAgentChatPanel();
     void refreshAppSettings();
   });
   document.getElementById("agent-chat-form")?.addEventListener("submit", (e) => {
@@ -12642,6 +12656,13 @@ function initKnowledge() {
 async function init() {
   initKanbanHeaderPopovers();
   const hubMode = isHubMode();
+  if (!hubMode) await initAppVariant(KoiApi, async () => {
+    if (activeVoiceRecording) throw new Error("Завершите запись голоса и повторите попытку.");
+    if (state.reportDirty && !(await saveCardReport())) throw new Error("Сохраните отчёт и повторите попытку.");
+    if (paperState.texDirty && !(await savePaperTex())) throw new Error("Сохраните статью и повторите попытку.");
+    if (document.querySelector('.modal:not(.hidden)')) throw new Error("Закройте открытое окно и повторите попытку.");
+    preserveVariantDrafts({ main: mainConversations, card: cardConversations });
+  });
   initImageLightbox();
   if (!hubMode) void initWidgets({ api: KoiApi, skip: false });
   if (!hubMode) {
@@ -12681,6 +12702,7 @@ async function init() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (document.getElementById("app-variant-dialog")?.open) return;
       if (document.getElementById("tag-settings-dialog")?.open) return;
       if (document.activeElement?.classList.contains("inline-edit-field")) return;
       const deleteConfirmModal = document.getElementById("delete-node-confirm-modal");

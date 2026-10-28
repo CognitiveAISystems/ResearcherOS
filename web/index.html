@@ -70,6 +70,9 @@
         <button type="button" id="btn-agent-chat" class="btn btn-chat-toggle" aria-label="Открыть чат" title="Открыть чат" aria-expanded="false" aria-controls="agent-chat-panel">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg>
         </button>
+        <button type="button" id="btn-app-variant" class="btn conversation-icon-button" aria-label="Настроить интерфейс" title="Настроить интерфейс" aria-haspopup="dialog" aria-controls="app-variant-dialog" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 3-.5 2-2 1-2-.5-2 3.5L5 10.5v3L3.5 15l2 3.5 2-.5 2 1 .5 2h4l.5-2 2-1 2 .5 2-3.5-1.5-1.5v-3L20.5 9l-2-3.5-2 .5-2-1L14 3Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
         <span id="save-status" class="sr-only" aria-live="polite"></span>
       </div>
     </div>
@@ -223,6 +226,23 @@
       </form>
     </div><nav id="agent-chat-conversations" class="conversation-sidebar" aria-label="Список чатов"></nav><div class="conversation-rail" role="group" aria-label="Инструменты разговора"><button type="button" class="conversation-icon-button conversation-nav-toggle" data-chat-navigation aria-label="Открыть список чатов" title="Открыть список чатов" aria-controls="agent-chat-conversations" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button><button type="button" class="conversation-icon-button" data-current-project aria-label="Показывать только текущий проект" title="Показывать только текущий проект" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg></button></div></div></aside>
   </div>
+
+  <dialog id="app-variant-dialog" class="tag-settings-dialog app-variant-dialog" aria-labelledby="app-variant-title" aria-describedby="app-variant-description">
+    <form>
+      <h2 id="app-variant-title">Режим интерфейса</h2>
+      <p id="app-variant-description">Проекты и история чатов общие для обоих режимов.</p>
+      <fieldset>
+        <legend class="sr-only">Выберите режим</legend>
+        <label><input type="radio" name="ui_variant" value="chats" checked /> <span><strong>Чаты</strong><small>Разговоры и программы всегда под рукой в боковой панели.</small></span></label>
+        <label><input type="radio" name="ui_variant" value="light" /> <span><strong>Light</strong><small>Карта, канбан и отчёты. Чат открывается по запросу.</small></span></label>
+      </fieldset>
+      <p role="status" aria-live="polite"></p>
+      <div class="form-actions">
+        <button type="button" class="btn" data-cancel>Отмена</button>
+        <button type="submit" class="btn btn-primary">Применить</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Настройки -->
   <div id="create-project-modal" class="modal hidden" role="dialog" aria-labelledby="create-project-title">

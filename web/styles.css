@@ -17024,6 +17024,18 @@ button.kb-doc {
 @media (max-width: 1100px) { .report-chat-resize { display: none; } }
 
 
+.app-variant-dialog { box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); overflow-y: auto; }
+.app-variant-dialog h2 { margin-block: 0 12px; }
+.app-variant-dialog p { color: var(--muted); overflow-wrap: anywhere; }
+.app-variant-dialog fieldset { margin: 20px 0; padding: 0; border: 0; }
+.app-variant-dialog label { display: flex; align-items: start; gap: 12px; min-height: 44px; padding: 12px 0; cursor: pointer; }
+.app-variant-dialog input { flex: 0 0 auto; width: auto; padding: 0; margin-block-start: 4px; accent-color: var(--purple); }
+.app-variant-dialog strong, .app-variant-dialog small { display: block; }
+.app-variant-dialog small { margin-block-start: 4px; color: var(--muted); font: inherit; }
+.app-variant-dialog .form-actions { flex-wrap: wrap; }
+#btn-app-variant { min-width: 44px; min-height: 44px; }
+#btn-app-variant:focus-visible, .app-variant-dialog :is(input, button):focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
+
 /* Conversations: project groups and a quiet, readable transcript. */
 .agent-chat-panel,
 .report-interview { container: chat-shell / inline-size; }

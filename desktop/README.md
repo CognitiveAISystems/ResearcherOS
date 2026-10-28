@@ -17,6 +17,14 @@ is packaged for macOS, Windows, and Linux.
 
 ## Install from a clone
 
+Beta development uses the `beta` branch. Each platform has one application with
+two interface modes: **Чаты** keeps research conversations in the sidebar;
+**Light** starts with the research map and opens chats on request. Use the gear
+button **Настроить интерфейс** to switch. Both modes share onboarding, projects,
+reports and conversation history. The selection persists in runtime settings,
+including across desktop launches. Existing prebuilt installers are snapshots;
+the mode switch is available after rebuilding from these sources.
+
 Double-click `installers/Установить ResearcherOS.command` in Finder.
 The installer downloads checksum-verified uv and Node.js archives, provisions a
 private Python 3.12 environment under `.tools/mac-installer/`, and builds the app.

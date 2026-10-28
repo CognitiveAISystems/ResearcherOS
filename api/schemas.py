@@ -237,6 +237,7 @@ class CursorApiKeyBody(BaseModel):
 
 
 class AgentChatSettingsBody(BaseModel):
+    ui_variant: Optional[Literal["chats", "light"]] = None
     chat_panel_width: Optional[int] = Field(default=None, ge=280, le=10000)
     chat_list_main_width: Optional[int] = Field(default=None, ge=160, le=440)
     chat_list_card_width: Optional[int] = Field(default=None, ge=160, le=440)

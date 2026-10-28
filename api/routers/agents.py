@@ -406,6 +406,8 @@ def put_agent_chat_settings(body: AgentChatSettingsBody) -> dict:
     if body.cursor_api_key is not None:
         set_cursor_api_key(body.cursor_api_key.strip() or None)
     from koi.adapters.settings_store import _write_env_var
+    if body.ui_variant is not None:
+        _write_env_var("KOI_UI_VARIANT", body.ui_variant)
     for scope in ("main", "card"):
         width = getattr(body, f"chat_list_{scope}_width", None)
         if width is not None:

@@ -3,7 +3,7 @@ name: Desktop Windows and Linux
 on:
   workflow_dispatch:
   push:
-    branches: [main, go_beta, codex/desktop-windows-linux]
+    branches: [main, beta]
     paths-ignore: ["installers/**"]
   pull_request:
     paths:
