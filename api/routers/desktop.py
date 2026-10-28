@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from api.schemas import DesktopWorkspaceBody
 from koi.adapters.desktop_onboarding import (
     connect_git_project,
+    find_existing_trees,
     inspect_existing_projects,
     inspect_existing_tree,
     inspect_git_project,
@@ -37,6 +38,7 @@ router = APIRouter(tags=["desktop"])
 
 class DesktopFolderBody(BaseModel):
     path: str = Field(min_length=1)
+    branch: str | None = None
 
 
 class DesktopConnectBody(BaseModel):
@@ -45,12 +47,20 @@ class DesktopConnectBody(BaseModel):
     require_existing: bool | None = None
     program_id: str | None = None
     program_title: str | None = None
+    branch: str | None = None
 
 
 class DesktopInterviewReplyBody(BaseModel):
     repo_path: str = Field(min_length=1)
     answer: str = Field(default="", max_length=12000)
     decision: str = "answer"
+    branch: str | None = None
+    phase: str | None = None
+
+
+@router.get("/desktop/onboarding/tree-locations")
+def get_existing_tree_locations() -> dict:
+    return {"trees": find_existing_trees()}
 
 
 @router.get("/desktop/onboarding/default-location")
@@ -109,7 +119,7 @@ def post_git_project(body: DesktopFolderBody) -> dict:
 def post_connect_project(body: DesktopConnectBody) -> dict:
     try:
         result = connect_git_project(
-            body.repo_path, body.workspace_root, require_existing=body.require_existing
+            body.repo_path, body.workspace_root, require_existing=body.require_existing, branch=body.branch
         )
         program = resolve_program(body.program_id, body.program_title)
         if program is not None:
@@ -127,6 +137,7 @@ def post_start_interview(body: DesktopConnectBody) -> dict:
             body.repo_path,
             body.workspace_root,
             resolve_program(body.program_id, body.program_title),
+            branch=body.branch,
         )
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -135,7 +146,7 @@ def post_start_interview(body: DesktopConnectBody) -> dict:
 @router.post("/desktop/onboarding/interview/reply")
 def post_interview_reply(body: DesktopInterviewReplyBody) -> dict:
     try:
-        return reply_interview(body.repo_path, body.answer, body.decision)
+        return reply_interview(body.repo_path, body.answer, body.decision, branch=body.branch, phase=body.phase)
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -143,7 +154,7 @@ def post_interview_reply(body: DesktopInterviewReplyBody) -> dict:
 @router.post("/desktop/onboarding/interview/finish")
 def post_finish_interview(body: DesktopFolderBody) -> dict:
     try:
-        result = finish_interview(body.path)
+        result = finish_interview(body.path, branch=body.branch)
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
     reset_workspace_cache()

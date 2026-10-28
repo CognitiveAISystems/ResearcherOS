@@ -25,6 +25,7 @@ import subprocess
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import yaml
@@ -136,12 +137,15 @@ def classify_install(
     scan_root: Path | None = None,
     sync_branch: str | None = None,
     create_if_missing: bool = False,
+    tree_name: str | None = None,
 ) -> InstallPlan:
     scan = (scan_root or primary_scan_root()).resolve()
     code_root, repo_name = resolve_repo_name(path, scan_root=scan)
-    tree_wt = tree_worktree_for(scan, repo_name)
-    tree_koi = tree_koi_for(scan, repo_name)
-    legacy = _find_legacy_koi(code_root) if code_root.is_dir() else None
+    if tree_name is not None and (not tree_name or Path(tree_name).name != tree_name or tree_name in {".", ".."}):
+        raise ValueError("Invalid research tree folder name")
+    tree_wt = tree_worktree_for(scan, tree_name or repo_name)
+    tree_koi = tree_koi_for(scan, tree_name or repo_name)
+    legacy = _find_legacy_koi(code_root) if code_root.is_dir() and tree_name is None else None
     branch = sync_branch or _read_sync_branch(
         tree_koi if (tree_koi / PROJECT_MD).is_file() else legacy
     )
@@ -369,12 +373,14 @@ def install_project(
     push: bool = True,
     dry_run: bool = False,
     create_if_missing: bool = False,
+    tree_name: str | None = None,
 ) -> dict[str, Any]:
     plan = classify_install(
         path,
         scan_root=scan_root,
         sync_branch=sync_branch,
         create_if_missing=create_if_missing,
+        tree_name=tree_name,
     )
     result: dict[str, Any] = {
         "ok": True,
@@ -398,7 +404,7 @@ def install_project(
 
     steps: list[dict[str, Any]] = result["steps"]
     project_title = title or plan.repo_name.replace("_", " ")
-    project_id = _project_id_for(plan.repo_name, _find_legacy_koi(plan.code_root))
+    project_id = tree_name or _project_id_for(plan.repo_name, _find_legacy_koi(plan.code_root))
 
     try:
         if plan.case == InstallCase.NEW_EMPTY:
@@ -435,10 +441,9 @@ def install_project(
                 result["message"] = "Seeded tree/koi-structure (no git in code repo)."
                 return result
 
-            # Seed into a temp dir, bootstrap orphan, then attach tree worktree
-            tmp_koi = plan.code_root / KOI_STRUCTURE_DIR
-            seeded_tmp = False
-            if not (tmp_koi / PROJECT_MD).is_file():
+            # A new tree must never seed from another tree in the code checkout.
+            with TemporaryDirectory(prefix="koi-install-") as temporary:
+                tmp_koi = Path(temporary) / KOI_STRUCTURE_DIR
                 _seed_koi_structure(
                     tmp_koi,
                     project_id=project_id,
@@ -446,13 +451,12 @@ def install_project(
                     git_repo=True,
                     branch=plan.sync_branch,
                 )
-                seeded_tmp = True
-            boot = _bootstrap_orphan_branch(
-                plan.code_root,
-                branch=plan.sync_branch,
-                koi_source=tmp_koi,
-                push=push,
-            )
+                boot = _bootstrap_orphan_branch(
+                    plan.code_root,
+                    branch=plan.sync_branch,
+                    koi_source=tmp_koi,
+                    push=push,
+                )
             steps.append({"action": "bootstrap_branch", **boot})
             if not boot.get("ok"):
                 result["ok"] = False
@@ -467,9 +471,6 @@ def install_project(
                 return result
 
             _ensure_gitignore(plan.code_root)
-            if seeded_tmp and tmp_koi.exists() and not is_under_tree(tmp_koi):
-                # Keep working copy only in tree/; remove in-repo seed if untracked-ish
-                shutil.rmtree(tmp_koi)
             steps.append({"action": "gitignore", "path": str(plan.code_root / ".gitignore")})
             rescan_projects()
             result["message"] = "Created orphan sync branch and tree/ worktree."

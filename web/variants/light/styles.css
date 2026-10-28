@@ -17191,3 +17191,11 @@ button.kb-doc {
 .report-chat-resize { position: absolute; inset: 0 auto 0 0; width: 8px; z-index: 2; cursor: col-resize; touch-action: none; }
 .report-chat-resize:hover, .report-chat-resize:focus-visible { background: color-mix(in srgb, var(--purple) 25%, transparent); outline: none; }
 @media (max-width: 1100px) { .report-chat-resize { display: none; } }
+
+.agent-chat-send[data-action="stop"],
+.agent-chat-send[data-action="stop"]:hover {
+  width: 44px;
+  height: 44px;
+  background: var(--purple);
+  color: var(--btn-primary-text);
+}

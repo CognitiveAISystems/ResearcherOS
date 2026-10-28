@@ -1,4 +1,5 @@
 import { attachReportChatResize } from "./report-chat-resize.js";
+import { syncChatStop } from "./chat-stop.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
 import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
@@ -3160,6 +3161,7 @@ function stopReportInterview() {
   reportInterviewItems = [];
   reportInterviewSignature = "";
   reportInterviewSending = false;
+  syncReportStop();
   document.querySelector(".report-agent-menu")?.remove();
   document.getElementById("report-interview-input").value = "";
   document.getElementById("report-interview-status").textContent = "";
@@ -3194,8 +3196,7 @@ async function refreshReportInterview() {
     if (!document.getElementById("report-interview-activity")?.classList.contains("hidden")) {
       void refreshReportInterviewActivity();
     }
-    const pending = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i));
-    document.querySelector("#report-interview-form button").disabled = pending || reportInterviewSending;
+    syncReportStop();
     if (!reportInterviewSending && reportInterviewItems.some(reportInterviewStuck)) {
       setReportInterviewStatus("Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.", "error");
     }
@@ -3240,6 +3241,7 @@ async function refreshReportInterviewActivity() {
   }
 }
 function renderReportInterview() {
+  syncReportStop();
   const log = document.getElementById("report-interview-log");
   const nearBottom = agentChatLogNearBottom(log);
   log.replaceChildren();
@@ -3252,10 +3254,11 @@ function renderReportInterview() {
     const article = document.createElement("article");
     article.className = `agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}`;
     const stuck = reportInterviewStuck(item);
+    const text = item.live?.text || item.answer || "";
     const answerBody = item.purpose === "grill_me" || item.purpose === "report_grill"
-      ? formatReportGrillAnswer(item.answer || "")
-      : formatAgentChatReply(item.answer || "");
-    const answerHtml = item.status === "answered"
+      ? formatReportGrillAnswer(text)
+      : formatAgentChatReply(text);
+    const answerHtml = item.status === "answered" || item.live?.text
       ? `<div class="agent-chat-reply${item.answer_kind === "warning" ? " agent-chat-reply--warning" : ""}">${answerBody}</div>`
       : stuck
         ? `<div class="agent-chat-reply agent-chat-reply--warning">Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.</div>`
@@ -3266,6 +3269,7 @@ function renderReportInterview() {
       agentChatDeliveryHtml(item) +
       `</div>` +
       answerHtml +
+      (pending && item.live?.text ? agentChatTypingHtml() : "") +
       `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>`;
     if (item.proposal) {
       const details = document.createElement("details");
@@ -3303,6 +3307,15 @@ function renderReportInterview() {
   }
   if (nearBottom) log.scrollTop = log.scrollHeight;
 }
+function syncReportStop() {
+  const identity = reportIdentity();
+  syncChatStop(document.querySelector('#report-interview-form .agent-chat-send'),
+    reportInterviewItems.find(i => i.status !== 'answered'), {
+      cancel: KoiApi.cancelAgentChatItem, refresh: refreshReportInterview,
+      error: message => { if (identity === reportIdentity()) setReportInterviewStatus(message, 'error'); },
+      sending: reportInterviewSending,
+    });
+}
 async function sendReportInterview(event) {
   event.preventDefault();
   const live = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i));
@@ -3311,7 +3324,7 @@ async function sendReportInterview(event) {
   const question = input.value.trim();
   if (!question) return;
   const identity = reportIdentity();
-  const button = document.querySelector("#report-interview-form button");
+  const button = document.querySelector("#report-interview-form .agent-chat-send");
   reportInterviewSending = true; button.disabled = true; setReportInterviewStatus("Отправляем вопрос…");
   const command = reportChatCommand(question);
   try {
@@ -3326,7 +3339,7 @@ async function sendReportInterview(event) {
     await refreshReportInterview();
   } catch (err) { if (identity === reportIdentity()) setReportInterviewStatus(err.message, "error"); }
   finally {
-    if (identity === reportIdentity()) { reportInterviewSending = false; button.disabled = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i)); }
+    if (identity === reportIdentity()) { reportInterviewSending = false; syncReportStop(); }
   }
 }
 
@@ -8007,6 +8020,11 @@ function agentChatLogNearBottom(log) {
 }
 
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
+  syncChatStop(document.getElementById('btn-agent-chat-send'),
+    agentChatItems.find(i => i.status !== 'answered'), {
+      cancel: KoiApi.cancelAgentChatItem, refresh: refreshAgentChat,
+      error: message => setAgentChatFormStatus(message, 'error'),
+    });
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
   clearInlineLoaderHints(log);
@@ -8025,7 +8043,9 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       const isWarning = item.answer_kind === "warning";
       const pendingLabel = agentChatPendingLabel(item);
       let answerHtml;
-      if (isProcessing) {
+      if (item.live?.text) {
+        answerHtml = `<div class="agent-chat-reply">${formatAgentChatReply(item.live.text)}</div>`;
+      } else if (isProcessing) {
         answerHtml = agentChatTypingHtml();
       } else if (pending) {
         answerHtml =
@@ -8041,6 +8061,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         `<button type="button" class="btn btn-small btn-danger agent-chat-delete" title="Удалить" aria-label="Удалить вопрос">×</button>` +
         `</div>` +
         answerHtml +
+        (pending && item.live?.text ? agentChatTypingHtml() : "") +
         `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>` +
         `</article>`
       );
@@ -8337,6 +8358,7 @@ async function refreshCliAgents() {
 
 async function submitAgentQuestion(e) {
   e.preventDefault();
+  if (agentChatHasPending()) return;
   const input = document.getElementById("agent-chat-input");
   if (document.getElementById("btn-agent-chat-send")?.disabled) return;
   const text = input?.value?.trim();

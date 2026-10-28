@@ -332,22 +332,28 @@ def discover_projects() -> list[ProjectMount]:
     return sorted(mounts.values(), key=lambda m: m.project_id)
 
 
+_mount_generation = 0
+
+
 @lru_cache(maxsize=1)
-def _mount_index() -> dict[str, ProjectMount]:
+def _mount_index(generation: int) -> dict[str, ProjectMount]:
+    # The key prevents an in-flight scan from caching an outdated workspace.
     return {m.project_id: m for m in discover_projects()}
 
 
 def rescan_projects() -> None:
     """Clear cached discovery (call after creating or attaching a project)."""
+    global _mount_generation
+    _mount_generation += 1
     _mount_index.cache_clear()
 
 
 def list_mounts() -> list[ProjectMount]:
-    return sorted(_mount_index().values(), key=lambda m: m.project_id)
+    return sorted(_mount_index(_mount_generation).values(), key=lambda m: m.project_id)
 
 
 def get_mount(project_id: str) -> ProjectMount | None:
-    return _mount_index().get(project_id)
+    return _mount_index(_mount_generation).get(project_id)
 
 
 def get_mount_or_raise(project_id: str) -> ProjectMount:

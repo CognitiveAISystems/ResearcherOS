@@ -13,6 +13,7 @@ from koi.adapters.workspace import get_workspace
 _ws = get_workspace()
 
 from koi.agent_chat.formatting import ANSWER_FORMAT_INSTRUCTIONS
+from koi.agent_chat.card_links import INSTRUCTIONS as CARD_LINK_INSTRUCTIONS
 from koi.adapters.agent_chat_queue import list_for_project, find_item, list_pending, mark_processing, submit_answer
 from koi.adapters.card_reports import read_report
 from koi.core.models import NodeType
@@ -120,10 +121,12 @@ def build_context(item_id: str) -> dict:
                           "research_database_path": str(research_path(p["id"])),
                           "code_root": str(code_root(p["id"]))} for p in list_projects()
                          if not program_id or p["id"] in allowed],
-            "history": [{"user": h["question"], "assistant": h.get("answer")}
+            "history": [{"user": h["question"], "assistant": h.get("answer"),
+                         **({"card_links": h["card_links"]} if h.get("card_links") else {})}
                         for h in reversed(messages(item["conversation_id"]))
                         if h["enqueued_at"] < item["enqueued_at"]],
             "answer_policy": ANSWER_FORMAT_INSTRUCTIONS,
+            "card_link_instructions": CARD_LINK_INSTRUCTIONS,
         }
 
     project = load_project(item["project_id"], sync_reports=False)
@@ -172,7 +175,9 @@ def build_context(item_id: str) -> dict:
             "purpose": purpose,
             "card": _card_meta(project, item.get("board_id"), item.get("card_id")),
             "current_document": item.get("report_markdown", ""),
-            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal")} for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))],
+            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal"),
+                         **({"card_links": h["card_links"]} if h.get("card_links") else {})}
+                        for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))],
         }
         skill = skills.get(purpose)
         if skill:
@@ -194,7 +199,8 @@ def build_context(item_id: str) -> dict:
         "research_root": str(koi_root(project.id)),
         "code_root": str(code_root(project.id)),
         "history": interview.get("history", [
-            {"user": h["question"], "assistant": h.get("answer")}
+            {"user": h["question"], "assistant": h.get("answer"),
+             **({"card_links": h["card_links"]} if h.get("card_links") else {})}
             for h in reversed(messages(item_conversation(item))[:20])
             if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))
         ]),
@@ -205,6 +211,7 @@ def build_context(item_id: str) -> dict:
         ),
         "research_database": research_db,
         "answer_policy": interview.get("interview_policy", ANSWER_FORMAT_INSTRUCTIONS),
+        "card_link_instructions": CARD_LINK_INSTRUCTIONS,
     }
 
 

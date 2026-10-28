@@ -49,6 +49,7 @@ from koi.adapters.settings_store import (
 )
 
 from koi.agent_chat import conversations
+from koi.agent_chat import live
 from koi.adapters.agent_chat_queue import _locked
 
 router = APIRouter(tags=["agents"])
@@ -107,7 +108,9 @@ def _conversation(cid):
 @router.get("/agent-conversations/{cid}")
 def get_conversation(cid: str):
     row = _conversation(cid)
-    return {"conversation": row, "items": conversations.messages(cid), "live": None}
+    items = conversations.messages(cid)
+    active = next((i for i in items if i["status"] != "answered"), None)
+    return {"conversation": row, "items": items, "live": live.snapshot(active) if active else None}
 
 
 @router.delete("/agent-conversations/{cid}")
@@ -120,6 +123,7 @@ def delete_conversation(cid: str):
         raise HTTPException(409, str(error)) from error
     for item_id in item_ids:
         delete_agent_chat_activity(item_id)
+        live.delete(item_id)
     return {"ok": True}
 
 
@@ -206,7 +210,28 @@ def get_conversation_activity(cid: str):
 @router.post("/agent-conversations/{cid}/cancel")
 def cancel_conversation(cid: str):
     _conversation(cid)
-    return {"ok": False}
+    item = next((i for i in conversations.messages(cid) if i["status"] != "answered"), None)
+    return {"ok": _cancel_turn(item) if item else False}
+
+
+@_locked
+def _cancel_turn(item):
+    item = find_item(item["id"])
+    if not item or item["status"] == "answered":
+        return False
+    live.request_cancel(item["id"])
+    if item["status"] == "pending":
+        submit_answer(item["id"], "Остановлено пользователем.", answer_kind="warning")
+    return True
+
+
+@router.post("/agent-chat/{item_id}/cancel")
+def cancel_agent_chat_item(item_id: str):
+    item = find_item(item_id)
+    if not item:
+        raise HTTPException(404, "Сообщение не найдено")
+    _check_scope(item["project_id"], item.get("board_id"), item.get("card_id"))
+    return {"ok": _cancel_turn(item)}
 
 
 @router.post("/agent-conversations/{cid}/permission")
@@ -339,7 +364,7 @@ def get_agent_chat(project_id: str, board_id: str | None = None, card_id: str | 
     items = list_for_project(project_id, limit=10000, board_id=board_id, card_id=card_id)
     if card_id is None:
         items = [i for i in items if not i.get("card_id")][:30]
-    return {"items": items}
+    return {"items": [{**i, "live": live.snapshot(i)} for i in items]}
 
 
 @router.patch("/agent-chat/{item_id}")
@@ -361,6 +386,7 @@ def delete_agent_chat_item(item_id: str) -> dict:
     if not dequeue_agent_chat_item(item_id):
         raise HTTPException(404, f"Queue item not found: {item_id}")
     delete_agent_chat_activity(item_id)
+    live.delete(item_id)
     return {"ok": True}
 
 

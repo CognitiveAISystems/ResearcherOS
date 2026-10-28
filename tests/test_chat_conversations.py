@@ -303,10 +303,11 @@ def test_cli_release_rejects_acp_without_losing_chat(state, monkeypatch):
     item = agents.post_agent_chat(AgentChatBody(conversation_id=chat["id"], cli_agent="codex", question="Продолжи"), BackgroundTasks())["item"]
     assert item["cli_agent"] == "codex"
     assert len(chats.messages(chat["id"])) == 2
-    assert agents.get_conversation(chat["id"])["live"] is None
+    assert agents.get_conversation(chat["id"])["live"]["item_id"] == item["id"]
 
 
-def test_restart_interrupts_cli_turn_and_keeps_history(state, monkeypatch):
+@pytest.mark.parametrize("progress", ["", "Сервер проверен. Осталась проверка браузера."])
+def test_restart_interrupts_cli_turn_and_keeps_history(state, monkeypatch, progress):
     from api import main
     from koi.adapters import project_discovery_watch, settings_store
     from koi.projects import done_research_auto
@@ -322,10 +323,16 @@ def test_restart_interrupts_cli_turn_and_keeps_history(state, monkeypatch):
     queue.submit_answer(answered["id"], "Согласовано")
     pending = queue.enqueue_question(None, "Продолжи", conversation_id=chat["id"])
     queue.mark_processing(pending["id"])
+    from koi.agent_chat import live
+    if progress:
+        live.publish(pending["id"], progress)
     main._startup()
     assert queue.find_item(answered["id"])["answer"] == "Согласовано"
     assert queue.find_item(pending["id"])["status"] == "answered"
-    assert "перезапуском" in queue.find_item(pending["id"])["answer"]
+    warning = "Запуск прерван перезапуском приложения. Продолжите работу новым сообщением."
+    assert queue.find_item(pending["id"])["answer"] == (progress + "\n\n" + warning).strip()
+    main._startup()
+    assert queue.find_item(pending["id"])["answer"].count(warning) == 1
     assert not chats.find(chat["id"])["pending"]
 
 

@@ -19,6 +19,8 @@ from koi.adapters import project_sync as sync
 from koi.adapters.project_mount import get_mount
 from koi.adapters.workspace import get_workspace
 from koi.agent_chat import conversations
+from koi.agent_chat import live
+from koi.adapters.agent_process import AgentCancelled, run_json
 
 log = logging.getLogger(__name__)
 # ponytail: one lock for Git chats; use per-repository locks if parallel actions become necessary.
@@ -394,25 +396,41 @@ def _execute(mount, state, action):
     return "Изменения объединены. Отправка в Git не выполнялась."
 
 
-def _suggest(prompt, backend=None):
+def _suggest(prompt, backend=None, item_id=None):
     """No write-capable SDK fallback; Claude receives no tools at all."""
     from koi.adapters.agent_backends import cli_agents, run_codex_exec, _claude_bin
-    from koi.agent_chat.runner import _run_local_agent
+    from koi.agent_chat.runner import _run_local_agent, _stream_options
+    stream = _stream_options(item_id) if item_id else {}
     available = [r["id"] for r in cli_agents() if r["available"]]
     candidates = ([backend] if backend in available else []) if backend else available
     for chosen in candidates:
         try:
             if chosen == "claude":
-                result = subprocess.run([_claude_bin(), "-p", "--tools", "", "--strict-mcp-config",
-                                        "--mcp-config", '{"mcpServers":{}}', "--output-format", "text"],
-                                        input=prompt, text=True, capture_output=True, timeout=180)
-                answer = result.stdout.strip() if result.returncode == 0 else None
+                command = [_claude_bin(), "-p", "--tools", "", "--strict-mcp-config",
+                           "--mcp-config", '{"mcpServers":{}}', "--output-format", "stream-json" if stream else "text"]
+                if stream:
+                    command.append("--verbose")
+                    answer = None
+                    def receive(event):
+                        nonlocal answer
+                        stream["on_event"](event)
+                        if event.get("type") == "result" and not event.get("is_error"):
+                            answer = event.get("result")
+                    if run_json(command, prompt, cwd=get_workspace().agent_cwd(), timeout=180,
+                                on_event=receive, is_cancelled=stream["is_cancelled"]) != 0:
+                        answer = None
+                else:
+                    result = subprocess.run(command, input=prompt, text=True, capture_output=True, timeout=180)
+                    answer = result.stdout.strip() if result.returncode == 0 else None
             elif chosen == "codex":
-                answer = run_codex_exec(prompt, timeout=180, allow_edits=False)
+                answer = run_codex_exec(prompt, timeout=180, allow_edits=False, **stream)
             else:
-                answer = _run_local_agent(prompt, "git-analysis", cli_agent="cursor", mode="ask", force=False,
-                                          timeout=180, log_activity=False)[0]
+                answer = _run_local_agent(prompt, item_id or "git-analysis", cli_agent="cursor", mode="ask", force=False,
+                                          timeout=180, log_activity=bool(item_id))[0]
             if answer:
+                progress = live.text(item_id) if item_id else ""
+                if progress.strip().endswith(answer.strip()):
+                    answer = progress
                 return answer
         except (OSError, subprocess.TimeoutExpired):
             log.warning("Read-only Git reviewer %s unavailable", chosen)
@@ -423,6 +441,8 @@ def process(item):
     queue.mark_processing(item["id"])
     try:
         with LOCK:
+            if live.cancelled(item["id"]):
+                raise AgentCancelled
             mount = get_mount(item["project_id"])
             if not mount:
                 raise RuntimeError("Дерево больше не подключено к рабочему пространству.")
@@ -475,7 +495,7 @@ def process(item):
         if item["purpose"] == "git_notice" or action == "review":
             prompt = POLICY + "\n" + NOTICE_POLICY + "\n\n" + json.dumps({
                 "draft": summary, "can_offer_save": can_offer, "diff": details}, ensure_ascii=False)
-            answer = _suggest(prompt, item.get("cli_agent"))
+            answer = _suggest(prompt, item.get("cli_agent"), item["id"])
             if not answer:
                 raise RuntimeError(REVIEW_FAILED)
             if proposal:
@@ -491,10 +511,12 @@ def process(item):
                 "can_offer_save": can_offer,
                 "diff": details, "history": [{"question": h["question"], "answer": h.get("answer")}
                     for h in reversed(conversations.messages(chat["id"])[:8]) if h["id"] != item["id"]]}, ensure_ascii=False)
-            answer = _suggest(prompt, item.get("cli_agent"))
+            answer = _suggest(prompt, item.get("cli_agent"), item["id"])
             if not answer:
                 raise RuntimeError(REVIEW_FAILED)
         queue.submit_answer(item["id"], answer)
+    except AgentCancelled:
+        queue.submit_answer(item["id"], (live.text(item["id"]) + "\n\nОстановлено пользователем.").strip(), answer_kind="warning")
     except Exception as exc:
         log.warning("Git chat failed for %s: %s", item["project_id"], type(exc).__name__)
         queue.submit_answer(item["id"], str(exc) if isinstance(exc, RuntimeError) else

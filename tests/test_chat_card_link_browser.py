@@ -27,6 +27,21 @@ async def smoke(url):
     general = conversations.create(title='Общий вопрос')
     question = queue.enqueue_question(None, 'Общий вопрос', conversation_id=general['id'])
     queue.submit_answer(question['id'], 'Ответ без привязки к карточке.')
+    created_chat = conversations.create('demo', title='Создание карточек из основного чата')
+    created = queue.enqueue_question('demo', 'Создай новую карточку', conversation_id=created_chat['id'])
+    from koi.agent_chat.cli import build_context
+    from koi.agent_chat.runner import _sdk_prompt
+    assert 'card_link_instructions' in build_context(created['id'])
+    assert 'research_cards' in _sdk_prompt(created['id'])
+    project = load_project('demo', sync_reports=False)
+    project.boards[0].cards.append(project.boards[0].cards[0].model_copy(update={'id':'created-card', 'title':'Новая проверка'}))
+    save_project(project)
+    queue.submit_answer(created['id'], 'Создана новая карточка, связанная проверка изучена.\n```research_cards\n'
+                        '[{"project_id":"demo","board_id":"board","card_id":"created-card"},'
+                        '{"project_id":"demo","board_id":"board","card_id":"card"}]\n```')
+    followup = queue.enqueue_question('demo', 'Что в новой карточке?', conversation_id=created_chat['id'])
+    assert build_context(followup['id'])['history'][-1]['card_links'][0]['card_id'] == 'created-card'
+    queue.dequeue(followup['id'])
     output = Path(__file__).resolve().parents[1] / '.run/ui-screenshots/chat-card-link'
     output.mkdir(parents=True, exist_ok=True)
 
@@ -44,6 +59,33 @@ async def smoke(url):
         assert await page.locator('#agent-chat-log [data-chat-card-link]').count() == 0
         await page.locator('.lab-project-frame[data-project-id=demo]').focus()
         await page.keyboard.press('Enter')
+        await page.locator('.research-program[data-focus-key=program-agents]').click()
+        await page.locator(f'.research-chat-entries [data-conversation="{created_chat["id"]}"]').click()
+        created_links = page.locator('#agent-chat-log [data-chat-card-link]')
+        await created_links.nth(1).wait_for(state='visible')
+        assert await created_links.count() == 2
+        assert await created_links.first.inner_text() == 'Открыть карточку «Новая проверка»'
+        await created_links.nth(1).focus()
+        await page.wait_for_timeout(1700)
+        assert await created_links.nth(1).evaluate('el=>el===document.activeElement')
+        assert 'research_cards' not in await page.locator('#agent-chat-log').inner_text()
+        assert conversations.find(created_chat['id'])['card_id'] is None
+        await created_links.first.press('Enter')
+        await page.locator('#card-report-modal:not(.hidden)').wait_for()
+        assert await page.locator('#card-report-card-title').inner_text() == 'Новая проверка'
+        await page.keyboard.press('Escape')
+        await page.locator('#kanban-modal .modal-close').click()
+        await page.locator('#kanban-modal').wait_for(state='hidden')
+        for theme in ('light', 'dark'):
+            await page.evaluate('theme=>document.documentElement.dataset.theme=theme', theme)
+            await page.screenshot(path=str(output/f'created-{theme}.png'))
+        await page.reload(wait_until='networkidle')
+        await page.locator('.lab-project-frame[data-project-id=demo]').focus()
+        await page.keyboard.press('Enter')
+        await page.locator('.research-program[data-focus-key=program-agents]').click()
+        await page.locator(f'.research-chat-entries [data-conversation="{created_chat["id"]}"]').click()
+        await page.locator('#agent-chat-log [data-chat-card-link]').nth(1).wait_for(state='visible')
+        assert await page.locator('#agent-chat-log [data-chat-card-link]').count() == 2
         await page.locator('.research-program[data-focus-key=program-agents]').click()
         await page.locator(f'.research-chat-entries [data-conversation="{card_chat["id"]}"]').click()
         link = page.locator('#agent-chat-log [data-chat-card-link]')

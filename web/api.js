@@ -598,6 +598,7 @@ export const KoiApi = {
   markConversationRead: (id, answerId) => api(`/agent-conversations/${encodeURIComponent(id)}/read`, { method: "POST", body: JSON.stringify({ answer_id: answerId }) }),
   conversationActivity: id => api(`/agent-conversations/${encodeURIComponent(id)}/activity`),
   cancelConversation: id => api(`/agent-conversations/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  cancelAgentChatItem: id => api(`/agent-chat/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   decideConversationPermission: (id, permission_id, option_id) => api(`/agent-conversations/${encodeURIComponent(id)}/permission`, { method: "POST", body: JSON.stringify({ permission_id, option_id }) }),
   listAgentChat: (projectId, boardId = null, cardId = null) =>
     api(`/agent-chat?project_id=${encodeURIComponent(projectId)}${cardId ? `&board_id=${encodeURIComponent(boardId)}&card_id=${encodeURIComponent(cardId)}` : ""}`),

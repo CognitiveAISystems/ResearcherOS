@@ -15,7 +15,7 @@ import yaml
 
 from koi.adapters.agent_backends import run_agent
 from koi.adapters.onboarding_literature import update_literature
-from koi.adapters.desktop_onboarding import connect_git_project, inspect_git_project
+from koi.adapters.desktop_onboarding import connect_git_project, inspect_git_project, new_tree_name
 from koi.adapters.desktop_workspace import application_support_dir
 from koi.adapters.project_mount import rescan_projects
 from koi.core.md_io import parse_project_md
@@ -84,15 +84,18 @@ class InterviewError(ValueError):
     """A recoverable interview or draft validation error."""
 
 
-def _repo(raw: str) -> Path:
-    info = inspect_git_project(raw)
-    if info["branch_exists"]:
+def _repo(raw: str, branch: str | None = None, *, fetch_remote: bool = True) -> Path:
+    info = inspect_git_project(raw, fetch_remote=fetch_remote)
+    if branch is not None:
+        new_tree_name(Path(info["repo_path"]), branch)
+    elif info["branch_exists"]:
         raise InterviewError("У репозитория уже есть исследовательская ветка.")
     return Path(info["repo_path"])
 
 
-def _session_path(repo: Path) -> Path:
-    digest = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:24]
+def _session_path(repo: Path, branch: str | None = None) -> Path:
+    key = str(repo) if branch is None else f"{repo}\n{branch}"
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
     return application_support_dir() / "onboarding-interviews" / f"{digest}.json"
 
 
@@ -132,6 +135,8 @@ def _public(state: dict[str, Any]) -> dict[str, Any]:
         "guide": bool(state.get("guide")),
         "grill": bool(state.get("grill")),
         "track": state.get("track"),
+        "editing_phase": state.get("editing_phase"),
+        "edit_answer": state.get("editing_answer", ""),
     }
 
 
@@ -379,8 +384,8 @@ def _title_from_words(text: str) -> str:
 def _upsert_user_node(state: dict[str, Any], text: str) -> None:
     """The person's words are the node. The agent does not rewrite them."""
     phase = state["phase"]
-    node_id = _NODE_ID[phase]
-    existing = next((node for node in state["nodes"] if node["id"] == node_id), None)
+    existing = next((node for node in state["nodes"] if node["type"] == _NODE_TYPE[phase]), None)
+    node_id = existing["id"] if existing else _NODE_ID[phase]
     parent = existing["parent_id"] if existing else (None if phase == "problem" else state["nodes"][-1]["id"])
     description = text.strip()[:3000]
     node = {"id": node_id, "type": _NODE_TYPE[phase], "parent_id": parent, "title": _title_from_words(description), "description": description}
@@ -391,15 +396,44 @@ def _upsert_user_node(state: dict[str, Any], text: str) -> None:
 
 
 def _phase_filled(state: dict[str, Any]) -> bool:
-    node_id = _NODE_ID.get(state["phase"])
-    return bool(node_id) and any(node["id"] == node_id for node in state["nodes"])
+    return any(node["type"] == _NODE_TYPE.get(state["phase"]) for node in state["nodes"])
+
+
+def _rewind_guide(state: dict[str, Any], phase: str | None) -> None:
+    """Keep the selected node for editing and discard everything after it."""
+    target = next((node for node in state["nodes"] if node["type"] == _NODE_TYPE.get(phase)), None)
+    if target is None:
+        raise InterviewError("Этот этап пока недоступен. Выберите один из заполненных этапов.")
+    state["nodes"] = state["nodes"][:state["nodes"].index(target) + 1]
+    first_answer = next((i for i, message in enumerate(state["messages"]) if message.get("role") == "user" and message.get("phase") == phase), len(state["messages"]))
+    state["messages"] = state["messages"][:first_answer]
+    state["phase"] = phase
+    state["complete"] = False
+    state["guide"] = True
+    state["grill"] = False
+    state["grill_phase"] = None
+    state["pending_node"] = None
+    state["approved_nodes"] = [node["id"] for node in state["nodes"][:-1]]
+    state["literature"] = []
+    if phase in {"problem", "cause"}:
+        state["track"] = None
+    elif phase in {"hypothesis", "evidence"}:
+        state["track"] = phase
+    elif phase == "method":
+        state["track"] = "evidence" if any(node["type"] == "cause_evidence" for node in state["nodes"]) else "hypothesis"
+    state["brief"] = "\n\n".join(f"{node['title']}\n\n{node['description']}" for node in state["nodes"])
+    state["editing_phase"] = phase
+    state["editing_answer"] = target["description"]
+    prompt = _METHOD_PROMPTS[state.get("track") or "hypothesis"] if phase == "method" else _PHASE_PROMPTS[phase]
+    if not state["messages"] or state["messages"][-1].get("text") != prompt:
+        state["messages"].append(_assistant_message(phase, prompt))
 
 
 def _track_choice(answer: str) -> str | None:
     text = " ".join(answer.split()).casefold().strip(".,;:!?")
-    for label, track in _BRANCH_TRACK.items():
-        if text == label.casefold():
-            return track
+    for number, label in enumerate(_BRANCH_OPTIONS, 1):
+        if text in {str(number), label.casefold()}:
+            return _BRANCH_TRACK[label]
     return None
 
 
@@ -491,27 +525,17 @@ def _accept_guide(state: dict[str, Any]) -> None:
     state["grill_phase"] = None
 
 
-def _guide_reply(state: dict[str, Any], answer: str, context: str, repo: Path) -> None:
+def _guide_reply(state: dict[str, Any], answer: str) -> None:
+    state.pop("editing_phase", None)
+    state.pop("editing_answer", None)
+    state["grill"] = False
+    state["grill_phase"] = None
     if state["phase"] == "branch" and _track_choice(answer):
-        state["grill"] = False
-        state["grill_phase"] = None
         _choose_track(state, answer)
         return
-    picked = state.get("grill") and answer.strip() in _offered_options(state)
     state["messages"].append({"role": "user", "phase": state["phase"], "text": answer.strip()})
-    if state.get("grill"):
-        # A numbered choice or a free reply only continues the talk.
-        # The node stays the sentence the person wrote for this step.
-        if picked:
-            return
-        state["literature"] = update_literature(state, context, repo, _ask_agent)
-        message, options = _accept_turn(_ask_agent(_clarify_prompt(state, context), repo), state)
-        state["messages"].append(_assistant_message(state["phase"], message, options))
-        return
     if state["phase"] == "branch":
         state["messages"].append(_assistant_message("branch", _BRANCH_PROMPT, list(_BRANCH_OPTIONS)))
-        return
-    if _phase_filled(state):
         return
     _upsert_user_node(state, answer)
     _advance_guide(state)
@@ -566,8 +590,9 @@ def attach_program(repo_raw: str, program: dict[str, str]) -> None:
     add_project_to_program(program["id"], mount.project_id, title=program["title"])
 
 
-def start_interview(repo_raw: str, workspace_raw: str, program: dict[str, str] | None = None) -> dict[str, Any]:
-    repo = _repo(repo_raw)
+def start_interview(repo_raw: str, workspace_raw: str, program: dict[str, str] | None = None, *, branch: str | None = None) -> dict[str, Any]:
+    repo = _repo(repo_raw, branch)
+    tree_name = new_tree_name(repo, branch)
     requested_workspace = Path(workspace_raw).expanduser()
     if requested_workspace == Path.home() / "Documents":
         requested_workspace.mkdir(parents=True, exist_ok=True)
@@ -579,16 +604,21 @@ def start_interview(repo_raw: str, workspace_raw: str, program: dict[str, str] |
         raise InterviewError("Папка исследований не найдена.")
     if workspace == repo or repo in workspace.parents:
         raise InterviewError("Выберите папку для исследований вне репозитория с кодом.")
-    code_link = workspace / repo.name
+    target = workspace / "tree" / (tree_name or repo.name)
+    if target.exists() and any(target.iterdir()):
+        raise InterviewError(f"Папка для нового дерева уже занята. Выберите репозиторий снова или освободите папку {target}.")
+    code_link = workspace / (tree_name or repo.name)
     if (code_link.exists() or code_link.is_symlink()) and code_link.resolve() != repo:
         raise InterviewError(f"В выбранной папке уже есть другой проект с именем {repo.name}.")
-    path = _session_path(repo)
+    path = _session_path(repo, branch)
     with _LOCK:
         state = _read(path)
         fresh = state is None or state.get("repo_path") != str(repo) or state.get("workspace_root") != str(workspace)
         remembered = False
         if fresh:
             state = {"version": 1, "repo_path": str(repo), "workspace_root": str(workspace), "phase": "problem", "messages": [], "nodes": [], "program": program, "brief": "", "literature": [], "approved_nodes": [], "pending_node": None, "complete": False, "guide": True, "grill": False, "track": None}
+            state["research_branch"] = branch
+            state["tree_name"] = tree_name
         elif program is not None:
             state["program"] = program
             remembered = True
@@ -605,74 +635,47 @@ def start_interview(repo_raw: str, workspace_raw: str, program: dict[str, str] |
                 state["messages"].append({"role": "assistant", "phase": "problem", "text": _approval_message(state)})
             _save(path, state)
             remembered = False
-        if not state["messages"]:
-            if state.get("guide"):
-                for text in (*_INTRO, _PHASE_PROMPTS["problem"]):
-                    state["messages"].append(_assistant_message("problem", text))
+        if not state.get("guide") or state.get("grill") or state.get("pending_node"):
+            target = next((node for node in state["nodes"] if node["id"] == state.get("pending_node")), None)
+            target = target or next((node for node in state["nodes"] if node["type"] == _NODE_TYPE.get(state["phase"])), None)
+            state.update(guide=True, grill=False, grill_phase=None, pending_node=None)
+            if target:
+                phase = next(key for key, kind in _NODE_TYPE.items() if kind == target["type"])
+                _rewind_guide(state, phase)
             else:
-                context = _code_context(repo)
-                state["literature"] = update_literature(state, context, repo, _ask_agent)
-                message, options = _accept_turn(_ask_agent(_interviewer_prompt(state, context), repo), state)
-                state["messages"].append(_assistant_message(state["phase"], message, options))
+                prompt = _BRANCH_PROMPT if state["phase"] == "branch" else (_METHOD_PROMPTS[state.get("track") or "hypothesis"] if state["phase"] == "method" else _PHASE_PROMPTS[state["phase"]])
+                options = list(_BRANCH_OPTIONS) if state["phase"] == "branch" else None
+                state["messages"].append(_assistant_message(state["phase"], prompt, options))
+            remembered = True
+        if not state["messages"]:
+            for text in (*_INTRO, _PHASE_PROMPTS["problem"]):
+                state["messages"].append(_assistant_message("problem", text))
             _save(path, state)
         elif remembered:
             _save(path, state)
         return _public(state)
 
 
-def reply_interview(repo_raw: str, answer: str, decision: str = "answer") -> dict[str, Any]:
-    repo = _repo(repo_raw)
-    if decision not in {"answer", "approve", "revise", "grill"} or not isinstance(answer, str) or len(answer) > 12000 or (decision not in {"approve", "grill"} and not answer.strip()):
+def reply_interview(repo_raw: str, answer: str, decision: str = "answer", *, branch: str | None = None, phase: str | None = None) -> dict[str, Any]:
+    repo = _repo(repo_raw, branch, fetch_remote=False)
+    if decision == "grill":
+        raise InterviewError("Уточнение с агентом пока недоступно. Заполните дерево своими словами.")
+    if decision not in {"answer", "rewind"} or not isinstance(answer, str) or len(answer) > 12000 or (decision != "rewind" and not answer.strip()):
         raise InterviewError("Напишите ответ длиной до 12 000 знаков.")
-    path = _session_path(repo)
+    path = _session_path(repo, branch)
     with _LOCK:
         state = _read(path)
         if state is None or state.get("repo_path") != str(repo):
             raise InterviewError("Сначала начните интервью.")
+        draft = json.loads(json.dumps(state, ensure_ascii=False))
+        if decision == "rewind":
+            _rewind_guide(draft, phase)
+            _save(path, draft)
+            return _public(draft)
         if state["complete"]:
             raise InterviewError("Интервью уже завершено.")
-        draft = json.loads(json.dumps(state, ensure_ascii=False))
-        context = _code_context(repo)
-        if decision == "grill":
-            if not draft.get("guide"):
-                raise InterviewError("Уточнение агентом доступно при заполнении дерева.")
-            _toggle_grill(draft, context, repo)
-            _save(path, draft)
-            return _public(draft)
-        if draft.get("guide"):
-            if decision == "approve":
-                _accept_guide(draft)
-            elif decision == "answer":
-                _guide_reply(draft, answer, context, repo)
-            else:
-                raise InterviewError("Напишите формулировку своими словами.")
-            _save(path, draft)
-            return _public(draft)
-        disagreed = False
-        if draft.get("pending_node"):
-            if decision == "approve":
-                draft["messages"].append({"role": "user", "phase": draft["phase"], "text": "Согласна с формулировкой узла."})
-                _advance_after_approval(draft, context, repo)
-                _save(path, draft)
-                return _public(draft)
-            if decision not in {"answer", "revise"}:
-                raise InterviewError("Сейчас нет узла для согласования.")
-            disagreed = True
-        elif decision != "answer":
-            raise InterviewError("Сейчас нет узла для согласования.")
-        kept_nodes, kept_pending = draft["nodes"], draft.get("pending_node")
-        draft["messages"].append({"role": "user", "phase": draft["phase"], "text": answer.strip()})
-        draft["literature"] = update_literature(draft, context, repo, _ask_agent)
-        tree_reply = _ask_agent(_tree_prompt(draft, context), repo)
-        proposed = _merge_current_node(draft, tree_reply)
-        if disagreed and not draft.get("pending_node"):
-            draft["nodes"], draft["pending_node"] = kept_nodes, kept_pending
-        options = None
-        if disagreed or not proposed:
-            message, options = _accept_turn(_ask_agent(_interviewer_prompt(draft, context), repo), draft)
-        else:
-            message = _approval_message(draft)
-        draft["messages"].append(_assistant_message(draft["phase"], message, options))
+        draft["guide"] = True
+        _guide_reply(draft, answer)
         _save(path, draft)
         return _public(draft)
 
@@ -682,13 +685,13 @@ def _project_markdown(state: dict[str, Any]) -> str:
     root = nodes[0]
     repo = Path(state["repo_path"])
     meta: dict[str, Any] = {
-        "id": repo.name,
+        "id": state.get("tree_name") or repo.name,
         "title": root["title"],
         "description": root["description"],
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "format": "koi/1",
         "git_repo": True,
-        "git_sync_branch": "koi-project",
+        "git_sync_branch": state.get("research_branch") or "koi-project",
     }
     if state.get("program"):
         meta["programs"] = [state["program"]]
@@ -705,9 +708,9 @@ def _project_markdown(state: dict[str, Any]) -> str:
     return content
 
 
-def finish_interview(repo_raw: str) -> dict[str, Any]:
-    repo = _repo(repo_raw)
-    path = _session_path(repo)
+def finish_interview(repo_raw: str, *, branch: str | None = None) -> dict[str, Any]:
+    repo = _repo(repo_raw, branch)
+    path = _session_path(repo, branch)
     with _LOCK:
         state = _read(path)
         if state is None or state.get("repo_path") != str(repo) or not state.get("complete") or len(state.get("approved_nodes", [])) != len(state.get("nodes", [])):
@@ -716,7 +719,7 @@ def finish_interview(repo_raw: str) -> dict[str, Any]:
         brief = state.get("brief", "").strip()
         if not brief:
             raise InterviewError("Бриф исследования пока пуст.")
-        result = connect_git_project(str(repo), state["workspace_root"], require_existing=False)
+        result = connect_git_project(str(repo), state["workspace_root"], require_existing=False, branch=branch)
         koi = Path(result["install"]["tree_koi"])
         destination = koi / "project.md"
         temporary = koi / ".project.md.onboarding-tmp"
@@ -726,4 +729,4 @@ def finish_interview(repo_raw: str) -> dict[str, Any]:
         (koi / "reports").mkdir(exist_ok=True)
         rescan_projects()
         path.unlink(missing_ok=True)
-        return {"project_id": repo.name, "project_md": str(destination), "workspace_root": state["workspace_root"]}
+        return {"project_id": state.get("tree_name") or repo.name, "project_md": str(destination), "workspace_root": state["workspace_root"]}

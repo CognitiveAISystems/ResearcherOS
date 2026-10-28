@@ -3129,7 +3129,7 @@ async function refreshReportInterviewActivity() {
 }
 function renderReportInterview() {
   const log = document.getElementById("report-interview-log");
-  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? document.activeElement.closest("article")?.dataset.id : null;
+  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? { id: document.activeElement.closest("article")?.dataset.id, href: document.activeElement.getAttribute("href") } : null;
   const nearBottom = agentChatLogNearBottom(log);
   log.replaceChildren();
   if (!reportInterviewItems.length) {
@@ -3156,6 +3156,7 @@ function renderReportInterview() {
       agentChatDeliveryHtml(item) +
       `</div>` +
       answerHtml +
+      (pending && item.streaming ? agentChatTypingHtml() : "") +
       agentChatCardLinkHtml(item, cardConversations?.row) +
       `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>`;
     if (item.proposal) {
@@ -3192,7 +3193,7 @@ function renderReportInterview() {
     }
     log.append(article);
   }
-  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink)}"] [data-chat-card-link]`)?.focus({ preventScroll: true });
+  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink.id)}"] [data-chat-card-link][href="${CSS.escape(focusedCardLink.href)}"]`)?.focus({ preventScroll: true });
   if (nearBottom) log.scrollTop = log.scrollHeight;
 }
 async function sendReportInterview(event) {
@@ -8030,10 +8031,15 @@ async function chooseAgentChatContext(event) {
 
 function agentChatCardLinkHtml(item, conversation) {
   const scope = item.card_id ? item : conversation;
-  if (!scope?.project_id || !scope.board_id || !scope.card_id) return "";
-  const params = new URLSearchParams({ project: scope.project_id, board: scope.board_id, card: scope.card_id });
-  if (new URLSearchParams(location.search).has("desktop")) params.set("desktop", "1");
-  return `<p class="agent-chat-card-source"><a class="agent-chat-card-link" data-chat-card-link href="?${escapeHtml(params.toString())}">Открыть карточку</a></p>`;
+  const links = [...(item.card_links || [])];
+  if (scope?.project_id && scope.board_id && scope.card_id && !links.some(link =>
+    link.project_id === scope.project_id && link.board_id === scope.board_id && link.card_id === scope.card_id)) links.unshift(scope);
+  return links.map(link => {
+    const params = new URLSearchParams({ project: link.project_id, board: link.board_id, card: link.card_id });
+    if (new URLSearchParams(location.search).has("desktop")) params.set("desktop", "1");
+    const label = link.title ? `Открыть карточку «${link.title}»` : "Открыть карточку";
+    return `<p class="agent-chat-card-source"><a class="agent-chat-card-link" data-chat-card-link href="?${escapeHtml(params.toString())}">${escapeHtml(label)}</a></p>`;
+  }).join("");
 }
 
 async function openChatCard(params) {
@@ -8064,7 +8070,7 @@ async function openChatCard(params) {
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
-  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? document.activeElement.closest("article")?.dataset.id : null;
+  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? { id: document.activeElement.closest("article")?.dataset.id, href: document.activeElement.getAttribute("href") } : null;
   clearInlineLoaderHints(log);
   const stickToBottom = scrollToBottom || agentChatLogNearBottom(log);
   const prevScrollTop = log.scrollTop;
@@ -8101,6 +8107,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         agentChatDeliveryHtml(item) +
         `</div>`) +
         answerHtml +
+        (pending && item.streaming ? agentChatTypingHtml() : "") +
         agentChatContextSuggestionsHtml(item) +
         agentChatCardLinkHtml(item, mainConversations?.row) +
         `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>` +
@@ -8108,7 +8115,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       );
     })
     .join("");
-  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink)}"] [data-chat-card-link]`)?.focus({ preventScroll: true });
+  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink.id)}"] [data-chat-card-link][href="${CSS.escape(focusedCardLink.href)}"]`)?.focus({ preventScroll: true });
   refreshInlineLoaderHints(log);
   if (stickToBottom) {
     log.scrollTop = log.scrollHeight;
@@ -9395,6 +9402,7 @@ function initAgentChat() {
     });
   }
   document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
+  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: () => mainConversations.contextScope?.card_id ? agentChatProjectId() : null });
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {

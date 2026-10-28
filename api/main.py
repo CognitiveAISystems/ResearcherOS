@@ -49,9 +49,11 @@ def _startup() -> None:
 
     load_env_file()
     from koi.adapters.agent_chat_queue import _load, submit_answer
+    from koi.agent_chat import live
     for item in _load():
         if item.get("conversation_id") and item.get("status") in ("pending", "processing"):
-            submit_answer(item["id"], "Запуск прерван перезапуском приложения. Продолжите работу новым сообщением.", answer_kind="warning")
+            text = (live.text(item["id"]) + "\n\nЗапуск прерван перезапуском приложения. Продолжите работу новым сообщением.").strip()
+            submit_answer(item["id"], text, answer_kind="warning")
     start_project_discovery_watch()
     from koi.agent_chat.git_changes import start as start_git_changes
 

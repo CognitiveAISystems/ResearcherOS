@@ -109,6 +109,28 @@ async def smoke(url):
             await page.locator("#report-agent-fab" if variant == "light" else "[data-research-create]").click()
             chat_input = "#agent-chat-input" if variant == "chats" else "#report-interview-input"
             await page.wait_for_function("id => document.activeElement === document.querySelector(id)", arg=chat_input)
+            field = page.locator(chat_input)
+            await field.fill("/")
+            menu = page.locator(".chat-skills:popover-open")
+            await menu.wait_for(state="visible")
+            assert await menu.locator("[role=option] strong").all_text_contents() == ["grill-me", "prose", "question", "run"]
+            await field.press("ArrowDown")
+            await field.press("Enter")
+            assert await field.input_value() == "/prose "
+            await field.fill("/run")
+            await menu.locator("[role=option]").click()
+            assert await field.input_value() == "/run "
+            await field.fill("/nothing")
+            assert await menu.locator(".chat-skills-empty").inner_text() == "Скиллы не найдены"
+            await field.press("Escape")
+            assert await menu.count() == 0
+            assert await page.locator("#card-report-modal").is_visible()
+            for theme in ("dark", "light"):
+                await page.evaluate("theme => document.documentElement.dataset.theme = theme", theme)
+                await field.fill("/")
+                await page.screenshot(path=str(screenshots / f"{variant}-skills-{theme}.png"))
+                await field.press("Escape")
+            await field.fill("")
             await page.screenshot(path=str(screenshots / f"{variant}-report-chat.png"))
             await page.locator('#card-report-modal > .modal-panel > .modal-close').click()
             await page.locator("#card-report-modal").wait_for(state="hidden")

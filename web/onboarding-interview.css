@@ -9,17 +9,11 @@
 .onboarding-interview__top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .onboarding-interview__repo { color: #667180; font-size: 13px; }
 .onboarding-interview__repo strong { color: #314956; font-weight: 700; }
-.onboarding-interview__fire { position: absolute; z-index: 2; top: 8px; left: 10px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 10px; background: #fff; color: #c4552a; cursor: pointer; box-shadow: 0 0 0 6px #fff; }
-.onboarding-interview__fire[hidden] { display: none; }
-.onboarding-interview__fire svg { width: 22px; height: 22px; fill: currentColor; }
-.onboarding-interview__fire.is-on { background: #fff1e8; color: #e24b16; }
-.onboarding-interview__fire:disabled { opacity: .6; cursor: wait; }
 .onboarding-interview .desktop-onboarding__header h1 { margin-top: 10px; font-size: 28px; }
 .onboarding-interview .desktop-onboarding__steps { margin-top: 19px; }
 .onboarding-interview__body { flex: 1 1 auto; display: grid; grid-template-columns: minmax(340px, 42%) minmax(0, 58%); min-height: 0; overflow: hidden; }
 .onboarding-interview__chat { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid #dce3e6; background: #fff; }
 .onboarding-interview__messages { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 30px 30px 18px; }
-.onboarding-interview__chat.has-fire .onboarding-interview__messages { padding-top: 48px; }
 .onboarding-interview__row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 17px; }
 .onboarding-interview__row.is-user { justify-content: flex-end; }
 .onboarding-interview__avatar { flex: none; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 9px; background: linear-gradient(135deg, #f4dfee, #e8e2fa); color: #8c5cb5; }
@@ -42,10 +36,6 @@
 .onboarding-interview__dots i:nth-child(3) { animation-delay: .3s; }
 @keyframes onboarding-interview-dot { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
 .onboarding-interview__composer { flex: none; padding: 14px 22px 20px; }
-.onboarding-interview__approval { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.onboarding-interview__approval[hidden] { display: none; }
-.onboarding-interview__approval .desktop-onboarding__button { min-height: 38px; padding: 7px 12px; font-size: 13px; }
-.onboarding-interview__approve.desktop-onboarding__button--primary { border-color: #8061d7; background: linear-gradient(100deg, #a73bb9, #7260df 58%, #168fb8); color: #fff; }
 .onboarding-interview__input-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 8px; padding: 12px; border: 1px solid #cdd9df; border-radius: 20px; background: #fff; }
 .onboarding-interview__input-wrap[hidden], .onboarding-interview__finish[hidden] { display: none; }
 .onboarding-interview__input-wrap:focus-within { border-color: #8561d8; box-shadow: 0 0 0 2px rgba(107,66,212,.06); }
@@ -77,4 +67,21 @@
 @media (prefers-reduced-motion: reduce) {
   .onboarding-interview__empty .method-activity-svg * { animation: none !important; }
   .onboarding-interview__dots i { animation: none; opacity: .7; }
+}
+
+.onboarding-interview__step {
+  min-height: 44px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+.onboarding-interview__step:disabled { cursor: default; opacity: .65; }
+.onboarding-interview__step:focus-visible { outline: 2px solid var(--onboarding-purple); outline-offset: 3px; }
+.onboarding-interview__step-hint { margin: 12px 0 0; color: var(--onboarding-muted); font-size: 13px; line-height: 1.5; }
+.onboarding-interview__edit-hint { margin: 0 0 12px; color: var(--onboarding-purple); font-size: 14px; line-height: 1.5; }
+@media (hover: hover) {
+  .onboarding-interview__step:hover:not(:disabled) { background: color-mix(in srgb, var(--onboarding-purple) 10%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-interview__step { transition: none; }
 }

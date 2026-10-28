@@ -1,12 +1,15 @@
+import { MindmapCamera } from './lab-canvas.js';
+
 const PHASE_SLOT = { problem: 0, cause: 1, branch: 2, hypothesis: 2, evidence: 2, method: 3 };
+const PHASE_TYPE = { problem: 'problem', cause: 'cause', hypothesis: 'remediation', evidence: 'cause_evidence', method: 'method' };
 const TYPE_LABELS = {
   problem: 'Проблема', cause: 'Причина', remediation: 'Гипотеза',
-  cause_evidence: 'Доказательство', method: 'Метод',
+  cause_evidence: 'Доказательство', method: 'Метод', experiment: 'Эксперимент',
 };
 const NODE_SIZE = {
   problem: [220, 105, '50%'], cause: [182, 80, '12px'],
   remediation: [170, 72, '4px'], cause_evidence: [170, 72, '12px'],
-  method: [165, 68, '6px'],
+  method: [165, 68, '6px'], experiment: [165, 68, '6px'],
 };
 
 function el(tag, className, text) {
@@ -26,7 +29,7 @@ async function post(url, payload) {
   return data;
 }
 
-function activitySvg() {
+export function activitySvg() {
   return `<svg class="method-activity-svg theme-agent" viewBox="0 0 88 44" aria-hidden="true">
     <defs><linearGradient id="onboard-activity-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="var(--pink)"/><stop offset="50%" stop-color="var(--purple)"/><stop offset="100%" stop-color="var(--cyan)"/></linearGradient></defs>
     <ellipse class="ma-floor" cx="44" cy="38" rx="28" ry="4"/>
@@ -54,12 +57,11 @@ function layoutNodes(nodes) {
   return positions;
 }
 
-function renderTree(world, nodes, empty, pendingId) {
+function renderTree(world, nodes, empty, pendingId, positions = layoutNodes(nodes)) {
   world.querySelectorAll('.onboarding-interview__node').forEach((node) => node.remove());
   const svg = world.querySelector('.onboarding-interview__edges');
   svg.querySelectorAll('.onboarding-interview__edge').forEach((edge) => edge.remove());
   empty.hidden = nodes.length > 0;
-  const positions = layoutNodes(nodes);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   for (const node of nodes) {
     const point = positions.get(node.id);
@@ -86,7 +88,87 @@ function renderTree(world, nodes, empty, pendingId) {
   }
 }
 
-export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot, onBack, program }) {
+export function renderExistingTree(container, nodes, branch) {
+  const frame = el('div', 'desktop-onboarding__tree-frame');
+  const viewport = el('div', 'desktop-onboarding__tree-map');
+  viewport.tabIndex = 0;
+  viewport.setAttribute('role', 'region');
+  viewport.setAttribute('aria-label', 'Дерево исследования');
+  const branchLabel = el('p', 'desktop-onboarding__tree-branch', `Ветка: ${branch}`);
+  branchLabel.title = branch;
+  frame.append(viewport, branchLabel);
+  container.append(frame);
+  if (!nodes.length) {
+    viewport.classList.add('is-empty');
+    viewport.append(el('p', 'desktop-onboarding__lead', 'В этом дереве пока нет узлов.'));
+    return () => {};
+  }
+  const world = el('div', 'onboarding-interview__world');
+  world.innerHTML = `<svg class="onboarding-interview__edges" aria-hidden="true"><defs>
+    <linearGradient id="onboard-edge-grad"><stop stop-color="var(--pink)"/><stop offset="1" stop-color="var(--cyan)"/></linearGradient>
+    <marker id="onboard-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="var(--cyan)"/></marker>
+  </defs></svg>`;
+  const children = new Map();
+  const ids = new Set(nodes.map(node => node.id));
+  for (const node of nodes) {
+    const parent = ids.has(node.parent_id) ? node.parent_id : null;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(node);
+  }
+  const positions = new Map();
+  let cursor = 0;
+  function place(node, depth) {
+    const kids = children.get(node.id) || [];
+    kids.forEach(child => place(child, depth + 1));
+    const x = kids.length
+      ? (positions.get(kids[0].id).x + positions.get(kids.at(-1).id).x) / 2
+      : (cursor++ * 260 + 140);
+    positions.set(node.id, { x, y: 80 + depth * 110 });
+  }
+  (children.get(null) || []).forEach(node => place(node, 0));
+  renderTree(world, nodes, { hidden: true }, null, positions);
+  const width = Math.max(...[...positions.values()].map(point => point.x)) + 140;
+  const height = Math.max(...[...positions.values()].map(point => point.y)) + 80;
+  world.style.width = `${width}px`;
+  world.style.height = `${height}px`;
+  world.querySelector('svg').setAttribute('viewBox', `0 0 ${width} ${height}`);
+  viewport.append(world);
+  const toolbar = el('div', 'desktop-onboarding__tree-tools');
+  const camera = new MindmapCamera(viewport, world);
+  const bounds = { x: 0, y: 0, width, height };
+  const fit = () => {
+    camera.setWorldBounds(bounds);
+    camera.maxScale = Math.max(2, camera.minScale);
+    camera.fitWorld(64);
+  };
+  for (const [path, label, action] of [
+    ['M5 12h14', 'Уменьшить дерево', () => camera.zoomBy(1 / 1.25)],
+    ['M5 12h14M12 5v14', 'Увеличить дерево', () => camera.zoomBy(1.25)],
+    ['M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5', 'Показать целиком', fit],
+  ]) {
+    const control = el('button', 'desktop-onboarding__button');
+    control.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+    control.type = 'button';
+    control.setAttribute('aria-label', label);
+    control.title = label;
+    control.addEventListener('click', action);
+    toolbar.append(control);
+  }
+  viewport.addEventListener('keydown', event => {
+    const delta = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    camera.x += delta[0];
+    camera.y += delta[1];
+    camera._apply();
+  });
+  frame.append(toolbar);
+  const observer = new ResizeObserver(fit);
+  observer.observe(viewport);
+  return () => observer.disconnect();
+}
+
+export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot, onBack, program, branch }) {
   const shell = el('div', 'desktop-onboarding__shell onboarding-interview');
   shell.setAttribute('role', 'dialog');
   shell.setAttribute('aria-modal', 'true');
@@ -95,15 +177,13 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
     <header class="desktop-onboarding__header">
       <div class="onboarding-interview__top"><p class="desktop-onboarding__eyebrow">ResearcherOS</p><span class="onboarding-interview__repo">Репозиторий <strong></strong></span></div>
       <ol class="desktop-onboarding__steps" aria-label="Этапы интервью"></ol>
+      <p class="onboarding-interview__step-hint">Выберите заполненный этап, чтобы изменить узел. Все следующие узлы нужно будет заполнить заново.</p>
     </header>
     <div class="onboarding-interview__body">
       <section class="onboarding-interview__chat" aria-label="Интервью">
-        <button class="onboarding-interview__fire" type="button" aria-pressed="false" aria-label="Уточнить с агентом" title="Уточнить с агентом" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.2 2.4c.4 2.6-.6 4.4-2 5.8 1.7-.2 3.2-1.2 4-2.6 1.8 2.2 2.8 4.6 2.8 7.1a6.8 6.8 0 1 1-13.6 0c0-2.6 1.5-4.6 2.8-6.4 1 1.8 1.8 2.8 3.2 2.9-.6-2.2-.4-4.6.8-6.8z"/></svg></button>
         <div class="onboarding-interview__messages" role="log" aria-live="polite"></div>
         <div class="onboarding-interview__composer">
-          <div class="onboarding-interview__approval" hidden>
-            <button class="desktop-onboarding__button desktop-onboarding__button--primary onboarding-interview__approve" type="button">Согласна с узлом</button>
-          </div>
+          <p class="onboarding-interview__edit-hint" role="status" hidden>Измените формулировку и отправьте её. Следующие узлы нужно заполнить заново.</p>
           <div class="onboarding-interview__input-wrap">
             <textarea class="onboarding-interview__input" rows="1" placeholder="Ваш ответ…" aria-label="Ваш ответ"></textarea>
             <button class="btn btn-primary agent-chat-send onboarding-interview__send" type="button" aria-label="Отправить сообщение" title="Отправить сообщение"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></button>
@@ -128,9 +208,7 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
   const messages = shell.querySelector('.onboarding-interview__messages');
   const textarea = shell.querySelector('.onboarding-interview__input');
   const send = shell.querySelector('.onboarding-interview__send');
-  const fire = shell.querySelector('.onboarding-interview__fire');
-  const approval = shell.querySelector('.onboarding-interview__approval');
-  const approve = shell.querySelector('.onboarding-interview__approve');
+  const editHint = shell.querySelector('.onboarding-interview__edit-hint');
   const finish = shell.querySelector('.onboarding-interview__finish');
   const error = shell.querySelector('.onboarding-interview__error');
   const world = shell.querySelector('.onboarding-interview__world');
@@ -184,17 +262,16 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
     const row = el('div', 'onboarding-interview__row is-agent onboarding-interview__typing');
     row.dataset.loading = 'true';
     row.setAttribute('role', 'status');
-    row.setAttribute('aria-label', 'Агент пишет');
+    row.setAttribute('aria-label', 'Обновляем дерево…');
     const bubble = el('div', 'onboarding-interview__bubble');
-    bubble.innerHTML = '<span class="onboarding-interview__typing-label">Агент пишет</span><span class="onboarding-interview__dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    bubble.innerHTML = '<span class="onboarding-interview__typing-label">Обновляем дерево…</span><span class="onboarding-interview__dots" aria-hidden="true"><i></i><i></i><i></i></span>';
     row.append(el('span', 'onboarding-interview__avatar', '✦'), bubble);
     return row;
   }
   function setBusy(value) {
     busy = value;
     send.disabled = value || Boolean(state?.complete);
-    approve.disabled = value || Boolean(textarea.value.trim());
-    fire.disabled = value || Boolean(state?.complete);
+    steps.querySelectorAll('button').forEach(button => { button.disabled = value || button.dataset.available !== 'true'; });
     messages.querySelectorAll('.onboarding-interview__pick').forEach((button) => { button.disabled = value; });
     finish.disabled = value;
     textarea.disabled = value || Boolean(state?.complete);
@@ -217,24 +294,30 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
       ['method', 'Метод'],
     ];
     const active = PHASE_SLOT[state.phase] ?? 0;
-    steps.replaceChildren(...stepsModel.map(([, title], index) => {
-      const item = el('li', 'desktop-onboarding__step');
-      if (index < active || state.complete) item.classList.add('is-done');
-      else if (index === active) item.classList.add('is-active');
-      item.append(el('span', 'desktop-onboarding__step-index', index < active || state.complete ? '✓' : String(index + 1)), el('span', '', title));
+    steps.replaceChildren(...stepsModel.map(([phase, title], index) => {
+      const item = el('li');
+      const step = el('button', 'desktop-onboarding__step onboarding-interview__step');
+      const filled = state.nodes.some(node => node.type === PHASE_TYPE[phase]);
+      step.type = 'button';
+      step.dataset.available = String(filled);
+      step.disabled = busy || !filled;
+      step.setAttribute('aria-label', `Редактировать узел «${title}»`);
+      if (index < active || state.complete) step.classList.add('is-done');
+      else if (index === active) { step.classList.add('is-active'); step.setAttribute('aria-current', 'step'); }
+      step.append(el('span', 'desktop-onboarding__step-index', index < active || state.complete ? '✓' : String(index + 1)), el('span', '', title));
+      step.addEventListener('click', () => { void rewind(phase); });
+      item.append(step);
       return item;
     }));
     const last = state.messages.length - 1;
     messages.replaceChildren(...state.messages.map((entry, index) => messageRow(entry, !state.complete && index === last)));
     messages.scrollTop = messages.scrollHeight;
-    renderTree(world, state.nodes, empty, state.pending_node);
+    const editingNode = state.nodes.find(node => node.type === PHASE_TYPE[state.editing_phase]);
+    renderTree(world, state.nodes, empty, editingNode?.id);
     const choices = state.complete ? [] : (state.messages[last]?.options || []);
-    fire.hidden = !state.guide;
-    fire.closest('.onboarding-interview__chat').classList.toggle('has-fire', Boolean(state.guide));
-    fire.classList.toggle('is-on', Boolean(state.grill));
-    fire.setAttribute('aria-pressed', state.grill ? 'true' : 'false');
-    approval.hidden = state.complete || (!state.grill && !state.pending_node);
-    textarea.placeholder = state.phase === 'branch' ? 'Выберите 1 или 2…' : (choices.length >= 2 ? 'Или напишите свой вариант…' : (state.pending_node ? 'Если не согласны, напишите…' : 'Ваш ответ…'));
+    editHint.hidden = !state.editing_phase;
+    textarea.value = state.edit_answer || '';
+    textarea.placeholder = state.phase === 'branch' ? 'Выберите 1 или 2…' : (choices.length >= 2 ? 'Или напишите свой вариант…' : 'Ваш ответ…');
     finish.hidden = !state.complete;
     textarea.hidden = state.complete;
     send.hidden = state.complete;
@@ -246,7 +329,7 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
     setBusy(true);
     error.textContent = '';
     try {
-      const payload = { repo_path: repoPath, workspace_root: workspaceRoot };
+      const payload = { repo_path: repoPath, workspace_root: workspaceRoot, branch };
       if (program?.title) payload.program_title = program.title;
       else if (program?.id) payload.program_id = program.id;
       state = await post('/api/desktop/onboarding/interview/start', payload);
@@ -254,35 +337,49 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
     } catch (problem) {
       error.textContent = problem.message;
     } finally { setBusy(false); }
+    (state?.complete ? finish : textarea).focus();
+  }
+  async function rewind(phase) {
+    if (busy || !state) return;
+    error.textContent = '';
+    setBusy(true);
+    let changed = false;
+    try {
+      state = await post('/api/desktop/onboarding/interview/reply', { repo_path: repoPath, branch, decision: 'rewind', phase });
+      render();
+      changed = true;
+    } catch (problem) {
+      error.textContent = problem.message;
+    } finally { setBusy(false); }
+    if (changed) {
+      textarea.focus();
+      textarea.setSelectionRange(0, textarea.value.length);
+    }
   }
   async function submit(answer, decision) {
     if (busy || !state || state.complete) return;
-    if (!answer && decision !== 'approve' && decision !== 'grill') return;
+    if (!answer) return;
     error.textContent = '';
-    let pending = null;
-    if (decision !== 'grill') {
-      pending = messageRow({ role: 'user', text: decision === 'approve' ? 'Согласна с формулировкой узла.' : answer });
-      pending.dataset.pending = 'true';
-      messages.append(pending);
-      textarea.value = '';
-      sizeInput();
-    }
+    const pending = messageRow({ role: 'user', text: answer });
+    pending.dataset.pending = 'true';
+    messages.append(pending);
+    textarea.value = '';
+    sizeInput();
     setBusy(true);
     try {
-      state = await post('/api/desktop/onboarding/interview/reply', { repo_path: repoPath, answer, decision });
+      state = await post('/api/desktop/onboarding/interview/reply', { repo_path: repoPath, answer, decision, branch });
       render();
     } catch (problem) {
       pending?.remove();
-      textarea.value = decision === 'approve' ? '' : answer;
+      textarea.value = answer;
       sizeInput();
       error.textContent = problem.message;
     } finally { setBusy(false); }
+    (state?.complete ? finish : textarea).focus();
   }
   function reply() { return submit(textarea.value.trim(), 'answer'); }
-  fire.addEventListener('click', () => { if (!busy) void submit('', 'grill'); });
   send.addEventListener('click', reply);
-  approve.addEventListener('click', () => { if (!textarea.value.trim()) void submit('', 'approve'); });
-  textarea.addEventListener('input', () => { sizeInput(); approve.disabled = busy || Boolean(textarea.value.trim()); });
+  textarea.addEventListener('input', sizeInput);
   textarea.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void reply(); }
   });
@@ -291,8 +388,8 @@ export async function runOnboardingInterview({ overlay, repoPath, workspaceRoot,
     setBusy(true);
     error.textContent = '';
     try {
-      await post('/api/desktop/onboarding/interview/finish', { path: repoPath });
-      window.location.replace('/');
+      const created = await post('/api/desktop/onboarding/interview/finish', { path: repoPath, branch });
+      window.location.replace(`/?project=${encodeURIComponent(created.project_id)}`);
     } catch (problem) {
       error.textContent = problem.message;
       setBusy(false);

@@ -257,7 +257,7 @@ def test_notice_is_reviewed_by_agent_before_any_offer(tree, monkeypatch):
     seed_card(mount)
     (mount.koi_root / "project.md").write_text(card_document("done"))
     calls = []
-    def review(prompt, backend):
+    def review(prompt, backend, item_id):
         calls.append(prompt)
         assert "Проверь предварительную сводку" in prompt
         assert "Проверить сокращение памяти" in prompt and '"diff":' in prompt

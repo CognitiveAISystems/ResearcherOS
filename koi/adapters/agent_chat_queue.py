@@ -52,6 +52,7 @@ class AgentChatItem(TypedDict, total=False):
     cli_agent: Optional[str]
     conversation_id: Optional[str]
     context_suggestions: Optional[dict]
+    card_links: list[dict]
     git_snapshot: Optional[str]
     git_notice_version: Optional[int]
 
@@ -100,6 +101,7 @@ def _normalize(item: dict) -> AgentChatItem:
         "review_passed": bool(item.get("review_passed", False)),
         "conversation_id": item.get("conversation_id"),
         "context_suggestions": item.get("context_suggestions"),
+        "card_links": item.get("card_links", []),
         "git_snapshot": item.get("git_snapshot"),
         "git_notice_version": item.get("git_notice_version"),
     }
@@ -253,6 +255,9 @@ def submit_answer(
         if item["id"] != item_id:
             continue
         item["status"] = "answered"
+        if answer_kind == "normal":
+            from koi.agent_chat.card_links import parse_reply as parse_card_links
+            text, item["card_links"] = parse_card_links(text, item)
         if item["project_id"] is None and answer_kind == "normal":
             from koi.agent_chat.context_routing import parse_reply
             from koi.agent_chat.conversations import find
