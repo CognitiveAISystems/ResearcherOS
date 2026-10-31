@@ -192,6 +192,20 @@ async def smoke(url):
         assert selected_fill.count('linear-gradient') == 2
         other_dot = comparison.locator('.research-quick-dot')
         assert 'linear-gradient' in await other_dot.evaluate('el => getComputedStyle(el).backgroundImage')
+        shared_gradient = await other_dot.evaluate("""el => {
+            const style = getComputedStyle(el);
+            const list = el.closest('.research-quick-tree-list');
+            const edge = getComputedStyle(list, '::before');
+            return {
+                sameImage: style.backgroundImage === edge.backgroundImage,
+                sameSize: style.backgroundSize === edge.backgroundSize,
+                nodeOrigin: el.getBoundingClientRect().top + parseFloat(style.backgroundPositionY),
+                edgeOrigin: list.getBoundingClientRect().top + 22 + parseFloat(edge.backgroundPositionY),
+            };
+        }""")
+        assert shared_gradient['sameImage'] and shared_gradient['sameSize']
+        assert abs(shared_gradient['nodeOrigin'] - shared_gradient['edgeOrigin']) < 1
+
         assert await first_entry.evaluate('el => el.getBoundingClientRect().height') >= 92
         toggle_before = await panel_toggle.bounding_box()
         await panel_toggle.focus()

@@ -71,6 +71,10 @@ export class ResearchChatNavigation {
     this.searchInput.oninput = event => { this.query = event.target.value; this.renderEntries(); };
     this.host.querySelector('.research-chat-entries').addEventListener('scroll', () => this.scheduleIndicators(), {passive: true});
     new ResizeObserver(() => this.scheduleIndicators()).observe(this.host);
+    if (this.quick) {
+      this.programs.addEventListener('scroll', () => this.scheduleIndicators(), {passive: true});
+      new ResizeObserver(() => this.scheduleIndicators()).observe(this.programs);
+    }
   }
 
   async selectGroup(group) {
@@ -271,6 +275,16 @@ export class ResearchChatNavigation {
 
   paintQuickIndicators() {
     const groups = this.groups();
+    const area = this.programs.getBoundingClientRect();
+    const markers = this.programs.querySelectorAll('.research-quick-dot');
+    const gradientTop = markers[0]?.getBoundingClientRect().top ?? area.top;
+    const gradientBottom = markers[markers.length - 1]?.getBoundingClientRect().bottom ?? area.bottom;
+    this.programs.style.setProperty('--quick-gradient-width', `${area.width}px`);
+    this.programs.style.setProperty('--quick-gradient-height', `${Math.max(1, gradientBottom - gradientTop)}px`);
+    const gradientPosition = (element, x, y) => {
+      element.style.setProperty('--quick-gradient-x', `${area.left - x}px`);
+      element.style.setProperty('--quick-gradient-y', `${gradientTop - y}px`);
+    };
     this.programs.setAttribute('aria-busy', String(Boolean(this.selectingTree)));
     for (const button of this.programs.querySelectorAll('button')) {
       const group = groups.find(g => g.id === button.dataset.programId);
@@ -278,6 +292,9 @@ export class ResearchChatNavigation {
       const rows = this.controller.rows.filter(row => tree ? tree.projectIds.includes(row.project_id) : group?.id === 'all' || !row.project_id);
       const unread = rows.some(row => row.unread);
       const selected = group?.id === this.groupId && (tree ? tree.id === this.tree?.id : true);
+      const dot = button.querySelector('.research-quick-dot');
+      const dotRect = dot.getBoundingClientRect();
+      gradientPosition(dot, dotRect.left, dotRect.top);
       button.disabled = Boolean(this.selectingTree);
       button.setAttribute('aria-pressed', String(selected));
       button.classList.toggle('has-unread', unread);
@@ -288,6 +305,8 @@ export class ResearchChatNavigation {
       }
     }
     for (const list of this.programs.querySelectorAll('.research-quick-tree-list')) {
+      const listRect = list.getBoundingClientRect();
+      gradientPosition(list, listRect.left + listRect.width / 2 - 1.5, listRect.top + 22);
       const buttons = [...list.children];
       const current = buttons.findIndex(button => button.getAttribute('aria-pressed') === 'true');
       list.dataset.current = String(current >= 0);
