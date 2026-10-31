@@ -3223,7 +3223,7 @@ body.hub-readonly .project-list__pull {
   background: color-mix(in srgb, var(--chat-accent-violet) 4%, var(--bg-elevated));
   color: var(--text);
   padding: 0.65rem 1rem;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--chat-accent-violet) 12%, transparent);
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--chat-accent-violet) 22%, transparent), 0 3px 10px color-mix(in srgb, var(--chat-accent-violet) 20%, transparent);
 }
 
 .map-node.problem::before {
