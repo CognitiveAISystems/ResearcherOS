@@ -2528,7 +2528,7 @@ body.hub-readonly .project-list__pull {
 }
 
 .lab-project-nodes.is-active .map-node:not(:focus-visible) {
-  filter: drop-shadow(0 7px 5px var(--tree-lift-shadow)) drop-shadow(0 15px 14px var(--tree-lift-shadow-soft));
+  filter: none;
 }
 
 .lab-tree-edges {
@@ -3185,75 +3185,49 @@ body.hub-readonly .project-list__pull {
   pointer-events: none;
 }
 
-.map-node.problem {
-  --node-ring: linear-gradient(135deg, #fff 0%, var(--pink) 40%, var(--cyan) 100%);
-  background: radial-gradient(ellipse 80% 70% at 35% 28%, #ffffff 0%, #ffe8f8 40%, #c8b8ff 85%);
-  color: #1a0a24;
-  box-shadow: var(--node-shadow-problem);
-  z-index: 10;
-  padding: 0.5rem 0.85rem;
-  border-radius: 50%;
-  min-width: 200px;
+/* Color identifies node type; the surface follows the surrounding UI theme. */
+.map-node.problem { --node-accent: var(--cyan); z-index: 10; }
+.map-node.cause { --node-accent: var(--orange); }
+.map-node.cause_evidence { --node-accent: var(--cyan); }
+.map-node.remediation { --node-accent: var(--purple); }
+.map-node.method { --node-accent: var(--pink); }
+
+.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) {
+  --node-ring: linear-gradient(145deg, var(--node-accent), color-mix(in srgb, var(--node-accent) 75%, var(--purple)));
+  background: color-mix(in srgb, var(--node-accent) 5%, var(--bg-elevated));
+  color: var(--text);
+  border: 1px solid transparent;
+  padding: 0.45rem 0.7rem 0.45rem 0.9rem;
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-heavy) 25%, transparent);
 }
 
-.map-node.problem::before {
+.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method)::before {
   opacity: 1;
-  border-radius: 50%;
 }
 
-.map-node.cause {
-  --node-ring: var(--grad-warm);
-  background: linear-gradient(145deg, rgba(255, 154, 92, 0.95) 0%, rgba(255, 107, 203, 0.9) 100%);
-  box-shadow: var(--node-shadow-cause);
-}
-
-.map-node.cause_evidence {
-  --node-ring: var(--grad-cool);
-  background: linear-gradient(145deg, rgba(61, 232, 255, 0.9) 0%, rgba(123, 92, 255, 0.95) 100%);
-  box-shadow: var(--node-shadow-cause-evidence);
-}
-
-.map-node.remediation {
-  --node-ring: linear-gradient(135deg, var(--purple) 0%, var(--pink) 100%);
-  background: linear-gradient(145deg, rgba(155, 92, 255, 0.95) 0%, rgba(255, 107, 203, 0.85) 100%);
-  box-shadow: var(--node-shadow-remediation);
+.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method)::after {
+  content: "";
+  position: absolute;
+  inset: 5px auto 5px 3px;
+  width: 5px;
   border-radius: 4px;
-  padding: 0.35rem 0.5rem;
+  background: var(--node-ring);
+  pointer-events: none;
 }
 
-.map-node.remediation::before {
-  border-radius: 5px;
-}
+.map-node.remediation .node-label,
+.map-node.method .node-label { font-size: 0.5rem; }
 
-.map-node.remediation .node-label {
-  font-size: 0.5rem;
-  margin-bottom: 0.08rem;
-}
-
-.map-node.remediation .node-title {
-  font-size: 0.62rem;
-  line-height: 1.2;
-}
-
-.map-node.method {
-  --node-ring: var(--grad-cool);
-  background: linear-gradient(
-    145deg,
-    rgba(61, 232, 255, 0.75) 0%,
-    rgba(123, 92, 255, 0.85) 100%
-  );
-  box-shadow: var(--node-shadow-cause-evidence);
-  border-radius: 6px;
-  padding: 0.3rem 0.45rem;
-}
-
-.map-node.method .node-label {
-  font-size: 0.5rem;
-}
-
+.map-node.remediation .node-title,
 .map-node.method .node-title {
   font-size: 0.62rem;
   line-height: 1.2;
+}
+
+@media (hover: hover) {
+  .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method):hover {
+    background: color-mix(in srgb, var(--node-accent) 10%, var(--bg-elevated));
+  }
 }
 
 .node-kanban-below {
@@ -4321,7 +4295,8 @@ body.hub-readonly .project-list__pull {
 }
 
 .map-node.clickable:hover {
-  box-shadow: var(--node-shadow-hover);
+  outline: 2px solid var(--node-accent, var(--purple));
+  outline-offset: 3px;
 }
 
 .map-node .node-label {
@@ -4333,7 +4308,7 @@ body.hub-readonly .project-list__pull {
   margin-bottom: 0.12rem;
 }
 
-.map-node.problem .node-label { color: rgba(60, 30, 80, 0.7); }
+.map-node .node-label { color: var(--text); }
 
 .map-node .node-title {
   font-size: 0.66rem;
@@ -4345,7 +4320,7 @@ body.hub-readonly .project-list__pull {
   word-break: break-word;
   overflow-wrap: anywhere;
   hyphens: auto;
-  text-shadow: var(--node-title-shadow);
+  text-shadow: none;
 }
 
 .map-node.problem .node-title {
