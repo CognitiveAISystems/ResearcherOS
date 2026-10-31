@@ -2519,7 +2519,8 @@ body.hub-readonly .project-list__pull {
 }
 
 .lab-project-nodes:not(.is-active) .map-node:not(:focus-visible) {
-  filter: saturate(0.72);
+  filter: saturate(0.35);
+  opacity: 0.65;
 }
 
 .lab-project-nodes.is-active {
@@ -2528,7 +2529,7 @@ body.hub-readonly .project-list__pull {
 }
 
 .lab-project-nodes.is-active .map-node:not(:focus-visible) {
-  filter: none;
+  filter: drop-shadow(0 7px 5px var(--tree-lift-shadow)) drop-shadow(0 15px 14px var(--tree-lift-shadow-soft));
 }
 
 .lab-tree-edges {
@@ -2568,7 +2569,7 @@ body.hub-readonly .project-list__pull {
 @media (forced-colors: active) {
   .lab-tree-edges .edge { stroke: CanvasText; }
   .lab-tree-edges.is-active .edge:not(.edge-add) { stroke: Highlight; filter: none; }
-  .lab-project-nodes:not(.is-active) .map-node { filter: none; }
+  .lab-project-nodes:not(.is-active) .map-node { filter: none; opacity: 1; }
   .lab-project-nodes.is-active .map-node { filter: none; }
 }
 

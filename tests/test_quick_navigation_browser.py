@@ -241,6 +241,14 @@ async def smoke(url):
         assert await comparison.locator('.research-quick-dot').evaluate('el => getComputedStyle(el).animationName') == 'none'
         assert await demo.locator('.research-quick-dot').evaluate('el => getComputedStyle(el).borderRadius') == '5px'
         await page.emulate_media(reduced_motion='no-preference')
+        active_node = page.locator('.lab-project-nodes.is-active .map-node').first
+        idle_node = page.locator('.lab-project-nodes:not(.is-active) .map-node').first
+        assert 'drop-shadow' in await active_node.evaluate('el => getComputedStyle(el).filter')
+        assert await active_node.evaluate('el => getComputedStyle(el).opacity') == '1'
+        assert float(await idle_node.evaluate('el => getComputedStyle(el).opacity')) < 0.8
+        await idle_node.focus()
+        assert await idle_node.evaluate('el => getComputedStyle(el).opacity') == '1'
+        await demo.focus()
         for theme in ('light',):
             await page.evaluate('theme => document.documentElement.dataset.theme = theme', theme)
             await page.screenshot(path=str(screenshots / f'{theme}.png'), animations='disabled')
