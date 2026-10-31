@@ -3185,12 +3185,15 @@ body.hub-readonly .project-list__pull {
   pointer-events: none;
 }
 
-/* Share the chat palette; node labels identify their research role. */
-.map-node.problem { z-index: 10; }
+/* Distinct research roles drawn from the same three chat accent colors. */
+.map-node.problem { --node-accent: var(--chat-accent-blue); z-index: 10; }
+.map-node.cause { --node-accent: var(--chat-accent-magenta); }
+.map-node.cause_evidence { --node-accent: color-mix(in srgb, var(--chat-accent-blue) 55%, var(--chat-accent-violet)); }
+.map-node.remediation { --node-accent: var(--chat-accent-violet); }
+.map-node.method { --node-accent: color-mix(in srgb, var(--chat-accent-violet) 65%, var(--chat-accent-magenta)); }
 
 .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) {
-  --node-accent: var(--purple);
-  --node-ring: var(--quick-compose-gradient, var(--grad-hero));
+  --node-ring: linear-gradient(145deg, var(--node-accent), color-mix(in srgb, var(--node-accent) 85%, var(--chat-accent-violet)));
   background: color-mix(in srgb, var(--node-accent) 5%, var(--bg-elevated));
   color: var(--text);
   border: 1px solid transparent;
@@ -17716,6 +17719,9 @@ button.kb-doc {
   --quick-node-border: color-mix(in srgb, var(--purple) 28%, var(--bg-elevated));
   --quick-unread: var(--cyan);
   --quick-connector-soft: color-mix(in srgb, var(--quick-node) 45%, var(--bg-elevated));
+  --chat-accent-magenta: var(--pink);
+  --chat-accent-violet: var(--purple);
+  --chat-accent-blue: var(--cyan);
   --quick-compose-gradient: var(--grad-hero);
   --quick-hover: color-mix(in srgb, var(--purple) 4%, var(--bg-elevated));
   --quick-chat-hover: var(--quick-hover);
@@ -17730,7 +17736,10 @@ button.kb-doc {
   --quick-node-border: #c3bdd2;
   --quick-unread: #157bc2;
   --quick-connector-soft: #efedf6;
-  --quick-compose-gradient: linear-gradient(135deg, #c333ad, #7440db 48%, #007bb8);
+  --chat-accent-magenta: #c333ad;
+  --chat-accent-violet: #7440db;
+  --chat-accent-blue: #007bb8;
+  --quick-compose-gradient: linear-gradient(135deg, var(--chat-accent-magenta), var(--chat-accent-violet) 48%, var(--chat-accent-blue));
   --quick-destructive-text: #a32d42;
 }
 .app-tooltip--navigation { pointer-events: none; }
