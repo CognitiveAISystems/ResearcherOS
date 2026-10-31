@@ -17761,7 +17761,7 @@ button.kb-doc {
   --quick-compose-gradient: linear-gradient(135deg, #c333ad, #7440db 48%, #007bb8);
   --quick-destructive-text: #a32d42;
 }
-.app-tooltip--navigation { pointer-events: none; }
+.app-tooltip--navigation { pointer-events: none; border-color: transparent; box-shadow: var(--glow-purple); }
 .research-navigation-error { margin: 0; padding: 8px 16px; color: var(--text); font-size: 12px; }
 .research-navigation-error:empty { display: none; }
 [data-app-variant="quick"], [data-app-variant="quick"] .unified-workspace, [data-app-variant="quick"] .workspace.unified-navigation { height: 100%; min-height: 0; }

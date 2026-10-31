@@ -269,6 +269,9 @@ async def smoke(url):
         await page.locator('#researcheros-tooltip:popover-open').wait_for()
         assert 'Результаты' not in await page.locator('#researcheros-tooltip').inner_text()
         assert 'Текущее' in await page.locator('#researcheros-tooltip').inner_text()
+        assert await page.locator('#researcheros-tooltip').evaluate('el => getComputedStyle(el).borderTopColor') == 'rgba(0, 0, 0, 0)'
+        assert await page.locator('#researcheros-tooltip').evaluate('el => getComputedStyle(el).boxShadow') != 'none'
+        await page.screenshot(path=str(screenshots / 'tree-tooltip-glow.png'), animations='disabled')
         assert (await page.locator('#researcheros-tooltip').bounding_box())['x'] >= (await demo.bounding_box())['x'] + 44
         await page.keyboard.press('Escape')
         await page.wait_for_timeout(2200)
