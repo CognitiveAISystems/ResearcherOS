@@ -219,10 +219,22 @@ async def smoke(url):
         assert all(abs(item['height'] - item['expected']) < 1 for item in program_gradients)
         assert all(item['top'] == '0px' for item in program_gradients)
         await demo.focus()
+        await page.keyboard.press('Tab')
+        await page.keyboard.press('Shift+Tab')
+        assert await demo.evaluate('el => el === document.activeElement')
         assert await demo.evaluate('el => getComputedStyle(el).outlineStyle') == 'none'
-        assert await selected_dot.evaluate('el => getComputedStyle(el).borderTopStyle') == 'solid'
+        assert 'drop-shadow' in await selected_dot.evaluate('el => getComputedStyle(el).filter')
 
 
+        await heading.click()
+        await page.mouse.move(800, 80)
+        marker_border = await other_dot.evaluate('el => getComputedStyle(el).borderTopWidth')
+        await comparison.hover()
+        assert await comparison.evaluate('el => getComputedStyle(el).backgroundColor') == 'rgba(0, 0, 0, 0)'
+        assert await other_dot.evaluate('el => getComputedStyle(el).borderTopWidth') == marker_border
+        assert 'drop-shadow' in await other_dot.evaluate('el => getComputedStyle(el).filter')
+        await page.screenshot(path=str(screenshots / 'tree-node-hover-glow.png'), animations='disabled')
+        await page.mouse.move(800, 80)
         assert await first_entry.evaluate('el => el.getBoundingClientRect().height') >= 92
         toggle_before = await panel_toggle.bounding_box()
         await panel_toggle.focus()

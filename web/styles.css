@@ -17808,7 +17808,7 @@ button.kb-doc {
 .research-quick-tree-list[data-current="true"]::before { background: linear-gradient(180deg, var(--quick-node) max(0%, calc(var(--quick-current-position) - 33%)), var(--bg-elevated) var(--quick-current-position), var(--quick-node) min(100%, calc(var(--quick-current-position) + 33%))); }
 .research-quick-tree { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .research-quick-dot { position: relative; width: 14px; height: 14px; border: 1px solid var(--quick-node-border); border-radius: 4px; background: var(--quick-node); pointer-events: none; }
-.research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 0 3px var(--quick-rail), 0 0 12px 4px color-mix(in srgb, var(--quick-unread) 24%, transparent); }
+.research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 12px 4px color-mix(in srgb, var(--quick-unread) 24%, transparent); }
 /* Each program owns one continuous gradient for its nodes and connectors. */
 [data-app-variant="quick"] .workspace:is(:not(.is-chat-list-hidden), .is-chat-open) .research-quick-tree[aria-pressed="false"] .research-quick-dot,
 [data-app-variant="quick"] .workspace:is(:not(.is-chat-list-hidden), .is-chat-open) .research-quick-tree-list::before {
@@ -17822,7 +17822,7 @@ button.kb-doc {
 .research-quick-tree.has-unread .research-quick-dot::after { content: ""; position: absolute; inset-inline-end: -5px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--quick-unread); box-shadow: 0 0 0 2px var(--quick-rail); }
 .research-quick-compose:focus-visible, .research-quick-create-tree:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
 .research-quick-tree:focus-visible { outline: none; }
-.research-quick-tree:focus-visible .research-quick-dot { border: 2px solid var(--text); }
+.research-quick-tree:focus-visible .research-quick-dot { filter: drop-shadow(0 0 4px var(--purple)); }
 .research-quick-tree:disabled, .research-quick-create-tree:disabled { opacity: 0.45; cursor: not-allowed; }
 [data-app-variant="quick"] .research-chat-section-content { padding-inline-start: 0; }
 [data-app-variant="quick"] .research-chat-browser:not(.is-searching) .research-chat-section > h3 { display: none; }
@@ -17856,7 +17856,9 @@ button.kb-doc {
 [data-app-variant="quick"] .conversation-action-note { margin: 0; padding: 4px 12px 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 @media (hover: hover) {
   [data-app-variant="quick"] .research-chat-add:not(:disabled):hover { background: var(--quick-compose-gradient); }
-  .research-quick-tree:not(:disabled):hover, [data-app-variant="quick"] .workspace.compact-chat .research-quick-create-tree:not(:disabled):hover { background: var(--quick-hover); }
+  .research-quick-tree:not(:disabled):hover { background: transparent; }
+  .research-quick-tree:not(:disabled):hover .research-quick-dot { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--purple) 55%, transparent)); }
+  [data-app-variant="quick"] .workspace.compact-chat .research-quick-create-tree:not(:disabled):hover { background: var(--quick-hover); }
   [data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry-row:hover { background: var(--quick-chat-hover); }
   [data-app-variant="quick"] .conversation-entry-menu:hover { background: transparent; color: var(--muted); }
   [data-app-variant="quick"] .research-chat-show-all:hover { background: transparent; }
@@ -17873,7 +17875,8 @@ button.kb-doc {
   [data-app-variant="quick"] .research-chat-entries .conversation-entry-row::after { inset-inline-start: 8px; }
 }
 @media (forced-colors: active) {
-  .research-quick-tree[aria-pressed="true"] .research-quick-dot { outline: 2px solid Highlight; outline-offset: 2px; }
+  .research-quick-tree[aria-pressed="true"] .research-quick-dot,
+  .research-quick-tree:focus-visible .research-quick-dot { outline: 2px solid Highlight; outline-offset: 2px; filter: none; }
   .research-quick-tree.has-unread .research-quick-dot::after { background: Highlight; border: 1px solid CanvasText; }
 }
 
