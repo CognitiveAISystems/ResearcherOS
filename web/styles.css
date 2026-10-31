@@ -3197,8 +3197,8 @@ body.hub-readonly .project-list__pull {
   background: color-mix(in srgb, var(--node-accent) 5%, var(--bg-elevated));
   color: var(--text);
   border: 1px solid transparent;
-  padding: 0.45rem 0.7rem 0.45rem 0.9rem;
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-heavy) 25%, transparent);
+  padding: 0.55rem 0.7rem 0.55rem 1.5rem;
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--node-accent) 22%, transparent), 0 2px 5px color-mix(in srgb, var(--shadow-heavy) 15%, transparent);
 }
 
 .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method)::before {
@@ -3208,15 +3208,32 @@ body.hub-readonly .project-list__pull {
 .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method)::after {
   content: "";
   position: absolute;
-  inset: 5px auto 5px 3px;
-  width: 5px;
-  border-radius: 4px;
+  inset: -1px auto -1px -1px;
+  width: 16px;
+  border-radius: inherit;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
   background: var(--node-ring);
   pointer-events: none;
 }
 
-.map-node.remediation .node-label,
-.map-node.method .node-label { font-size: 0.5rem; }
+/* External role label leaves the tinted surface for the research statement. */
+.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) .node-label {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 16px;
+  margin: 0;
+  max-width: calc(100% - 20px);
+  text-align: left;
+  font-size: 0.55rem;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  opacity: 1;
+}
+
+.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) .node-title {
+  font-weight: 500;
+}
 
 .map-node.remediation .node-title,
 .map-node.method .node-title {
