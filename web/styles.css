@@ -17808,9 +17808,9 @@ button.kb-doc {
 .research-quick-tree-list[data-current="true"]::before { background: linear-gradient(180deg, var(--quick-node) max(0%, calc(var(--quick-current-position) - 33%)), var(--bg-elevated) var(--quick-current-position), var(--quick-node) min(100%, calc(var(--quick-current-position) + 33%))); }
 .research-quick-tree { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .research-quick-dot { position: relative; width: 14px; height: 14px; border: 1px solid var(--quick-node-border); border-radius: 4px; background: var(--quick-node); pointer-events: none; }
-.research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 0 3px var(--quick-rail); }
-/* Filled selection means this tree's chat list is currently visible. */
-[data-app-variant="quick"] .workspace:not(.is-chat-list-hidden):not(.is-chat-open) .research-quick-tree[aria-pressed="true"] .research-quick-dot { background: var(--quick-compose-gradient); box-shadow: 0 0 0 3px var(--quick-rail), var(--glow-purple); }
+.research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 0 3px var(--quick-rail), 0 0 12px 4px color-mix(in srgb, var(--quick-unread) 24%, transparent); }
+/* Other trees use the shared gradient while chat navigation is expanded. */
+[data-app-variant="quick"] .workspace:not(.is-chat-list-hidden):not(.is-chat-open) .research-quick-tree[aria-pressed="false"] .research-quick-dot { background: var(--quick-compose-gradient); border-color: transparent; }
 .research-quick-tree.has-unread .research-quick-dot::after { content: ""; position: absolute; inset-inline-end: -5px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--quick-unread); box-shadow: 0 0 0 2px var(--quick-rail); }
 .research-quick-tree:focus-visible, .research-quick-compose:focus-visible, .research-quick-create-tree:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
 .research-quick-tree:disabled, .research-quick-create-tree:disabled { opacity: 0.45; cursor: not-allowed; }
