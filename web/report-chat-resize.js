@@ -40,11 +40,11 @@ export function attachMainChatResize(panel, api) {
   handle.title = 'Потяните границу, чтобы изменить ширину. Двойной щелчок — стандартная ширина.'; handle.setAttribute('aria-controls', panel.id);
   panel.append(handle);
   const compact = workspace.classList.contains("compact-chat");
-  const defaultWidth = compact ? 400 : 960;
+  const defaultWidth = compact ? (document.documentElement.dataset.appVariant === "quick" ? 460 : 400) : 960;
   let preferred = defaultWidth, drag, edited = false;
   const minimum = () => Math.min(compact ? 340 : 640, workspace.clientWidth - 180);
   const maximum = () => Math.max(minimum(), Math.min(compact ? 720 : Infinity, workspace.clientWidth - 180));
-  const width = () => panel.getBoundingClientRect().width;
+  const width = () => panel.offsetWidth;
   const render = () => {
     const next = Math.round(Math.max(minimum(), Math.min(maximum(), preferred)));
     panel.style.setProperty('--main-chat-width', `${next}px`);
@@ -59,12 +59,12 @@ export function attachMainChatResize(panel, api) {
   handle.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
     event.preventDefault(); handle.focus();
-    drag = {x: event.clientX, width: width(), direction: getComputedStyle(workspace).direction === 'rtl' ? 1 : -1};
+    drag = {x: event.clientX, width: width(), scale: panel.getBoundingClientRect().width / width(), direction: getComputedStyle(workspace).direction === 'rtl' ? 1 : -1};
     handle.setPointerCapture(event.pointerId);
   });
   handle.addEventListener('pointermove', event => {
     if (!drag) return;
-    preferred = drag.width + (drag.x - event.clientX) * drag.direction; render();
+    preferred = drag.width + (drag.x - event.clientX) / drag.scale * drag.direction; render();
   });
   handle.addEventListener('lostpointercapture', () => { if (drag) { drag = null; save(); } });
   handle.addEventListener('keydown', event => {

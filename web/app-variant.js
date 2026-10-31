@@ -11,9 +11,11 @@ function mountVariantSettings() {
       <form>
         <h2 id="app-variant-title">Режим интерфейса</h2>
         <p id="app-variant-description">Данные исследований сохраняются при переключении режима.</p>
+        <button type="button" class="btn" data-manage-trees hidden>Управление деревьями</button>
         <fieldset>
           <legend class="sr-only">Выберите режим</legend>
           <label><input type="radio" name="ui_variant" value="chats" checked /> <span><strong>Чаты</strong><small>Разговоры и программы всегда под рукой в боковой панели.</small></span></label>
+          <label><input type="radio" name="ui_variant" value="quick" /> <span><strong>Quick navigation</strong><small>Компактная навигация по деревьям и их чатам.</small></span></label>
           <label><input type="radio" name="ui_variant" value="light" /> <span><strong>Light</strong><small>Классический интерфейс: карта, канбан и отчёты.</small></span></label>
         </fieldset>
         <p role="status" aria-live="polite"></p>
@@ -61,7 +63,10 @@ export async function initAppVariant(api, prepareSwitch) {
   stylesheet.href = new URL("./app-variant.css", import.meta.url).href;
   document.head.append(stylesheet);
   let variant = "chats";
-  try { variant = (await api.getSettings()).ui_variant === "light" ? "light" : "chats"; }
+  try {
+    const saved = (await api.getSettings()).ui_variant;
+    if (["chats", "quick", "light"].includes(saved)) variant = saved;
+  }
   catch { /* Keep the existing interface available when settings are offline. */ }
   document.documentElement.dataset.appVariant = variant;
   const trigger = document.getElementById("btn-app-variant");
@@ -72,11 +77,18 @@ export async function initAppVariant(api, prepareSwitch) {
   const cancel = dialog.querySelector('[data-cancel]');
   let saving = false;
   trigger.hidden = false;
-  trigger.title = `Режим интерфейса: ${variant === "light" ? "Light" : "Чаты"}`;
+  trigger.title = `Режим интерфейса: ${{light: "Light", quick: "Quick navigation", chats: "Чаты"}[variant]}`;
   trigger.onclick = () => {
     form.elements.ui_variant.value = variant;
     status.textContent = "";
+    dialog.querySelector("[data-manage-trees]").disabled = Boolean(document.querySelector(".research-manage")?.disabled);
     dialog.showModal();
+  };
+  const manage = dialog.querySelector('[data-manage-trees]');
+  manage.hidden = variant !== 'quick';
+  manage.onclick = () => {
+    dialog.close();
+    document.querySelector('.research-manage')?.click();
   };
   cancel.onclick = () => dialog.close();
   dialog.addEventListener("cancel", event => { if (saving) event.preventDefault(); });

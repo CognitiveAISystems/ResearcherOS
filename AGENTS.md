@@ -54,6 +54,7 @@ python -m koi.projects.install_cli install <name> --create # пустой про
 
 | Задача | Как |
 |--------|-----|
+| Любая операция с Cryri Jobs | Обязательный скилл **koi-cryri-jobs**: общий реестр в `tree/cryri-jobs.md`, проверка принадлежности, мониторинг GPU, подтверждение перед остановкой |
 | Подключить существующий code-репо к ResearchOS | скилл **koi-project-onboard** — диалог → brief → clarity → prose → писать в `tree/<repo>/koi-structure/`; затем **`install_cli install <repo>`** (orphan `koi/research` + tree worktree) |
 | Только layout / ветка koi/research без онбординга | `python -m koi.projects.install_cli install <repo>` |
 | Синхронизация research-данных | скилл **koi-project-sync** / `sync_cli push|pull` (working copy = `tree/<repo>/koi-structure`) |

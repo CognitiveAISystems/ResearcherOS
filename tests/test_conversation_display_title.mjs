@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const source = await readFile(new URL('../web/chat-conversations.js', import.meta.url), 'utf8');
+const { conversationDisplayTitle: clean } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+assert.equal(clean('/[koi-reader-rewrite](/Users/zoya/project...'), 'koi-reader-rewrite');
+assert.equal(clean('/[koi-reader-rewrite] (/Users/zoya/project...'), 'koi-reader-rewrite');
+assert.equal(clean('[Документ](/home/user/report.md) — обсудим'), 'Документ — обсудим');
+assert.equal(clean('Можем расписать эту карточку?'), 'Можем расписать эту карточку?');
+assert.equal(clean('Сравнить [A] и [B]'), 'Сравнить [A] и [B]');
+console.log('PASS: display titles strip link markup and truncated paths without renaming conversations');

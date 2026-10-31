@@ -7,7 +7,7 @@ from koi.adapters import settings_store
 from koi.agent_chat.settings import settings_snapshot
 
 
-@pytest.mark.parametrize("variant", ["chats", "light"])
+@pytest.mark.parametrize("variant", ["chats", "quick", "light"])
 def test_variant_persists_across_settings_reload(monkeypatch, tmp_path, variant):
     monkeypatch.setattr(settings_store, "ENV_PATH", tmp_path / "settings.env")
     monkeypatch.setenv("KOI_UI_VARIANT", "chats")

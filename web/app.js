@@ -2708,7 +2708,7 @@ function initViewControls() {
   updateViewChrome();
 }
 
-async function focusLabProject(projectId, { animate = false, reload = false } = {}) {
+async function focusLabProject(projectId, { animate = false, reload = false, fitTree = false } = {}) {
   if (!state.lab?.projectsById) return;
   if (ensureLabTreeVisible(projectId)) {
     void loadProjectList(projectId);
@@ -2741,7 +2741,7 @@ async function focusLabProject(projectId, { animate = false, reload = false } = 
   updateAgentChatScope();
   void refreshAgentChat();
   const mode = getViewMode();
-  if (mode === "teamlead") {
+  if (mode === "teamlead" && !fitTree) {
     renderLabMindmap({ fitProgram: true, flyAnimate: animate });
   } else {
     renderLabMindmap({
@@ -9170,6 +9170,7 @@ function initUnifiedNavigation() {
   sidebar.replaceChildren(management);
   const openList = () => {
     workspace.classList.remove("is-chat-list-hidden", "is-managing-trees");
+    researchChatNavigation.host.append(actions);
     toggleAgentChatPanel(false);
   };
   researchChatNavigation = new ResearchChatNavigation({ sidebar,
@@ -9190,12 +9191,25 @@ function initUnifiedNavigation() {
     },
     chooseTree: id => {
       if (id === "global") return;
-      if (state.lab?.projectsById?.[id]) return focusLabProject(id, {animate: true});
+      if (state.lab?.projectsById?.[id]) return focusLabProject(id, {animate: true, fitTree: researchChatNavigation.quick});
       if (isCompositeVirtualId(id)) return switchComposite(id.slice("composite:".length));
       return switchProject(id);
+    },
+    leaveContext: async () => {
+      if (!document.getElementById("card-report-modal").classList.contains("hidden")) {
+        await closeReportModal();
+        if (!document.getElementById("card-report-modal").classList.contains("hidden")) return false;
+      }
+      hideModal("kanban-modal");
+      await syncWorkspaceChatContext();
     }, openList, collapse: toggleWorkspaceSidebar
   });
   researchChatNavigation.host.append(actions);
+  if (researchChatNavigation.quick) {
+    createProject.className = 'btn conversation-icon-button research-quick-create-tree';
+    createProject.replaceChildren(createProject.querySelector('svg'));
+    document.getElementById('btn-app-variant').before(createProject);
+  }
   for (const type of ["pointerdown", "wheel"]) document.getElementById("mindmap-viewport").addEventListener(type, () => {
     researchChatNavigation.followActive = true;
   }, {passive: true});
@@ -9209,6 +9223,7 @@ function initUnifiedNavigation() {
     renderUnifiedNavigation();
   };
   layout.querySelector(".conversation-rail").insertBefore(manage, themeToggle);
+  if (researchChatNavigation.quick) document.getElementById('btn-app-variant').replaceChildren(manage.firstElementChild.cloneNode(true));
   const chatHeader = panel.querySelector(".agent-chat-header");
   const back = document.getElementById("btn-chat-collapse"); back.setAttribute("aria-label", "Вернуться к чатам"); back.title = "Вернуться к чатам";
   chatHeader.prepend(back);
@@ -9508,7 +9523,7 @@ function setTheme(theme) {
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  const theme = stored === "dark" ? "dark" : "light";
+  const theme = document.documentElement.dataset.appVariant !== "quick" && stored === "dark" ? "dark" : "light";
   if (theme === "light") {
     document.documentElement.setAttribute("data-theme", "light");
   } else {

@@ -64,11 +64,18 @@ function show(element) {
   if (anchor !== element) hide();
   anchor = element;
   tip.textContent = element.dataset.tooltip;
+  tip.classList.toggle('app-tooltip--navigation', element.dataset.tooltipSide === 'right');
   if (described === undefined) described = element.getAttribute('aria-describedby') || '';
   element.setAttribute('aria-describedby', [described, tip.id].filter(Boolean).join(' '));
   tip.showPopover();
   const rect = element.getBoundingClientRect();
+  tip.style.maxWidth = element.dataset.tooltipSide === 'right' ? `${Math.min(320, Math.max(100, innerWidth - rect.right - 44))}px` : '';
   const size = tip.getBoundingClientRect();
+  if (element.dataset.tooltipSide === 'right') {
+    tip.style.left = `${Math.max(8, Math.min(innerWidth - size.width - 8, rect.right + 10))}px`;
+    tip.style.top = `${Math.max(8, Math.min(innerHeight - size.height - 8, rect.top + (rect.height - size.height) / 2))}px`;
+    return;
+  }
   tip.style.left = `${Math.max(8, Math.min(innerWidth - size.width - 8, rect.left + (rect.width - size.width) / 2))}px`;
   tip.style.top = `${Math.max(8, rect.top >= size.height + 16 ? rect.top - size.height - 8 : Math.min(innerHeight - size.height - 8, rect.bottom + 8))}px`;
 }

@@ -16,7 +16,7 @@
     radial-gradient(circle at 84% 76%, rgba(38, 173, 220, .18), transparent 32%),
     #e7e7f0;
   color: #1b2430;
-  font-family: "Outfit", system-ui, sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
   color-scheme: light;
 }
 
@@ -49,7 +49,7 @@
   background: linear-gradient(90deg, #ae2d9f, #7663d9, #078db5);
   background-clip: text;
   color: transparent;
-  font-family: "Syne", "Outfit", sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
   font-size: 16px;
   font-weight: 800;
   letter-spacing: .16em;
@@ -58,7 +58,7 @@
 
 .desktop-onboarding__header h1 {
   margin: 12px 0 0;
-  font-family: "Syne", "Outfit", sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
   font-size: clamp(28px, 4vw, 42px);
   line-height: 1.08;
 }
@@ -123,7 +123,7 @@
 
 .desktop-onboarding__panel-title {
   margin: 0;
-  font-family: "Syne", "Outfit", sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
   font-size: clamp(22px, 3vw, 28px);
   line-height: 1.25;
 }

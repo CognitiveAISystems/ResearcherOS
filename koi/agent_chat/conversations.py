@@ -39,7 +39,10 @@ def _save(rows):
 def list_conversations(project_id=None, board_id=None, card_id=None):
     with LOCK:
         stored = _load()
-        rows = {r["id"]: {**r, "pending": False, "agent_active": False} for r in stored}
+        rows = {r["id"]: {**r, "pending": False, "agent_active": False,
+                          "last_message_preview": "", "last_message_role": "user"} for r in stored}
+        answer_times = {}
+        preview_times = {}
         for item in sorted(queue._load(), key=lambda i: i["enqueued_at"]):
             cid = item_conversation(item)
             if cid not in rows:
@@ -47,12 +50,19 @@ def list_conversations(project_id=None, board_id=None, card_id=None):
                     "board_id": item.get("board_id"), "card_id": item.get("card_id"),
                     "title": item["question"][:80], "created_at": item["enqueued_at"],
                     "backend": item.get("cli_agent")}
-            rows[cid]["updated_at"] = item.get("answered_at") or item["enqueued_at"]
+            timestamp = item.get("answered_at") or item["enqueued_at"]
+            if timestamp >= preview_times.get(cid, ""):
+                preview_times[cid] = timestamp
+                answer = item.get("answer") if item["status"] == "answered" else None
+                rows[cid].update(updated_at=timestamp,
+                    last_message_preview=" ".join((answer or item["question"]).split())[:240],
+                    last_message_role="assistant" if answer else "user")
             rows[cid]["pending"] = rows[cid].get("pending", False) or item["status"] != "answered"
             rows[cid]["agent_active"] = rows[cid].get("agent_active", False) or queue.agent_active(item)
             if item["status"] == "answered" and item.get("answered_at") and not (
                 item.get("purpose") == "git_notice" and (item.get("git_notice_version") or 0) < 3
             ):
+                answer_times.setdefault(cid, []).append(item["answered_at"])
                 if item["answered_at"] > rows[cid].get("latest_answer_at", ""):
                     rows[cid].update(latest_answer_at=item["answered_at"], latest_answer_id=item["id"])
         # Establish a baseline once, so installing unread tracking does not light up old history.
@@ -61,11 +71,12 @@ def list_conversations(project_id=None, board_id=None, card_id=None):
             if "read_through" not in row:
                 saved = next((r for r in stored if r["id"] == row["id"]), None)
                 if saved is None:
-                    saved = {k: v for k, v in row.items() if k not in ("pending", "agent_active", "latest_answer_at", "latest_answer_id")}
+                    saved = {k: v for k, v in row.items() if k not in ("pending", "agent_active", "latest_answer_at", "latest_answer_id", "last_message_preview", "last_message_role")}
                     stored.append(saved)
                 row["read_through"] = saved["read_through"] = row.get("latest_answer_at", "")
                 migrated = True
             row["unread"] = row.get("latest_answer_at", "") > row["read_through"]
+            row["unread_count"] = sum(timestamp > row["read_through"] for timestamp in answer_times.get(row["id"], []))
         if migrated:
             _save(stored)
         return sorted((r for r in rows.values()

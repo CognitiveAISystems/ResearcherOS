@@ -29,15 +29,20 @@ _ws = get_workspace()
 
 def _sdk_prompt(item_id: str) -> str:
     ctx = build_context(item_id)
-    if "project_id" in ctx and ctx["project_id"] is None:
+    if "project_id" in ctx and ctx["project_id"] is None and ctx.get("purpose", "agent") in ("agent", "prose", "run"):
         from koi.agent_chat.context_routing import INSTRUCTIONS
         return (
             "Ты агент ResearcherOS. Дерево для этого чата ещё не выбрано. "
             + ("Программа уже выбрана; работай только с деревьями этой программы. " if ctx.get("program_id") else
                "Запрос может касаться всех исследований рабочего пространства. ")
             + "В контексте дан список проектов и пути "
-            "к их исследовательским материалам. Изучи нужные research.json и отчёты, "
-            "ссылайся на найденные результаты. Не приписывай вопрос текущему проекту интерфейса. "
+            "к их исследовательским материалам. Выполни запрос человека: отвечай на вопросы "
+            "и по его поручению редактируй деревья, карточки и отчёты по указанным путям. "
+            "Прочитай AGENTS.md и применимые skills перед правкой. Перед каждой записью "
+            "перечитывай файл и учитывай правки человека. Для вопросов о результатах изучи "
+            "нужные research.json и отчёты, ссылайся на найденные результаты. "
+            "Не приписывай вопрос текущему проекту интерфейса. "
+            "После правки назови изменённые файлы и проверку; не заявляй о работе, которой не сделал. "
             + INSTRUCTIONS + "\n"
             + "Ответь по-русски.\n\nКонтекст:\n" + json.dumps(ctx, ensure_ascii=False, indent=2)
         )
@@ -339,7 +344,7 @@ def _process_item(item_id: str) -> bool:
             prompt += ("\n\nПеред длительными действиями и по мере появления важных результатов "
                        "отправляй короткие промежуточные сообщения для пользователя. "
                        "В конце дай итоговый ответ.")
-        allow_edits = general_chat and item.get("project_id") is not None
+        allow_edits = general_chat
         local_kwargs = {"mode": None, "force": True} if allow_edits else {}
         if chosen:
             local_kwargs["cli_agent"] = chosen

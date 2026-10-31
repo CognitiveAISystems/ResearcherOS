@@ -146,13 +146,17 @@ ipcMain.handle('researchos:request-microphone', async () => {
 app.whenReady().then(async () => {
   try {
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-      const localPage = !!serverUrl && webContents.getURL().startsWith(serverUrl);
+      const localPage = !!serverUrl && webContents?.getURL().startsWith(`${serverUrl}/`);
       const audioOnly = details?.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio';
-      callback(permission === 'media' && localPage && audioOnly);
+      const clipboardWrite = permission === 'clipboard-sanitized-write' && details?.requestingUrl?.startsWith(`${serverUrl}/`);
+      callback(localPage && (clipboardWrite || (permission === 'media' && audioOnly)));
     });
     session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-      const localPage = !!serverUrl && webContents?.getURL().startsWith(serverUrl);
-      return permission === 'media' && localPage && requestingOrigin.startsWith(serverUrl) && details?.mediaType === 'audio';
+      const localPage = !!serverUrl && webContents?.getURL().startsWith(`${serverUrl}/`);
+      return localPage && requestingOrigin === serverUrl && (
+        permission === 'clipboard-sanitized-write' ||
+        (permission === 'media' && details?.mediaType === 'audio')
+      );
     });
     createWindow(await startServer());
   } catch (error) {

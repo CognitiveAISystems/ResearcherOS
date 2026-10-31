@@ -1,8 +1,17 @@
+// Clean display-only Markdown links, including paths cut off by stored title limits.
+export function conversationDisplayTitle(title) {
+  return String(title || '')
+    .replace(/\/?\[([^\]]+)\]\s*\((?:[^)]*)\)/g, '$1')
+    .replace(/\/?\[([^\]]+)\]\s*\((?:\/Users\/|\/home\/|file:)[^)]*$/g, '$1')
+    .trim();
+}
+
 const ICONS = {
   compose: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/>',
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 10h18"/>',
   chat: '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8Z"/>',
   card: '<rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h6M8 16h4"/>',
+  trash: '<path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/>',
 };
 
 function icon(name) {
@@ -88,7 +97,7 @@ export class ChatConversations {
       const menu = sidebar.querySelector('.conversation-actions-popover:popover-open');
       if (event.key !== "Escape" || !menu) return;
       event.preventDefault(); event.stopImmediatePropagation(); menu.hidePopover();
-      menu.parentElement.querySelector('[data-chat-menu]').focus();
+      menu.parentElement.querySelector('[data-chat-menu], [data-conversation]')?.focus();
     }, true);
     sidebar.addEventListener("click", event => {
       const button = event.target.closest("[data-conversation]");
@@ -372,7 +381,7 @@ export class ChatConversations {
     const heading = this.layout.querySelector("[data-conversation-title]");
     const subtitle = this.layout.querySelector("[data-conversation-context]");
     const scope = this.row || this.contextScope;
-    if (heading) heading.textContent = this.titleForScope ? this.titleForScope(scope) : this.row?.title || "Новый чат";
+    if (heading) heading.textContent = this.titleForScope ? this.titleForScope(scope) : conversationDisplayTitle(this.row?.title) || "Новый чат";
     if (subtitle) subtitle.textContent = this.main
       ? [scope?.project_id ? this.projectName(scope.project_id) : "Без проекта", scope?.card_id ? "Карточка" : scope?.board_id ? "Метод" : ""].filter(Boolean).join(" · ")
       : "Чат карточки";
@@ -536,7 +545,7 @@ export class ChatConversations {
     dialog.setAttribute("aria-labelledby", titleId);
     dialog.setAttribute("aria-describedby", titleId + "-name " + titleId + "-description");
     dialog.innerHTML = `<form><h2 id="${titleId}">Удалить чат?</h2><p id="${titleId}-name" class="conversation-delete-name"></p><p id="${titleId}-description">Вся переписка будет удалена без возможности восстановления.</p><p class="conversation-delete-error" role="alert" hidden></p><div class="form-actions"><button type="button" class="btn" data-dismiss>Отмена</button><button type="submit" class="btn btn-danger">Удалить</button></div></form>`;
-    dialog.querySelector('.conversation-delete-name').textContent = row.title;
+    dialog.querySelector('.conversation-delete-name').textContent = conversationDisplayTitle(row.title);
     const cancel = dialog.querySelector('[data-dismiss]'), submit = dialog.querySelector('[type=submit]');
     cancel.onclick = () => dialog.close();
     dialog.addEventListener('close', () => {
@@ -570,10 +579,10 @@ export class ChatConversations {
     button.setAttribute("aria-pressed", String(row.id === this.row?.id));
     button.classList.toggle('has-unread', Boolean(row.unread));
     button.classList.toggle('has-activity', Boolean(row.agent_active));
-    button.title = [row.title, this.status(row)].filter(Boolean).join(' · ');
+    button.title = [conversationDisplayTitle(row.title), this.status(row)].filter(Boolean).join(' · ');
     button.setAttribute('aria-label', button.title);
     const title = document.createElement("span"); title.className = "conversation-entry-title";
-    title.textContent = row.title;
+    title.textContent = conversationDisplayTitle(row.title);
     const text = document.createElement("span"); text.className = "conversation-entry-text";
     text.append(title);
     if (this.status(row) && !this.renderNavigation) {
@@ -584,18 +593,34 @@ export class ChatConversations {
     const dot = document.createElement('span'); dot.className = 'chat-status-dot'; dot.setAttribute('aria-hidden', 'true'); button.append(dot);
     if (!this.api.deleteConversation) return button;
     const wrapper = document.createElement('div'); wrapper.className = 'conversation-entry-row';
-    const trigger = document.createElement('button'); trigger.type = 'button';
-    trigger.className = 'conversation-entry-menu'; trigger.dataset.chatMenu = row.id;
-    trigger.setAttribute('aria-label', 'Действия с чатом'); trigger.title = 'Действия с чатом';
-    trigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+    const quick = document.documentElement.dataset.appVariant === 'quick';
+    const trigger = quick ? button : document.createElement('button');
+    if (!quick) {
+      trigger.type = 'button';
+      trigger.className = 'conversation-entry-menu'; trigger.dataset.chatMenu = row.id;
+      trigger.setAttribute('aria-label', 'Действия с чатом'); trigger.title = 'Действия с чатом';
+      trigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+    }
     const menu = document.createElement('div'); menu.className = 'conversation-actions-popover';
     menu.id = 'chat-actions-' + crypto.randomUUID(); menu.setAttribute('popover', 'auto');
-    trigger.setAttribute('popovertarget', menu.id);
+    if (!quick) trigger.setAttribute('popovertarget', menu.id);
+    else { trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-controls', menu.id); }
+    trigger.setAttribute('aria-expanded', 'false');
+    if (quick) { menu.tabIndex = -1; menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', 'Действия с чатом'); }
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'conversation-delete-action';
     remove.textContent = 'Удалить чат'; remove.disabled = Boolean(row.pending);
     if (row.pending) remove.title = 'Дождитесь завершения ответа перед удалением чата';
     remove.onclick = () => { menu.hidePopover(); this.confirmDelete(row, trigger); };
     menu.append(remove);
+    if (quick) {
+      remove.classList.add('conversation-delete-action--danger');
+      remove.prepend(icon('trash'));
+      if (row.pending) {
+        const note = document.createElement('p'); note.className = 'conversation-action-note';
+        note.id = menu.id + '-note'; note.textContent = 'Пока агент отвечает, чат нельзя удалить.';
+        menu.setAttribute('aria-describedby', note.id); menu.append(note);
+      }
+    }
     const blink = document.createElement('button'); blink.type = 'button'; blink.className = 'conversation-delete-action';
     blink.onclick = () => {
       const value = document.documentElement.dataset.chatBlink === 'off' ? 'on' : 'off';
@@ -603,20 +628,40 @@ export class ChatConversations {
       try { localStorage.setItem('researchos-chat-blink', value); } catch { /* Private storage. */ }
       menu.hidePopover(); trigger.focus();
     };
-    menu.append(blink);
+    if (!quick) menu.append(blink);
+    let menuPoint;
+    if (quick) {
+      wrapper.addEventListener('contextmenu', event => {
+        if (menu.contains(event.target)) return;
+        event.preventDefault();
+        menuPoint = { x: event.clientX, y: event.clientY };
+        // Chromium may dispatch contextmenu before pointerup, which dismisses an auto popover.
+        if (event.buttons & 2) wrapper.addEventListener('pointerup', () => {
+          setTimeout(() => { if (menu.isConnected) menu.showPopover({source: button}); }, 0);
+        }, {once: true});
+        else menu.showPopover({source: button});
+      });
+      button.addEventListener('keydown', event => {
+        if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+        event.preventDefault(); menuPoint = null; menu.showPopover({source: button});
+      });
+    }
     menu.addEventListener('beforetoggle', event => {
+      trigger.setAttribute('aria-expanded', String(event.newState === 'open'));
       if (event.newState !== 'open') return;
       blink.textContent = document.documentElement.dataset.chatBlink === 'off' ? 'Включить мигание' : 'Отключить мигание';
       const rect = trigger.getBoundingClientRect();
-      menu.style.left = `${Math.max(8, Math.min(innerWidth - 208, rect.right - 200))}px`;
-      menu.style.top = `${Math.max(8, Math.min(innerHeight - 64, rect.bottom + 4))}px`;
+      menu.style.left = `${Math.max(8, Math.min(innerWidth - 208, (menuPoint?.x ?? rect.right - 200)))}px`;
+      menu.style.top = `${Math.max(8, Math.min(innerHeight - 64, (menuPoint?.y ?? rect.bottom + 4)))}px`;
     });
     menu.addEventListener('toggle', event => {
       if (event.newState !== 'open') return;
       menu.style.top = `${Math.max(8, Math.min(parseFloat(menu.style.top), innerHeight - menu.getBoundingClientRect().height - 8))}px`;
-      (remove.disabled ? blink : remove).focus();
+      (quick ? menu : remove.disabled ? blink : remove).focus({preventScroll: true});
     });
-    wrapper.append(button, trigger, menu);
+    wrapper.append(button);
+    if (!quick) wrapper.append(trigger);
+    wrapper.append(menu);
     return wrapper;
   }
 

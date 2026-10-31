@@ -83,6 +83,30 @@ def test_read_receipt_does_not_consume_newer_or_other_chat_answer(state):
     assert not chats.find(one["id"])["unread"]
 
 
+def test_preview_and_unread_count_follow_message_time_not_question_order(state):
+    chat = chats.create("a")
+    first = queue.enqueue_question("a", "Первый вопрос", conversation_id=chat["id"])
+    second = queue.enqueue_question("a", "Следующий\n  вопрос", conversation_id=chat["id"])
+    row = chats.find(chat["id"])
+    assert row["last_message_preview"] == "Следующий вопрос"
+    assert row["last_message_role"] == "user"
+    assert row["unread_count"] == 0
+    queue.submit_answer(second["id"], "Ранний ответ")
+    queue.submit_answer(first["id"], "Поздний\n ответ " + "x" * 300)
+    row = chats.find(chat["id"])
+    assert row["last_message_preview"].startswith("Поздний ответ ")
+    assert len(row["last_message_preview"]) == 240
+    assert row["last_message_role"] == "assistant"
+    assert row["updated_at"] == queue.find_item(first["id"])["answered_at"]
+    assert row["unread_count"] == 2
+    chats.mark_read(chat["id"], second["id"])
+    assert chats.find(chat["id"])["unread_count"] == 1
+    chats.mark_read(chat["id"], first["id"])
+    assert chats.find(chat["id"])["unread_count"] == 0
+    stored = json.loads(chats.PATH.read_text())[0]
+    assert "last_message_preview" not in stored and "unread_count" not in stored
+
+
 def test_unread_rollout_baselines_old_history_only_once_including_legacy(state):
     chat = chats.create("a")
     old = queue.enqueue_question("a", "Старое", conversation_id=chat["id"])
