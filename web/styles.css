@@ -3193,7 +3193,7 @@ body.hub-readonly .project-list__pull {
 .map-node.method { --node-accent: color-mix(in srgb, var(--chat-accent-violet) 65%, var(--chat-accent-magenta)); }
 
 .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) {
-  --node-ring: linear-gradient(145deg, var(--node-accent), color-mix(in srgb, var(--node-accent) 85%, var(--chat-accent-violet)));
+  --node-ring: linear-gradient(180deg, color-mix(in srgb, var(--node-accent) 65%, var(--chat-accent-magenta)), var(--node-accent) 45%, color-mix(in srgb, var(--node-accent) 45%, var(--chat-accent-blue)));
   background: color-mix(in srgb, var(--node-accent) 5%, var(--bg-elevated));
   color: var(--text);
   border: 1px solid transparent;
