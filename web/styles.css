@@ -17829,11 +17829,10 @@ button.kb-doc {
 [data-app-variant="quick"] .research-chat-section-label { display: flex; align-items: center; gap: 8px; padding: 12px 8px; color: var(--muted); font-size: 12px; font-weight: 500; }
 [data-app-variant="quick"] .research-chat-section-label > svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
 [data-app-variant="quick"] .research-chat-entries { gap: 10px; }
-[data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry { align-items: center; min-height: 92px; gap: 12px; padding: 20px 8px; background: transparent; }
+[data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry { align-items: center; min-height: 104px; gap: 12px; padding: 16px 8px; background: transparent; }
 [data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry-row:has(> [aria-pressed="true"]) { background: transparent; }
-[data-app-variant="quick"] .research-chat-entries .conversation-entry-row:not(:last-child)::after { content: ""; position: absolute; bottom: 0; inset-inline-start: 56px; inset-inline-end: 8px; height: 1px; background: color-mix(in srgb, var(--border) 65%, transparent); pointer-events: none; }
-[data-app-variant="quick"] .research-chat-avatar { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: var(--quick-connector-soft); color: var(--muted); }
-[data-app-variant="quick"] .research-chat-avatar > svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+[data-app-variant="quick"] .research-chat-entries .conversation-entry-row:not(:last-child)::after { content: ""; position: absolute; bottom: 0; inset-inline-start: 8px; inset-inline-end: 8px; height: 1px; background: color-mix(in srgb, var(--border) 65%, transparent); pointer-events: none; }
+[data-app-variant="quick"] .research-chat-kind { display: block; margin-bottom: 6px; color: var(--muted); font-size: 10px; font-weight: 600; line-height: 1.3; letter-spacing: 0.08em; text-transform: uppercase; }
 [data-app-variant="quick"] :is(.research-chat-title-line, .research-chat-preview-line) { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 [data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry-title { display: block; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-app-variant="quick"] .research-chat-time { flex-shrink: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -17848,7 +17847,7 @@ button.kb-doc {
 [data-app-variant="quick"] .research-chat-add span { min-width: 0; overflow-wrap: anywhere; }
 [data-app-variant="quick"] .research-chat-add:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 [data-app-variant="quick"] .research-chat-add:disabled { opacity: 0.55; cursor: wait; }
-[data-app-variant="quick"] .research-chat-entries .conversation-entry-menu { position: absolute; inset-inline-end: 2px; top: 24px; width: 44px; min-height: 44px; margin: 0; background: transparent; }
+[data-app-variant="quick"] .research-chat-entries .conversation-entry-menu { position: absolute; inset-inline-end: 2px; top: 30px; width: 44px; min-height: 44px; margin: 0; background: transparent; }
 [data-app-variant="quick"] .conversation-entry-menu[aria-expanded="true"] { opacity: 1; }
 [data-app-variant="quick"] .conversation-actions-popover { padding: 6px; border-radius: 14px; box-shadow: var(--quick-menu-shadow); }
 [data-app-variant="quick"] .conversation-delete-action { display: flex; align-items: center; gap: 10px; min-height: 44px; border-radius: 7px; }
@@ -17871,7 +17870,6 @@ button.kb-doc {
   [data-app-variant="quick"] .unified-workspace > .rq-bell-wrap { inset-block-start: auto; inset-block-end: 116px; inset-inline-end: auto; inset-inline-start: 18px; }
   [data-app-variant="quick"] .research-chat-heading { padding-inline: 12px 4px; }
   [data-app-variant="quick"] .research-chat-heading h2 { font-size: 16px; }
-  [data-app-variant="quick"] .research-chat-avatar { display: none; }
   [data-app-variant="quick"] .research-chat-entries .conversation-entry-row::after { inset-inline-start: 8px; }
 }
 @media (forced-colors: active) {

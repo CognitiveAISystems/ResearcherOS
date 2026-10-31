@@ -483,11 +483,11 @@ export class ResearchChatNavigation {
       meta.textContent = this.controller.status(row) || [kind, when].filter(Boolean).join(' · ');
       if (this.quick) {
         const button = entry.matches('[data-conversation]') ? entry : entry.querySelector('[data-conversation]');
-        const icon = button.querySelector(':scope > svg');
-        const avatar = document.createElement('span'); avatar.className = 'research-chat-avatar'; avatar.setAttribute('aria-hidden', 'true');
-        if (icon) avatar.append(icon);
-        button.prepend(avatar);
+        button.querySelector(':scope > svg')?.remove();
         const text = button.querySelector('.conversation-entry-text');
+        const typeLabel = document.createElement('span'); typeLabel.className = 'research-chat-kind';
+        typeLabel.textContent = row.card_id ? 'Карточка' : row.board_id ? 'Канбан' : row.project_id ? 'Дерево' : 'Чат';
+        text.prepend(typeLabel);
         const titleLine = document.createElement('span'); titleLine.className = 'research-chat-title-line';
         titleLine.append(text.querySelector('.conversation-entry-title'));
         const time = document.createElement('time'); time.className = 'research-chat-time'; time.textContent = when;
@@ -502,7 +502,7 @@ export class ResearchChatNavigation {
           const count = row.unread_count || 1; badge.textContent = count > 99 ? '99+' : String(count); previewLine.append(badge);
         }
         text.append(previewLine);
-        const label = [conversationDisplayTitle(row.title), kind, meta.textContent, when, row.unread ? `Непрочитанных ответов: ${row.unread_count || 1}` : ''].filter(Boolean).join(' · ');
+        const label = [conversationDisplayTitle(row.title), typeLabel.textContent, meta.textContent, when, row.unread ? `Непрочитанных ответов: ${row.unread_count || 1}` : ''].filter(Boolean).join(' · ');
         button.title = label; button.setAttribute('aria-label', label);
         return entry;
       }

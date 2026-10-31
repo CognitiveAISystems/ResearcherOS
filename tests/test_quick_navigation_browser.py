@@ -100,6 +100,8 @@ async def smoke(url):
 
         assert await page.locator('.research-quick-tree-list').count() == 3
         assert await page.locator('.research-chat-meta').first.inner_text() == 'Эксперимент завершён. Новый результат.'
+        assert await page.locator('.research-chat-kind').first.inner_text() == 'ДЕРЕВО'
+        assert await page.locator('.research-chat-entries .research-chat-avatar').count() == 0
         assert await page.locator('.research-chat-unread').first.inner_text() == '1'
         assert await page.locator('[data-research-add-chat]').is_visible()
         # Expanding and scrolling a long list must not move its creation action off screen.
@@ -244,6 +246,7 @@ async def smoke(url):
         assert chats.find(general['id'])['unread'], 'Opening General must not read its chats'
         assert await page.locator(f'.research-chat-entries [data-conversation="{general["id"]}"]').is_visible()
         assert await page.locator(f'.research-chat-entries [data-conversation="{first["id"]}"]').count() == 0
+        assert await page.locator('.research-chat-kind').first.inner_text() == 'ЧАТ'
         await page.screenshot(path=str(screenshots / 'general.png'), animations='disabled')
         async with page.expect_response(lambda r: r.request.method == 'POST' and r.url.endswith('/agent-conversations')) as general_created:
             await page.locator('[data-research-add-chat]').click()
@@ -399,6 +402,7 @@ async def smoke(url):
         assert await more.get_attribute('aria-expanded') == 'false'
         await more.click()
         assert set(await entries.locator('[data-conversation]').evaluate_all('els => els.map(el => el.dataset.conversation)')) == expected_board
+        assert await page.locator('.research-chat-kind').first.inner_text() == 'КАНБАН'
         await page.screenshot(path=str(screenshots / 'kanban-history.png'), animations='disabled')
         await page.locator('#kanban-board [data-card-id=card] .card-expand-report').focus()
         await page.keyboard.press('Enter')
@@ -411,6 +415,7 @@ async def smoke(url):
         assert set(await entries.locator('[data-conversation]').evaluate_all('els => els.map(el => el.dataset.conversation)')) == expected_card
         await more.click()
         assert await entries.locator('[data-conversation]').count() == 3
+        assert await page.locator('.research-chat-kind').first.inner_text() == 'КАРТОЧКА'
         await page.screenshot(path=str(screenshots / 'card-history.png'), animations='disabled')
         assert not await comparison.is_disabled() and not await empty.is_disabled()
         assert not await general_button.is_disabled()
