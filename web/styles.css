@@ -17809,7 +17809,7 @@ button.kb-doc {
 .research-quick-tree { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .research-quick-dot { position: relative; width: 14px; height: 14px; border: 1px solid var(--quick-node-border); border-radius: 4px; background: var(--quick-node); pointer-events: none; }
 .research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 0 3px var(--quick-rail), 0 0 12px 4px color-mix(in srgb, var(--quick-unread) 24%, transparent); }
-/* Nodes and connectors reveal different positions in one navigation gradient. */
+/* Each program owns one continuous gradient for its nodes and connectors. */
 [data-app-variant="quick"] .workspace:not(.is-chat-list-hidden):not(.is-chat-open) .research-quick-tree[aria-pressed="false"] .research-quick-dot,
 [data-app-variant="quick"] .workspace:not(.is-chat-list-hidden):not(.is-chat-open) .research-quick-tree-list::before {
   background-image: var(--quick-compose-gradient);
@@ -17820,7 +17820,9 @@ button.kb-doc {
   border-color: transparent;
 }
 .research-quick-tree.has-unread .research-quick-dot::after { content: ""; position: absolute; inset-inline-end: -5px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--quick-unread); box-shadow: 0 0 0 2px var(--quick-rail); }
-.research-quick-tree:focus-visible, .research-quick-compose:focus-visible, .research-quick-create-tree:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
+.research-quick-compose:focus-visible, .research-quick-create-tree:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
+.research-quick-tree:focus-visible { outline: none; }
+.research-quick-tree:focus-visible .research-quick-dot { border: 2px solid var(--text); }
 .research-quick-tree:disabled, .research-quick-create-tree:disabled { opacity: 0.45; cursor: not-allowed; }
 [data-app-variant="quick"] .research-chat-section-content { padding-inline-start: 0; }
 [data-app-variant="quick"] .research-chat-browser:not(.is-searching) .research-chat-section > h3 { display: none; }

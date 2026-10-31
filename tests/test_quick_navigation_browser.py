@@ -205,6 +205,21 @@ async def smoke(url):
         }""")
         assert shared_gradient['sameImage'] and shared_gradient['sameSize']
         assert abs(shared_gradient['nodeOrigin'] - shared_gradient['edgeOrigin']) < 1
+        program_gradients = await page.locator('.research-quick-tree-list').evaluate_all("""lists => lists.map(list => {
+            const first = list.querySelector('.research-quick-dot');
+            const last = list.lastElementChild.querySelector('.research-quick-dot');
+            return {
+                height: parseFloat(getComputedStyle(first).getPropertyValue('--quick-gradient-height')),
+                expected: last.getBoundingClientRect().bottom - first.getBoundingClientRect().top,
+                top: getComputedStyle(first).backgroundPositionY,
+            };
+        })""")
+        assert all(abs(item['height'] - item['expected']) < 1 for item in program_gradients)
+        assert all(item['top'] == '0px' for item in program_gradients)
+        await demo.focus()
+        assert await demo.evaluate('el => getComputedStyle(el).outlineStyle') == 'none'
+        assert await selected_dot.evaluate('el => getComputedStyle(el).borderTopStyle') == 'solid'
+
 
         assert await first_entry.evaluate('el => el.getBoundingClientRect().height') >= 92
         toggle_before = await panel_toggle.bounding_box()
