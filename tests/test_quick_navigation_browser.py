@@ -294,8 +294,15 @@ async def smoke(url):
         assert await actions.get_by_text('Пока агент отвечает, чат нельзя удалить.').is_visible()
         await page.screenshot(path=str(screenshots / 'chat-menu-pending.png'), animations='disabled')
         await page.keyboard.press('Escape')
-        # Open a chat, preserve its draft when selecting another tree, return explicitly.
+        # Reading a conversation preserves navigation colors, including connections.
+        idle_marker = empty.locator('.research-quick-dot')
+        list_gradient = await idle_marker.evaluate('el => getComputedStyle(el).backgroundImage')
         await page.locator(f'.research-chat-entries [data-conversation="{other["id"]}"]').click()
+        assert await page.locator('.workspace').evaluate("el => el.classList.contains('is-chat-open')")
+        assert await idle_marker.evaluate('el => getComputedStyle(el).backgroundImage') == list_gradient
+        assert await demo.evaluate("el => getComputedStyle(el.closest('.research-quick-tree-list'), '::before').backgroundImage") == list_gradient
+        await page.screenshot(path=str(screenshots / 'chat-open-navigation.png'), animations='disabled')
+        # Open a chat, preserve its draft when selecting another tree, return explicitly.
         await page.locator('#agent-chat-input').fill('Неотправленный черновик')
         await demo.click()
         assert await page.locator('#agent-chat-conversations').is_visible()
