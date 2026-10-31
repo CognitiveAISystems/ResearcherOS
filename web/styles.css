@@ -3217,13 +3217,17 @@ body.hub-readonly .project-list__pull {
   pointer-events: none;
 }
 
-/* The root uses the primary action's full gradient and a softer silhouette. */
+/* A quiet root surface with a gradient contour widening at both ends. */
 .map-node.problem {
   --node-ring: var(--quick-compose-gradient);
-  background: var(--quick-compose-gradient);
-  color: var(--btn-primary-text);
+  background: color-mix(in srgb, var(--chat-accent-violet) 4%, var(--bg-elevated));
+  color: var(--text);
   padding: 0.65rem 1rem;
-  box-shadow: 0 3px 10px color-mix(in srgb, var(--chat-accent-violet) 20%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--chat-accent-violet) 12%, transparent);
+}
+
+.map-node.problem::before {
+  padding: 2px 9px;
 }
 
 .map-node.problem::after { display: none; }
