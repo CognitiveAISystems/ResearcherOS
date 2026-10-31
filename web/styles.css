@@ -2519,8 +2519,7 @@ body.hub-readonly .project-list__pull {
 }
 
 .lab-project-nodes:not(.is-active) .map-node:not(:focus-visible) {
-  filter: saturate(0.35);
-  opacity: 0.65;
+  filter: saturate(0.72);
 }
 
 .lab-project-nodes.is-active {
@@ -2569,7 +2568,7 @@ body.hub-readonly .project-list__pull {
 @media (forced-colors: active) {
   .lab-tree-edges .edge { stroke: CanvasText; }
   .lab-tree-edges.is-active .edge:not(.edge-add) { stroke: Highlight; filter: none; }
-  .lab-project-nodes:not(.is-active) .map-node { filter: none; opacity: 1; }
+  .lab-project-nodes:not(.is-active) .map-node { filter: none; }
   .lab-project-nodes.is-active .map-node { filter: none; }
 }
 
@@ -3186,81 +3185,75 @@ body.hub-readonly .project-list__pull {
   pointer-events: none;
 }
 
-/* Distinct research roles drawn from the same three chat accent colors. */
-.map-node.problem { --node-accent: var(--chat-accent-blue); z-index: 10; }
-.map-node.cause { --node-accent: var(--chat-accent-magenta); }
-.map-node.cause_evidence { --node-accent: color-mix(in srgb, var(--chat-accent-blue) 55%, var(--chat-accent-violet)); }
-.map-node.remediation { --node-accent: var(--chat-accent-violet); }
-.map-node.method { --node-accent: color-mix(in srgb, var(--chat-accent-violet) 65%, var(--chat-accent-magenta)); }
-
-.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) {
-  --node-ring: linear-gradient(180deg, color-mix(in srgb, var(--node-accent) 65%, var(--chat-accent-magenta)), var(--node-accent) 45%, color-mix(in srgb, var(--node-accent) 45%, var(--chat-accent-blue)));
-  background: color-mix(in srgb, var(--node-accent) 5%, var(--bg-elevated));
-  color: var(--text);
-  border: 1px solid transparent;
-  padding: 0.55rem 0.7rem 0.55rem 1.5rem;
-  box-shadow: inset 0 0 10px color-mix(in srgb, var(--node-accent) 22%, transparent), 0 2px 5px color-mix(in srgb, var(--shadow-heavy) 15%, transparent);
-}
-
-.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method)::before {
-  opacity: 1;
-}
-
-.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method)::after {
-  content: "";
-  position: absolute;
-  inset: -1px auto -1px -1px;
-  width: 16px;
-  border-radius: inherit;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  background: var(--node-ring);
-  pointer-events: none;
-}
-
-/* A quiet root surface with a gradient contour widening at both ends. */
 .map-node.problem {
-  --node-ring: var(--quick-compose-gradient);
-  background: color-mix(in srgb, var(--chat-accent-violet) 4%, var(--bg-elevated));
-  color: var(--text);
-  padding: 0.65rem 1rem;
-  box-shadow: inset 0 0 10px color-mix(in srgb, var(--chat-accent-violet) 22%, transparent), 0 3px 10px color-mix(in srgb, var(--chat-accent-violet) 20%, transparent);
+  --node-ring: linear-gradient(135deg, #fff 0%, var(--pink) 40%, var(--cyan) 100%);
+  background: radial-gradient(ellipse 80% 70% at 35% 28%, #ffffff 0%, #ffe8f8 40%, #c8b8ff 85%);
+  color: #1a0a24;
+  box-shadow: var(--node-shadow-problem);
+  z-index: 10;
+  padding: 0.5rem 0.85rem;
+  border-radius: 50%;
+  min-width: 200px;
 }
 
 .map-node.problem::before {
-  padding: 2px 9px;
-}
-
-.map-node.problem::after { display: none; }
-
-/* External role label leaves the tinted surface for the research statement. */
-.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) .node-label {
-  position: absolute;
-  bottom: calc(100% + 5px);
-  left: 16px;
-  margin: 0;
-  max-width: calc(100% - 20px);
-  text-align: left;
-  font-size: 0.55rem;
-  line-height: 1.2;
-  letter-spacing: 0.04em;
   opacity: 1;
+  border-radius: 50%;
 }
 
-.map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) .node-title {
-  font-weight: 500;
+.map-node.cause {
+  --node-ring: var(--grad-warm);
+  background: linear-gradient(145deg, rgba(255, 154, 92, 0.95) 0%, rgba(255, 107, 203, 0.9) 100%);
+  box-shadow: var(--node-shadow-cause);
 }
 
-.map-node.remediation .node-title,
-.map-node.method .node-title {
+.map-node.cause_evidence {
+  --node-ring: var(--grad-cool);
+  background: linear-gradient(145deg, rgba(61, 232, 255, 0.9) 0%, rgba(123, 92, 255, 0.95) 100%);
+  box-shadow: var(--node-shadow-cause-evidence);
+}
+
+.map-node.remediation {
+  --node-ring: linear-gradient(135deg, var(--purple) 0%, var(--pink) 100%);
+  background: linear-gradient(145deg, rgba(155, 92, 255, 0.95) 0%, rgba(255, 107, 203, 0.85) 100%);
+  box-shadow: var(--node-shadow-remediation);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+.map-node.remediation::before {
+  border-radius: 5px;
+}
+
+.map-node.remediation .node-label {
+  font-size: 0.5rem;
+  margin-bottom: 0.08rem;
+}
+
+.map-node.remediation .node-title {
   font-size: 0.62rem;
   line-height: 1.2;
 }
 
-@media (hover: hover) {
-  .map-node:is(.cause, .cause_evidence, .remediation, .method):hover {
-    background: color-mix(in srgb, var(--node-accent) 10%, var(--bg-elevated));
-  }
+.map-node.method {
+  --node-ring: var(--grad-cool);
+  background: linear-gradient(
+    145deg,
+    rgba(61, 232, 255, 0.75) 0%,
+    rgba(123, 92, 255, 0.85) 100%
+  );
+  box-shadow: var(--node-shadow-cause-evidence);
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+}
+
+.map-node.method .node-label {
+  font-size: 0.5rem;
+}
+
+.map-node.method .node-title {
+  font-size: 0.62rem;
+  line-height: 1.2;
 }
 
 .node-kanban-below {
@@ -4328,8 +4321,7 @@ body.hub-readonly .project-list__pull {
 }
 
 .map-node.clickable:hover {
-  outline: 2px solid var(--node-accent, var(--purple));
-  outline-offset: 3px;
+  box-shadow: var(--node-shadow-hover);
 }
 
 .map-node .node-label {
@@ -4341,7 +4333,7 @@ body.hub-readonly .project-list__pull {
   margin-bottom: 0.12rem;
 }
 
-.map-node .node-label { color: var(--text); }
+.map-node.problem .node-label { color: rgba(60, 30, 80, 0.7); }
 
 .map-node .node-title {
   font-size: 0.66rem;
@@ -4353,7 +4345,7 @@ body.hub-readonly .project-list__pull {
   word-break: break-word;
   overflow-wrap: anywhere;
   hyphens: auto;
-  text-shadow: none;
+  text-shadow: var(--node-title-shadow);
 }
 
 .map-node.problem .node-title {
@@ -17752,9 +17744,6 @@ button.kb-doc {
   --quick-node-border: color-mix(in srgb, var(--purple) 28%, var(--bg-elevated));
   --quick-unread: var(--cyan);
   --quick-connector-soft: color-mix(in srgb, var(--quick-node) 45%, var(--bg-elevated));
-  --chat-accent-magenta: var(--pink);
-  --chat-accent-violet: var(--purple);
-  --chat-accent-blue: var(--cyan);
   --quick-compose-gradient: var(--grad-hero);
   --quick-hover: color-mix(in srgb, var(--purple) 4%, var(--bg-elevated));
   --quick-chat-hover: var(--quick-hover);
@@ -17769,10 +17758,7 @@ button.kb-doc {
   --quick-node-border: #c3bdd2;
   --quick-unread: #157bc2;
   --quick-connector-soft: #efedf6;
-  --chat-accent-magenta: #c333ad;
-  --chat-accent-violet: #7440db;
-  --chat-accent-blue: #007bb8;
-  --quick-compose-gradient: linear-gradient(135deg, var(--chat-accent-magenta), var(--chat-accent-violet) 48%, var(--chat-accent-blue));
+  --quick-compose-gradient: linear-gradient(135deg, #c333ad, #7440db 48%, #007bb8);
   --quick-destructive-text: #a32d42;
 }
 .app-tooltip--navigation { pointer-events: none; }

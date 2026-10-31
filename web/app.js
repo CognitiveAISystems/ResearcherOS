@@ -380,13 +380,13 @@ function computeNodeSize(node) {
     const ph = Math.ceil(
       Math.max(PROBLEM_MIN_H, h + 24)
     );
-    return { w: pw, h: ph, round: "28px", lines };
+    return { w: pw, h: ph, round: "50%", shape: "oval", lines };
   }
 
   return {
     w,
     h,
-    round: "12px",
+    round: isHypothesis ? HYPOTHESIS_METRICS.round : "12px",
     lines,
   };
 }
