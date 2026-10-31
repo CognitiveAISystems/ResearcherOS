@@ -3217,6 +3217,17 @@ body.hub-readonly .project-list__pull {
   pointer-events: none;
 }
 
+/* The root uses the primary action's full gradient and a softer silhouette. */
+.map-node.problem {
+  --node-ring: var(--quick-compose-gradient);
+  background: var(--quick-compose-gradient);
+  color: var(--btn-primary-text);
+  padding: 0.65rem 1rem;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--chat-accent-violet) 20%, transparent);
+}
+
+.map-node.problem::after { display: none; }
+
 /* External role label leaves the tinted surface for the research statement. */
 .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) .node-label {
   position: absolute;
@@ -3242,7 +3253,7 @@ body.hub-readonly .project-list__pull {
 }
 
 @media (hover: hover) {
-  .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method):hover {
+  .map-node:is(.cause, .cause_evidence, .remediation, .method):hover {
     background: color-mix(in srgb, var(--node-accent) 10%, var(--bg-elevated));
   }
 }
