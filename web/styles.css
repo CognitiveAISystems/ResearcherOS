@@ -17808,7 +17808,9 @@ button.kb-doc {
 .research-quick-tree-list[data-current="true"]::before { background: linear-gradient(180deg, var(--quick-node) max(0%, calc(var(--quick-current-position) - 33%)), var(--bg-elevated) var(--quick-current-position), var(--quick-node) min(100%, calc(var(--quick-current-position) + 33%))); }
 .research-quick-tree { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .research-quick-dot { position: relative; width: 14px; height: 14px; border: 1px solid var(--quick-node-border); border-radius: 4px; background: var(--quick-node); pointer-events: none; }
-.research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 0 3px var(--quick-rail), 0 0 12px 4px color-mix(in srgb, var(--quick-unread) 24%, transparent); }
+.research-quick-tree[aria-pressed="true"] .research-quick-dot { width: 18px; height: 18px; border: 2px solid transparent; border-radius: 5px; background: linear-gradient(var(--bg-elevated), var(--bg-elevated)) padding-box, var(--quick-compose-gradient) border-box; box-shadow: 0 0 0 3px var(--quick-rail); }
+/* Filled selection means this tree's chat list is currently visible. */
+[data-app-variant="quick"] .workspace:not(.is-chat-list-hidden):not(.is-chat-open) .research-quick-tree[aria-pressed="true"] .research-quick-dot { background: var(--quick-compose-gradient); box-shadow: 0 0 0 3px var(--quick-rail), var(--glow-purple); }
 .research-quick-tree.has-unread .research-quick-dot::after { content: ""; position: absolute; inset-inline-end: -5px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--quick-unread); box-shadow: 0 0 0 2px var(--quick-rail); }
 .research-quick-tree:focus-visible, .research-quick-compose:focus-visible, .research-quick-create-tree:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
 .research-quick-tree:disabled, .research-quick-create-tree:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -17816,7 +17818,8 @@ button.kb-doc {
 [data-app-variant="quick"] .research-chat-browser:not(.is-searching) .research-chat-section > h3 { display: none; }
 [data-app-variant="quick"] .research-chat-section-label { display: flex; align-items: center; gap: 8px; padding: 12px 8px; color: var(--muted); font-size: 12px; font-weight: 500; }
 [data-app-variant="quick"] .research-chat-section-label > svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; }
-[data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry { align-items: center; min-height: 76px; gap: 12px; padding: 12px 8px; background: transparent; }
+[data-app-variant="quick"] .research-chat-entries { gap: 10px; }
+[data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry { align-items: center; min-height: 92px; gap: 12px; padding: 20px 8px; background: transparent; }
 [data-app-variant="quick"] .workspace.compact-chat .research-chat-entries .conversation-entry-row:has(> [aria-pressed="true"]) { background: transparent; }
 [data-app-variant="quick"] .research-chat-entries .conversation-entry-row:not(:last-child)::after { content: ""; position: absolute; bottom: 0; inset-inline-start: 56px; inset-inline-end: 8px; height: 1px; background: color-mix(in srgb, var(--border) 65%, transparent); pointer-events: none; }
 [data-app-variant="quick"] .research-chat-avatar { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 50%; background: var(--quick-connector-soft); color: var(--muted); }
@@ -17835,7 +17838,7 @@ button.kb-doc {
 [data-app-variant="quick"] .research-chat-add span { min-width: 0; overflow-wrap: anywhere; }
 [data-app-variant="quick"] .research-chat-add:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 [data-app-variant="quick"] .research-chat-add:disabled { opacity: 0.55; cursor: wait; }
-[data-app-variant="quick"] .research-chat-entries .conversation-entry-menu { position: absolute; inset-inline-end: 2px; top: 16px; width: 44px; min-height: 44px; margin: 0; background: transparent; }
+[data-app-variant="quick"] .research-chat-entries .conversation-entry-menu { position: absolute; inset-inline-end: 2px; top: 24px; width: 44px; min-height: 44px; margin: 0; background: transparent; }
 [data-app-variant="quick"] .conversation-entry-menu[aria-expanded="true"] { opacity: 1; }
 [data-app-variant="quick"] .conversation-actions-popover { padding: 6px; border-radius: 14px; box-shadow: var(--quick-menu-shadow); }
 [data-app-variant="quick"] .conversation-delete-action { display: flex; align-items: center; gap: 10px; min-height: 44px; border-radius: 7px; }

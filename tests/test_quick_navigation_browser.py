@@ -187,15 +187,21 @@ async def smoke(url):
         assert await page.locator('#create-project-tag').is_visible()
         await page.locator('#create-project-modal > .modal-panel > .modal-close').click()
         # One stable rail control collapses and reopens the panel from the keyboard.
+        selected_dot = demo.locator('.research-quick-dot')
+        expanded_fill = await selected_dot.evaluate('el => getComputedStyle(el).backgroundImage')
+        assert expanded_fill.count('linear-gradient') == 1
+        assert await first_entry.evaluate('el => el.getBoundingClientRect().height') >= 92
         toggle_before = await panel_toggle.bounding_box()
         await panel_toggle.focus()
         await page.keyboard.press('Enter')
         assert not await page.locator('.research-chat-search input').is_visible()
         assert await panel_toggle.get_attribute('aria-expanded') == 'false'
+        assert (await selected_dot.evaluate('el => getComputedStyle(el).backgroundImage')).count('linear-gradient') == 2
         assert await panel_toggle.bounding_box() == toggle_before
         assert await panel_toggle.evaluate('el => el === document.activeElement')
         await page.keyboard.press('Enter')
         assert await panel_toggle.get_attribute('aria-expanded') == 'true'
+        assert await selected_dot.evaluate('el => getComputedStyle(el).backgroundImage') == expanded_fill
         assert await panel_toggle.bounding_box() == toggle_before
         # General lists unassigned chats, creates them without a tree and is searchable everywhere.
         await general_button.click()
