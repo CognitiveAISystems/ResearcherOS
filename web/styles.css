@@ -3185,15 +3185,12 @@ body.hub-readonly .project-list__pull {
   pointer-events: none;
 }
 
-/* Color identifies node type; the surface follows the surrounding UI theme. */
-.map-node.problem { --node-accent: var(--cyan); z-index: 10; }
-.map-node.cause { --node-accent: var(--orange); }
-.map-node.cause_evidence { --node-accent: var(--cyan); }
-.map-node.remediation { --node-accent: var(--purple); }
-.map-node.method { --node-accent: var(--pink); }
+/* Share the chat palette; node labels identify their research role. */
+.map-node.problem { z-index: 10; }
 
 .map-node:is(.problem, .cause, .cause_evidence, .remediation, .method) {
-  --node-ring: linear-gradient(145deg, var(--node-accent), color-mix(in srgb, var(--node-accent) 75%, var(--purple)));
+  --node-accent: var(--purple);
+  --node-ring: var(--quick-compose-gradient, var(--grad-hero));
   background: color-mix(in srgb, var(--node-accent) 5%, var(--bg-elevated));
   color: var(--text);
   border: 1px solid transparent;
