@@ -63,7 +63,7 @@ export class ResearchChatNavigation {
       this.host.append(add);
       this.host.querySelector('.research-chat-search-row').remove();
     }
-    this.createButton.onclick = () => void this.create();
+    this.createButton.onclick = () => void (this.quick ? this.createGlobal() : this.create());
     this.host.querySelector('[data-research-collapse]').onclick = () => {
       collapse();
       if (this.quick) rail.querySelector('#btn-agent-chat')?.focus();
@@ -143,6 +143,17 @@ export class ResearchChatNavigation {
     this.render(this.controller);
   }
 
+  async createGlobal() {
+    const button = this.createButton;
+    button.disabled = true;
+    try {
+      if (this.controller.contextScope && await this.leaveContext() === false) return;
+      this.controller.setContext(null);
+      await this.selectGroup(this.groups().find(group => group.id === 'global'));
+      await this.controller.newChat({project_id: null});
+    } finally { button.disabled = false; }
+  }
+
   create() {
     if (this.controller.contextScope) return this.controller.newChat(this.controller.contextScope);
     if (this.quick && this.tree && !['global', 'all'].includes(this.groupId)) {
@@ -211,8 +222,9 @@ export class ResearchChatNavigation {
     if (this.quick && this.tree && !scope) this.quickTreeId = this.tree.id;
     if (this.quick) {
       create.title = scope?.card_id ? 'Новый чат карточки' : scope ? 'Новый чат метода' : this.tree && !['global', 'all'].includes(this.groupId) ? 'Новый чат дерева' : 'Новый общий чат';
-      create.setAttribute('aria-label', create.title);
       this.addButton.setAttribute('aria-label', create.title);
+      create.title = 'Новый общий чат';
+      create.setAttribute('aria-label', create.title);
       const search = this.searchInput;
       search.placeholder = 'Поиск (⌘K)';
       search.setAttribute('aria-label', scope ? 'Поиск в текущем контексте' : 'Поиск по всем чатам');

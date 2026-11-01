@@ -1,0 +1,6 @@
+interface:
+  display_name: "Cryri Jobs"
+  short_description: "Реестр джоб, мониторинг GPU и согласование остановки"
+  default_prompt: "Используй $koi-cryri-jobs для проверки наших джоб Cryri и их утилизации."
+policy:
+  allow_implicit_invocation: true
