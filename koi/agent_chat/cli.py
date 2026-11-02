@@ -91,13 +91,16 @@ def build_context(item_id: str) -> dict:
     if item is None:
         raise SystemExit(f"Queue item not found: {item_id}")
 
+    from koi.adapters.glossary import context as glossary_context
+    vocabulary = glossary_context(item.get("project_id"))
+
     if item.get("purpose") in ("git_notice", "git_chat"):
         from koi.agent_chat.git_changes import POLICY, snapshot, _summary, _diff, get_mount
         mount = get_mount(item["project_id"])
         if mount is None:
             raise SystemExit("Дерево больше не подключено к рабочему пространству.")
         state = snapshot(mount)
-        return {"queue_id": item_id, "project_id": item["project_id"], "purpose": item["purpose"],
+        return {"glossary": vocabulary, "queue_id": item_id, "project_id": item["project_id"], "purpose": item["purpose"],
                 "user_question": item["question"], "git_instructions": POLICY,
                 "git_snapshot": state["token"], "summary": _summary(state), "diff": _diff(mount, state)}
 
@@ -110,6 +113,7 @@ def build_context(item_id: str) -> dict:
         contexts = for_program(catalog(), program_id)
         allowed = {p["project_id"] for p in contexts}
         return {
+            "glossary": vocabulary,
             "queue_id": item["id"], "project_id": None,
             "purpose": item.get("purpose", "agent"), "user_question": item["question"],
             "workspace_root": str(_ws.agent_cwd()),
@@ -191,6 +195,7 @@ def build_context(item_id: str) -> dict:
             interview["task"] = "Собери отчёт по этой задаче, следуя скиллу koi-execute-card."
     return {
         **interview,
+        "glossary": vocabulary,
         "queue_id": item["id"],
         "enqueued_at": item["enqueued_at"],
         "user_question": item["question"],

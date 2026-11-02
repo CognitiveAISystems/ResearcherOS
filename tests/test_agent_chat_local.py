@@ -177,6 +177,8 @@ def test_queue_keeps_chosen_cli(monkeypatch, tmp_path: Path) -> None:
 @pytest.mark.parametrize('project_id', [None, 'demo'])
 @pytest.mark.parametrize('purpose,allow_edits', [('agent', True), ('question', False)])
 def test_chat_edit_permissions_do_not_depend_on_project_binding(monkeypatch, project_id, purpose, allow_edits):
+    from koi.adapters import glossary
+    monkeypatch.setattr(glossary, 'prompt', lambda _project=None: '')
     item = {'id': 'aq-global', 'project_id': project_id, 'question': 'Исправь описание дерева BP35', 'status': 'pending', 'purpose': purpose}
     monkeypatch.setattr(runner, 'find_item', lambda _id: item)
     monkeypatch.setattr(runner, 'is_cursor_manual_agent_mode', lambda: False)
@@ -233,4 +235,4 @@ def test_arbor_selected_project_enters_coordinator(monkeypatch):
     monkeypatch.setattr(runner, 'find_item', lambda _: {'id': 'aq-routing'})
     from koi.agent_chat import research
     monkeypatch.setattr(research, 'coordinator_prompt', lambda item, ctx: 'research coordinator')
-    assert runner._sdk_prompt('aq-routing') == 'research coordinator'
+    assert runner._base_sdk_prompt('aq-routing') == 'research coordinator'

@@ -42,6 +42,12 @@ def _artifact_task_cwd(item_id: str):
 
 
 def _sdk_prompt(item_id: str) -> str:
+    from koi.adapters.glossary import prompt
+    item = find_item(item_id) or {}
+    return prompt(item.get("project_id")) + "\n\n" + _base_sdk_prompt(item_id)
+
+
+def _base_sdk_prompt(item_id: str) -> str:
     from koi.agent_chat import conversations
     item = find_item(item_id)
     conversation = conversations.find(item["conversation_id"]) if item and item.get("conversation_id") else None
@@ -358,6 +364,9 @@ def _review_grill_proposal(item_id: str, proposal: dict[str, str], *, local_mode
         f"Черновик:\n{draft}\n\nИстория для проверки фактов:\n"
         f"{json.dumps({'history': (evidence or {}).get('history', []), 'pending_question': (evidence or {}).get('pending_question')}, ensure_ascii=False, indent=2)}"
     )
+    from koi.adapters.glossary import prompt as vocabulary_prompt
+    item = find_item(item_id) or {}
+    prompt = vocabulary_prompt(item.get("project_id")) + "\n\n" + prompt
     if local_mode:
         answer, _ = _run_local_agent(prompt, item_id, mode="ask", force=False, log_activity=log_activity)
     else:

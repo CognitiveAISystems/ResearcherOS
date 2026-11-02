@@ -87,6 +87,8 @@ async function api(path, options = {}) {
 }
 
 export const KoiApi = {
+  getGlossary: projectId => api(`/glossary${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
+  saveGlossary: (projectId, text, revision) => api(`/glossary${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`, { method: "PUT", body: JSON.stringify({ text, revision }) }),
   health: () => api("/health"),
   translateToEnglish: (text) =>
     api("/agent/translate-to-english", {

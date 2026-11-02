@@ -13,6 +13,9 @@ from api.schemas import AgentChatBody
 
 @pytest.fixture
 def isolated_queue(monkeypatch, tmp_path):
+    from koi.adapters import glossary
+    monkeypatch.setattr(glossary, "get_workspace", lambda: SimpleNamespace(agent_cwd=lambda: tmp_path))
+    monkeypatch.setattr(glossary, "koi_root", lambda pid: tmp_path / pid)
     monkeypatch.setattr(queue, "QUEUE_PATH", tmp_path / "chat.json")
 
 

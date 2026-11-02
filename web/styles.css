@@ -18661,3 +18661,20 @@ button.kb-doc {
 .morph-node-info > button { background: transparent; box-shadow: none; font-size: 14px; font-weight: 500; }
 .morph-node-info > button::before { inset: 12px; background: var(--bg-elevated); z-index: -1; }
 .morph-node-info > button { position: relative; isolation: isolate; }
+
+.glossary-dialog { width: min(38rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); }
+.glossary-dialog [hidden] { display: none; }
+.glossary-dialog textarea, .glossary-dialog select {
+  box-sizing: border-box; width: 100%; padding: 0.65rem;
+  border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); background: var(--surface-input); font: inherit;
+}
+.glossary-dialog textarea { resize: vertical; min-height: 10rem; line-height: 1.6; }
+.glossary-dialog [data-quick]:not([hidden]) { display: grid; gap: 0.5rem; }
+.glossary-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.glossary-dialog summary { cursor: pointer; }
+.glossary-dialog :is(textarea, select, input):focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.glossary-dialog .btn { min-height: 44px; }
+.glossary-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.report-agent-menu { display: grid; gap: 0.25rem; min-width: 0; max-width: calc(100vw - 16px); }
+.report-agent-menu .btn { text-align: left; min-height: 44px; white-space: normal; }

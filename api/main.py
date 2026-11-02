@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agents, collaboration, composites, cursor, desktop, knowledge, library, meta, morphology, pages, paper, programs, projects, review, sync, voice, widgets
+from api.routers import agents, collaboration, composites, glossary, cursor, desktop, knowledge, library, meta, morphology, pages, paper, programs, projects, review, sync, voice, widgets
 
 app = FastAPI(
     title="KOI API",
@@ -22,6 +22,7 @@ app.add_middleware(
 
 for router in (
     meta.router,
+    glossary.router,
     library.router,
     programs.router,
     composites.router,

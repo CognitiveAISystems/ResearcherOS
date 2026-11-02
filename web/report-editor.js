@@ -55,8 +55,8 @@ export function setupWouldShrink(source, proposal) {
 }
 
 export class ReportEditor {
-  constructor(host, { render, onChange, onAgent, onPaste, hookLinks, readOnly = false, toc = null }) {
-    Object.assign(this, { host, render, onChange, onAgent, onPaste, hookLinks, readOnly, toc });
+  constructor(host, { render, onChange, onAgent, onGlossary, onPaste, hookLinks, readOnly = false, toc = null }) {
+    Object.assign(this, { host, render, onChange, onAgent, onGlossary, onPaste, hookLinks, readOnly, toc });
     if (toc) {
       this.tocMedia = window.matchMedia('(min-width: 1101px)');
       const resize = () => { toc.open = this.tocMedia.matches; };
@@ -71,6 +71,15 @@ export class ReportEditor {
       e.preventDefault();
       this.agentMenu(selected, e.clientX, e.clientY);
     });
+    host.addEventListener("keyup", e => {
+      if (this.readOnly || !this.onGlossary || !(e.shiftKey || e.key === "ContextMenu")) return;
+      const selected = this.selection();
+      if (selected) {
+        const bounds = e.target.getBoundingClientRect();
+        this.agentMenu(selected, bounds.left, bounds.top);
+        document.querySelector(".report-agent-menu button:last-child")?.focus();
+      }
+    });
     host.addEventListener("mouseup", e => {
       if (this.readOnly) return;
       const selected = this.selection();
@@ -83,16 +92,26 @@ export class ReportEditor {
   }
   agentMenu(selected, x, y) {
     document.querySelector(".report-agent-menu")?.remove();
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "report-agent-menu btn";
-    button.textContent = "Сформулировать постановку с агентом";
-    button.style.left = `${Math.min(x, window.innerWidth - 340)}px`;
-    button.style.top = `${Math.min(y, window.innerHeight - 70)}px`;
-    button.onclick = () => { button.remove(); this.onAgent(selected); };
-    document.body.append(button);
-    setTimeout(() => document.addEventListener("pointerdown", e => { if (e.target !== button) button.remove(); }, { once: true }), 0);
+    const menu = document.createElement("div");
+    menu.className = "report-agent-menu";
+    menu.setAttribute("role", "group");
+    menu.setAttribute("aria-label", "Действия с выделенным текстом");
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 340))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - 120))}px`;
+    const actions = [["Сформулировать постановку с агентом", this.onAgent]];
+    if (this.onGlossary) actions.push(["В словарь…", this.onGlossary]);
+    for (const [label, action] of actions) {
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "btn"; button.textContent = label;
+      button.onclick = () => { menu.remove(); action(selected); };
+      menu.append(button);
+    }
+    document.body.append(menu);
+    const dismiss = e => { if (!menu.contains(e.target)) menu.remove(); };
+    setTimeout(() => document.addEventListener("pointerdown", dismiss, { once: true }), 0);
+    menu.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); menu.remove(); this.host.focus(); } });
   }
+
   setValue(source) { this.blocks = reportBlocks(source); this.paint(); }
   getValue() { return this.blocks.map(b => b.raw).join(""); }
   changed() { this.onChange(this.getValue()); this.updateToc(); }

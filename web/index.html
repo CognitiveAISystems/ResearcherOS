@@ -221,7 +221,7 @@
         </div>
         <p id="agent-chat-form-status" class="agent-chat-form-status" role="status" aria-live="polite" hidden></p>
       </form>
-    </div><nav id="agent-chat-conversations" class="conversation-sidebar" aria-label="Список чатов"></nav><div class="conversation-rail" role="group" aria-label="Инструменты разговора"><button type="button" class="conversation-icon-button conversation-nav-toggle" data-chat-navigation aria-label="Открыть список чатов" title="Открыть список чатов" aria-controls="agent-chat-conversations" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button><button type="button" class="conversation-icon-button" data-current-project aria-label="Показывать только текущий проект" title="Показывать только текущий проект" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg></button></div></div></aside>
+    </div><nav id="agent-chat-conversations" class="conversation-sidebar" aria-label="Список чатов"></nav><div class="conversation-rail" role="group" aria-label="Инструменты разговора"><button type="button" id="global-glossary-settings" class="conversation-icon-button" aria-label="Словарь для всех деревьев" title="Словарь для всех деревьев"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 3 3v14a4 4 0 0 0-4-3H4Zm16 0h-4a3 3 0 0 0-3 3v14a4 4 0 0 1 4-3h3Z"/></svg></button><button type="button" class="conversation-icon-button conversation-nav-toggle" data-chat-navigation aria-label="Открыть список чатов" title="Открыть список чатов" aria-controls="agent-chat-conversations" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button><button type="button" class="conversation-icon-button" data-current-project aria-label="Показывать только текущий проект" title="Показывать только текущий проект" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8Z"/></svg></button></div></div></aside>
   </div>
 
   <!-- Настройки -->
@@ -441,6 +441,7 @@
             <div id="kanban-date-filter" class="kanban-date-filter" role="group" aria-label="Период изменения"></div>
             <div id="kanban-tag-filter" class="kanban-tag-filter kanban-tag-filter--inline hidden" aria-label="Фильтр по тегам"></div>
             <div class="kanban-filter-footer">
+            <button type="button" id="kanban-glossary-settings" class="kanban-hint-btn">Словарь</button>
             <button type="button" id="kanban-tags-settings" class="kanban-hint-btn" aria-label="Настройки тегов">Настройки тегов</button>
             <button type="button" id="kanban-filters-clear" class="kanban-filters-clear hidden" title="Сбросить все фильтры" aria-label="Сбросить все фильтры">Сбросить</button>
             </div>

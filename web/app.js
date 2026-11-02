@@ -1,3 +1,4 @@
+import { openGlossary } from "./glossary.js";
 import { projectTreeNodes } from "./tree-projection.js";
 import { EDGE_LABELS, edgeCaption, edgeLabelHeight, treeEdgeDefs, appendTreeEdge } from "./tree-edges.js";
 import { ChatConversations } from "./chat-conversations.js";
@@ -2904,6 +2905,7 @@ function getReportBlockEditor() {
       reportAutoSaveTimer = setTimeout(() => void saveCardReport(), 900);
     },
     onAgent: idea => void openReportInterview(idea),
+    onGlossary: term => void openGlossary(reportWriteProjectId(), term),
     onPaste: async (event, input, commit) => {
       const file = clipboardImageFile(event.clipboardData);
       if (!file) return;
@@ -5817,6 +5819,14 @@ function renderKanbanTagFilter(project, board) {
   const el = document.getElementById("kanban-tag-filter");
   if (!el) return;
 
+  const glossaryButton = document.getElementById("kanban-glossary-settings");
+  if (glossaryButton) {
+    glossaryButton.hidden = isHubMode() || !boardWriteProjectId(board);
+    glossaryButton.onclick = () => {
+      document.getElementById("kanban-board-filters")?.hidePopover();
+      void openGlossary(boardWriteProjectId(board));
+    };
+  }
   const settingsButton = document.getElementById("kanban-tags-settings");
   if (settingsButton) {
     settingsButton.hidden = isHubMode() || !boardWriteProjectId(board);
@@ -12837,6 +12847,7 @@ async function init() {
     if (e.key === "Escape") {
       if (document.getElementById("app-variant-dialog")?.open) return;
       if (document.getElementById("tag-settings-dialog")?.open) return;
+      if (document.getElementById("glossary-dialog")?.open) return;
       if (document.activeElement?.classList.contains("inline-edit-field")) return;
       const deleteConfirmModal = document.getElementById("delete-node-confirm-modal");
       if (deleteConfirmModal && !deleteConfirmModal.classList.contains("hidden")) {
@@ -13220,4 +13231,11 @@ async function openTagSettings(board) {
     document.getElementById("tag-settings-cancel").onclick = close;
     dialog.oncancel = event => { event.preventDefault(); void close(); };
   } catch (err) { status.textContent = err.message; }
+}
+
+// Global vocabulary remains reachable without opening a tree.
+const globalGlossaryButton = document.getElementById("global-glossary-settings");
+if (globalGlossaryButton) {
+  globalGlossaryButton.hidden = isHubMode();
+  globalGlossaryButton.onclick = () => void openGlossary();
 }
