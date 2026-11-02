@@ -20,23 +20,21 @@ async def smoke(url):
         await page.route('https://**/*', lambda route: route.abort())
         await page.request.put(url + '/api/desktop/archived-trees', data={'ids': [f'scroll-{i}' for i in range(12)]})
         await page.goto(url + '?desktop=1', wait_until='networkidle')
-        await page.locator('.research-program').first.wait_for()
+        await page.locator('.research-quick-group').first.wait_for()
         await page.locator('#btn-app-variant').click()
         dialog = page.locator('#app-variant-dialog')
         assert await dialog.get_by_role('button', name='Закрыть настройки', exact=True).is_visible()
         assert await dialog.get_by_role('button', name='Закрыть', exact=True).count() == 0
-        assert await dialog.locator('legend').inner_text() == 'Интерфейс'
+        assert await dialog.locator('input[name=ui_variant]').count() == 0
         assert await dialog.get_by_role('heading', name='Управление деревьями', exact=True).is_visible()
         assert await dialog.locator('small, #app-variant-description').count() == 0
-        await dialog.locator('[value=chats]').focus()
-        assert await dialog.locator('[value=chats]').evaluate('(el)=>el===document.activeElement')
         current = dialog.locator('section[data-archived=false]')
         archived = dialog.locator('section[data-archived=true]')
         await current.get_by_role('button', name='В архив: Проверка чатов', exact=True).click()
         await archived.get_by_role('button', name='Восстановить: Проверка чатов', exact=True).wait_for()
         assert await current.get_by_role('heading', name='Исследования агентов').is_visible()
         await page.reload(wait_until='networkidle')
-        await page.locator('.research-program').first.wait_for()
+        await page.locator('.research-quick-group').first.wait_for()
         await page.locator('#btn-app-variant').click()
         await archived.get_by_role('button', name='Восстановить: Проверка чатов', exact=True).wait_for()
         output = Path('.run/ui-screenshots'); output.mkdir(parents=True, exist_ok=True)
@@ -50,7 +48,7 @@ async def smoke(url):
                 return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3);
               };
               const background = rgb(getComputedStyle(el).backgroundColor);
-              const pairs = ['h2', 'h5', '.settings-tree-count', 'label:not(:has(:checked)) strong'].map(selector => ({
+              const pairs = ['h2', 'h5', '.settings-tree-count'].map(selector => ({
                 selector, foreground: rgb(getComputedStyle(el.querySelector(selector)).color), background,
               }));
               return pairs;
@@ -98,7 +96,7 @@ async def smoke(url):
         await current.get_by_role('button', name='В архив: Проверка чатов', exact=True).wait_for()
         assert not errors, errors
         await browser.close()
-        print('PASS: archive round trip, persistence, modes, themes, 320/640/1440px, RTL and enlarged text')
+        print('PASS: archive round trip, persistence, Quick Navigation, themes, 320/640/1440px, RTL and enlarged text')
 
 if __name__ == '__main__':
     fixture.smoke = smoke

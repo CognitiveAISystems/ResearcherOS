@@ -1,22 +1,17 @@
 """Saved legacy interface settings cannot replace Quick Navigation assets."""
-import hashlib
-import json
 from pathlib import Path
 from threading import Thread
 from urllib.request import Request, urlopen
 from http.server import ThreadingHTTPServer
 
-import pytest
 
 from api.web_proxy import KoiWebHandler
 from koi.adapters import settings_store
 
 ROOT = Path(__file__).resolve().parents[1]
-LIGHT = ROOT / "web/variants/light"
-SOURCE = json.loads((LIGHT / "source.json").read_text())
 
 
-def test_variant_switch_serves_main_assets_without_stale_cache(monkeypatch, tmp_path):
+def test_legacy_selection_serves_quick_navigation_without_stale_cache(monkeypatch, tmp_path):
     monkeypatch.setattr(settings_store, "ENV_PATH", tmp_path / "settings.env")
     monkeypatch.setenv("KOI_UI_VARIANT", "light")
     server = ThreadingHTTPServer(("127.0.0.1", 0), KoiWebHandler)
