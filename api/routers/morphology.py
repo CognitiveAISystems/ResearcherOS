@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from api.deps import parse_project
 from api.schemas import MorphologyExplainBody, MorphologyStageBody
@@ -42,8 +42,64 @@ def post_project_morphology_stage(
         raise HTTPException(400, str(e)) from e
 
 
+@router.post("/projects/{project_id}/morphology/agent")
+def post_project_morphology_agent(
+    project_id: str, body: MorphologyStageBody, background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    """Run morphology through the same conversation worker as literature search."""
+    from api.routers.agents import create_conversation, post_agent_chat
+    from api.schemas import AgentChatBody, ConversationCreateBody
+    from koi.agent_chat import conversations
+    from koi.literature.morphology import morphology_dir, _write_json
+
+    parse_project(project_id)
+    try:
+        staged = stage_paper_morphology(project_id, body.paper)
+        conversation = create_conversation(ConversationCreateBody(
+            project_id=project_id, title=f"Морфология: {body.paper.get('title', '')}"[:80],
+            backend=body.cli_agent,
+        ))["item"]
+        conversations.update(conversation["id"], kind="morphology", morphology_run_id=staged["run_id"])
+        response = post_agent_chat(AgentChatBody(
+            project_id=project_id, question="Собери морфологию выбранной статьи.",
+            conversation_id=conversation["id"], cli_agent=body.cli_agent,
+        ), background_tasks)
+        _write_json(morphology_dir(project_id) / staged["run_id"] / "chat.json",
+                    {"conversation_id": conversation["id"]})
+        return {**staged, "conversation_id": conversation["id"], "item": response["item"]}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 def _tree_cwd(project_id: str):
     return sync_worktree_path(get_mount_or_raise(project_id))
+
+
+@router.post("/projects/{project_id}/morphology/explain")
+def post_project_morphology_explain(
+    project_id: str, body: MorphologyExplainBody, background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    """Explain a graph selection using the in-app background worker."""
+    from api.routers.agents import create_conversation, post_agent_chat
+    from api.schemas import AgentChatBody, ConversationCreateBody
+    from koi.agent_chat import conversations
+
+    parse_project(project_id)
+    try:
+        note = explain_note_file(paper_morphology_dir(project_id), body.run_id, body.node_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if not note.parent.is_dir():
+        raise HTTPException(404, "Прогон морфологии не найден.")
+    conversation = create_conversation(ConversationCreateBody(
+        project_id=project_id, title="Пояснение связки",
+    ))["item"]
+    conversations.update(conversation["id"], kind="morphology_explain", morphology_run_id=body.run_id)
+    response = post_agent_chat(AgentChatBody(
+        project_id=project_id, conversation_id=conversation["id"],
+        question=body.prompt + explain_note_suffix(str(note.resolve())),
+    ), background_tasks)
+    return {"conversation_id": conversation["id"], "item": response["item"]}
 
 
 @router.post("/projects/{project_id}/morphology/explain-terminal")

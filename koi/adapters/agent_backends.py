@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from koi.adapters.workspace import get_workspace
+from koi.adapters.agent_process import run_json
 
 
 def _resolve_cwd(cwd: Path | str | None) -> Path | str:
@@ -107,6 +108,9 @@ def run_codex_exec(
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
     externally_sandboxed: bool = False,
+    on_event=None,
+    is_cancelled=None,
+    on_started=None,
 ) -> Optional[str]:
     """Non-interactive вызов локального Codex CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -134,24 +138,33 @@ def run_codex_exec(
     model = os.environ.get("KOI_CODEX_MODEL", "").strip()
     if model:
         cmd[2:2] = ["-m", model]
-    extra = os.environ.get("KOI_CODEX_ARGS", "").split()
+    # Research tasks need APIs and local preview servers inside the workspace.
+    extra = ["-c", "sandbox_workspace_write.network_access=true"] if allow_edits and not externally_sandboxed else []
+    if allow_edits and not externally_sandboxed:
+        # Desktop state lives outside the code workspace. SQLite also needs
+        # permission to create its journal beside the registry.
+        run_dir = get_workspace().run_dir
+        run_dir.mkdir(parents=True, exist_ok=True)
+        extra += ["--add-dir", str(run_dir.resolve())]
+    extra += os.environ.get("KOI_CODEX_ARGS", "").split()
     if extra:
         cmd[2:2] = extra
     try:
-        proc = subprocess.run(
-            cmd,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            cwd=str(cwd),
-            timeout=timeout,
-        )
+        if on_event is not None:
+            cmd.insert(2, "--json")
+            returncode = run_json(cmd, prompt, cwd=cwd, timeout=timeout,
+                                  on_event=on_event, is_cancelled=is_cancelled, on_started=on_started)
+            stdout = ""
+        else:
+            proc = subprocess.run(cmd, input=prompt, capture_output=True,
+                                  text=True, cwd=str(cwd), timeout=timeout)
+            stdout, returncode = proc.stdout, proc.returncode
         if output_path.exists():
             text = output_path.read_text(encoding="utf-8").strip()
             if text:
                 return text
-        if proc.returncode == 0:
-            text = (proc.stdout or "").strip()
+        if returncode == 0:
+            text = (stdout or "").strip()
             return text or None
         return None
     except (OSError, subprocess.TimeoutExpired):
@@ -239,6 +252,9 @@ def run_claude_code(
     cwd: Path | str | None = None,
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
+    on_event=None,
+    is_cancelled=None,
+    on_started=None,
 ) -> Optional[str]:
     """Headless-вызов Claude Code; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -257,6 +273,20 @@ def run_claude_code(
     extra = os.environ.get("KOI_CLAUDE_ARGS", "").split()
     cmd += extra
     try:
+        if on_event is not None:
+            cmd[cmd.index("--output-format") + 1] = "stream-json"
+            cmd.append("--verbose")
+            answer = ""
+            failed = False
+            def receive(event):
+                nonlocal answer, failed
+                on_event(event)
+                if event.get("type") == "result":
+                    answer = str(event.get("result") or "").strip()
+                    failed = bool(event.get("is_error"))
+            code = run_json(cmd, prompt, cwd=cwd, timeout=timeout,
+                            on_event=receive, is_cancelled=is_cancelled, on_started=on_started)
+            return answer if code == 0 and not failed and answer else None
         proc = subprocess.run(
             cmd,
             input=prompt,
@@ -329,6 +359,7 @@ CLI_AGENTS = (
     ("cursor", "Cursor"),
     ("codex", "Codex"),
     ("claude", "Claude"),
+    ("opencode", "OpenCode"),
 )
 
 
@@ -336,10 +367,12 @@ def cli_agents() -> list[dict]:
     """Какие CLI реально есть на этой машине."""
     from koi.literature.cursor_agent_terminal import find_agent_bin
 
+    from koi.adapters.acp_agents import agents as acp_agents
     checks = {
         "cursor": find_agent_bin() is not None,
         "codex": _codex_ready(),
         "claude": _claude_bin() is not None,
+        "opencode": any(row["id"] == "acp:opencode" and row["available"] for row in acp_agents()),
     }
     return [
         {"id": key, "label": label, "available": checks[key]}
@@ -390,6 +423,9 @@ def run_agent(
     allow_edits: bool = False,
     backend: Optional[str] = None,
     externally_sandboxed: bool = False,
+    on_event=None,
+    is_cancelled=None,
+    on_started=None,
 ) -> tuple[Optional[str], Optional[str]]:
     """Запустить агента первым доступным бэкендом.
 
@@ -399,12 +435,17 @@ def run_agent(
     cwd = _resolve_cwd(cwd)
     order = [backend] if backend else backend_order()
     for name in order:
+        if is_cancelled and is_cancelled():
+            from koi.adapters.agent_process import AgentCancelled
+            raise AgentCancelled
         if allow_edits and name == "openrouter":
             continue  # Text-only backend cannot carry out project changes.
         runner = _RUNNERS.get(name)
         if runner is None:
             continue
         extra = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
+        if on_event is not None and name in ("codex", "claude"):
+            extra.update(on_event=on_event, is_cancelled=is_cancelled, on_started=on_started)
         text = runner(prompt, cwd=cwd, timeout=timeout, allow_edits=allow_edits, **extra)
         if text:
             return text, name

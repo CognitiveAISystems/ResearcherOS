@@ -1,4 +1,10 @@
-import { attachReportChatResize } from "./report-chat-resize.js";
+import { openGlossary } from "./glossary.js";
+import { projectTreeNodes } from "./tree-projection.js";
+import { EDGE_LABELS, edgeCaption, edgeLabelHeight, treeEdgeDefs, appendTreeEdge } from "./tree-edges.js";
+import { ChatConversations } from "./chat-conversations.js";
+import { ResearchChatNavigation } from "./research-chat-navigation.js";
+import { initAppVariant, usesChatNavigation, preserveVariantDrafts, restoreVariantDrafts } from "./app-variant.js";
+import { attachReportChatResize, attachMainChatResize } from "./report-chat-resize.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
 import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
@@ -16,7 +22,7 @@ import {
   mergeComputeCost,
 } from "./compute-cost.js";
 import { KoiApi } from "./api.js?v=20261021paper-edits";
-import { openNewProjectWizard } from "./desktop-onboarding.js";
+import { openNewProjectWizard, openLocalTreeInterview } from "./desktop-onboarding.js";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
 import {
   refreshInlineLoaderHints,
@@ -45,7 +51,6 @@ import {
   formatAddChildContextHint,
   formatAddChildFormatHint,
   formatAddParentIntro,
-  mountAddNodeButton,
   mountNodeTypeHelp,
 } from "./node-tree-help.js";
 
@@ -144,7 +149,6 @@ function applyHubReadonlyChrome() {
     "btn-widgets",
     "btn-new-project",
     "btn-agent-chat",
-    "btn-agent-chat-welcome",
     "btn-knowledge",
     "btn-related-work",
     "btn-paper",
@@ -205,6 +209,9 @@ const VERDICT_BADGES = {
 };
 
 const TYPE_LABELS = {
+  topic: "Тема",
+  direction: "Направление",
+  program: "Инженерное решение",
   problem: "Проблема",
   cause: "Причина",
   cause_evidence: "Доказательство",
@@ -227,6 +234,9 @@ const KANBAN_BELOW_H = 34;
 const KANBAN_BELOW_W = 88;
 
 const TYPE_ORDER = {
+  topic: -1,
+  direction: 0,
+  program: 1,
   problem: 0,
   cause: 1,
   cause_evidence: 2,
@@ -238,29 +248,9 @@ const TYPE_ORDER = {
 const PROBLEM_MIN_W = 200;
 const PROBLEM_MAX_W = 300;
 const PROBLEM_MIN_H = 72;
-const PROBLEM_MAX_H = 110;
 const EXP_SIZE = 48;
-const ADD_NODE_SIZE = { w: 80, h: 80, round: "50%" };
-
-function addSlotId(parentId) {
-  return `__add__${parentId}`;
-}
-
-function isAddSlot(id) {
-  return typeof id === "string" && id.startsWith("__add__");
-}
-
-function addNodeSize() {
-  return ADD_NODE_SIZE;
-}
-
 function canShowAddButton(node) {
-  return (
-    node.node_type === "problem" ||
-    node.node_type === "cause" ||
-    node.node_type === "cause_evidence" ||
-    node.node_type === "remediation"
-  );
+  return allowedChildTypes(node.node_type).length > 0;
 }
 
 function shouldShowAddSlot(node) {
@@ -291,8 +281,6 @@ const HYPOTHESIS_METRICS = {
   round: "4px",
 };
 
-const RQ_BADGE_HOLD_MS = 2500;
-const RQ_BADGE_FADE_MS = 5_000;
 const RQ_IMPORTANCE_FILTER_KEY = "koi-rq-importance-min";
 const RQ_IMPORTANCE_FILTER_OPTIONS = [
   { min: 1, label: "Все", title: "Показать все выводы" },
@@ -315,7 +303,7 @@ let state = {
   kanbanNodeId: null,
   kanbanDisabledTagFilters: [],
   kanbanDateFilter: "all",
-  kanbanFocus: false,
+  kanbanFavoritesOnly: false,
   questionsNodeId: null,
   reportCardId: null,
   reportBoardId: null,
@@ -386,12 +374,12 @@ function computeNodeSize(node) {
   let h = m.padY * 2 + m.labelH + lines.length * m.lineH;
   h = Math.ceil(Math.min(m.maxH, Math.max(isHypothesis ? 44 : 50, h)));
 
-  if (node.node_type === "problem") {
+  if (["topic", "problem", "direction"].includes(node.node_type)) {
     const pw = Math.ceil(
       Math.min(PROBLEM_MAX_W, Math.max(PROBLEM_MIN_W, textW + m.padX * 2 + 8))
     );
     const ph = Math.ceil(
-      Math.min(PROBLEM_MAX_H, Math.max(PROBLEM_MIN_H, h))
+      Math.max(PROBLEM_MIN_H, h + 24)
     );
     return { w: pw, h: ph, round: "50%", shape: "oval", lines };
   }
@@ -399,14 +387,14 @@ function computeNodeSize(node) {
   return {
     w,
     h,
-    round: isHypothesis ? HYPOTHESIS_METRICS.round : "12px",
+    round: node.node_type === "program" ? "24px" : isHypothesis ? HYPOTHESIS_METRICS.round : "12px",
     lines,
   };
 }
 
 function buildSizeCache() {
   const sizes = {};
-  for (const n of state.project.nodes) {
+  for (const n of projectTreeNodes(state.project.nodes)) {
     sizes[n.id] = computeNodeSize(n);
   }
   state.nodeSizes = sizes;
@@ -430,6 +418,19 @@ function formatAgentChatInline(text) {
 }
 
 function formatAgentChatReply(text) {
+  const src = text || "";
+  const stages = /(?:^|\n)```setup-progress[ \t]*\n([\s\S]*?)(?:\n```[ \t]*(?=\n|$)|$)/g;
+  let html = "";
+  let last = 0;
+  for (const match of src.matchAll(stages)) {
+    html += formatAgentChatText(src.slice(last, match.index).replace(/\n+$/, ""));
+    if (match[1].trim()) html += `<div class="agent-chat-progress">${escapeHtml(match[1].trim())}</div>`;
+    last = match.index + match[0].length;
+  }
+  return html + formatAgentChatText(last ? src.slice(last).replace(/^\n+/, "") : src);
+}
+
+function formatAgentChatText(text) {
   const src = text || "";
   const parts = [];
   let last = 0;
@@ -504,49 +505,6 @@ function researchQuestionNarrative(q) {
   const narrative = (q.narrative || "").trim();
   if (narrative) return narrative;
   return (q.answer || "").trim();
-}
-
-const rqBadgeTimers = new WeakMap();
-
-function clearRqBadgeTimers(wrap) {
-  const t = rqBadgeTimers.get(wrap);
-  if (!t) return;
-  if (t.hold) clearTimeout(t.hold);
-  if (t.fadeEnd) clearTimeout(t.fadeEnd);
-  rqBadgeTimers.delete(wrap);
-}
-
-function showResearchQuestionBadge(wrap, qBtn) {
-  clearRqBadgeTimers(wrap);
-  qBtn.classList.remove("is-fading", "is-hidden");
-  void qBtn.offsetWidth;
-  qBtn.classList.add("is-visible");
-}
-
-function scheduleResearchQuestionBadgeFade(wrap, qBtn) {
-  clearRqBadgeTimers(wrap);
-  const hold = setTimeout(() => {
-    qBtn.classList.remove("is-visible");
-    void qBtn.offsetWidth;
-    qBtn.classList.add("is-fading");
-    const fadeEnd = setTimeout(() => {
-      qBtn.classList.remove("is-fading");
-      qBtn.classList.add("is-hidden");
-      rqBadgeTimers.delete(wrap);
-    }, RQ_BADGE_FADE_MS);
-    rqBadgeTimers.set(wrap, { fadeEnd });
-  }, RQ_BADGE_HOLD_MS);
-  rqBadgeTimers.set(wrap, { hold });
-}
-
-function wireResearchQuestionBadge(wrap, qBtn) {
-  qBtn.classList.add("is-hidden");
-  wrap.addEventListener("mouseenter", () => showResearchQuestionBadge(wrap, qBtn));
-  wrap.addEventListener("mouseleave", () =>
-    scheduleResearchQuestionBadgeFade(wrap, qBtn)
-  );
-  qBtn.addEventListener("focus", () => showResearchQuestionBadge(wrap, qBtn));
-  qBtn.addEventListener("blur", () => scheduleResearchQuestionBadgeFade(wrap, qBtn));
 }
 
 function methodRegionKey(projectId, nodeId) {
@@ -653,7 +611,8 @@ function syncKanbanProgressBar(el, s) {
 
 function activityContextForProject(project) {
   const pid = project?.id;
-  const authors = pid ? runningAuthorsByProject.get(pid) || {} : {};
+  const people = pid ? runningAuthorsByProject.get(pid) || {} : {};
+  const authors = Object.fromEntries(Object.entries(people).map(([id, names]) => [id, names.join(", ")]));
   const hubOwner = window.__HUB__?.meta?.owner_login || "";
   return {
     projectTitle: project?.title || pid || "",
@@ -733,7 +692,10 @@ async function ensureRunningAuthors(projectId, { force = false } = {}) {
     } else {
       const data = await KoiApi.getKanbanRunningActivity(projectId);
       authors = Object.fromEntries(
-        (data.items || []).map((item) => [item.card_id, item.author || "коллега"])
+        (data.items || []).map((item) => [
+          item.card_id,
+          Array.isArray(item.authors) ? item.authors : (item.author ? [item.author] : []),
+        ])
       );
     }
     runningAuthorsByProject.set(projectId, authors);
@@ -758,7 +720,6 @@ function applyRunningCardAuthorTitles(root, projectId) {
     state.lab?.projectsById?.[projectId] ||
     (state.project?.id === projectId ? state.project : null);
   if (!project) return;
-  const fallbackAuthor = window.__HUB__?.meta?.owner_login || "";
 
   const cardsById = new Map();
   for (const board of Object.values(project.boards || {})) {
@@ -770,7 +731,7 @@ function applyRunningCardAuthorTitles(root, projectId) {
     const cardId = el.dataset.cardId;
     const card = cardsById.get(cardId);
     if (!card || card.column_id !== "running") return;
-    const author = authors[cardId] || fallbackAuthor;
+    const author = (authors[cardId] || []).join(", ");
     if (!author) return;
     let task = card.title;
     const body = String(card.description || "").replace(/\\n/g, "\n");
@@ -826,12 +787,9 @@ function authorMapsForProject(project) {
   return maps;
 }
 
-function resolveRunningAuthor(project, cardId) {
-  for (const map of authorMapsForProject(project)) {
-    const who = String(map[cardId] || "").trim();
-    if (who) return who;
-  }
-  return String(window.__HUB__?.meta?.owner_login || "").trim();
+function resolveRunningAuthors(project, cardId) {
+  const authors = authorMapsForProject(project).flatMap((map) => map[cardId] || []);
+  return [...new Map(authors.filter(Boolean).map((name) => [name.toLowerCase(), name])).values()];
 }
 
 /**
@@ -849,10 +807,12 @@ function runningWorkersUnderNode(project, nodeId) {
     const board = getBoardForNode(project, node);
     for (const card of board?.cards || []) {
       if (card.column_id !== "running") continue;
-      const login = resolveRunningAuthor(project, card.id) || "коллега";
+      const authors = resolveRunningAuthors(project, card.id);
       const task = String(card.title || card.id).trim();
-      if (!byAuthor.has(login)) byAuthor.set(login, []);
-      if (task) byAuthor.get(login).push(task);
+      for (const login of authors.length ? authors : [""]) {
+        if (!byAuthor.has(login)) byAuthor.set(login, []);
+        if (task && !byAuthor.get(login).includes(task)) byAuthor.get(login).push(task);
+      }
     }
   }
 
@@ -867,8 +827,10 @@ function runningWorkersForCard(project, cardId) {
     if (card) break;
   }
   if (!card || card.column_id !== "running") return [];
-  const login = resolveRunningAuthor(project, cardId) || "коллега";
-  return [{ login, tasks: [String(card.title || cardId).trim()].filter(Boolean) }];
+  const authors = resolveRunningAuthors(project, cardId);
+  return (authors.length ? authors : [""]).map((login) => ({
+    login, tasks: [String(card.title || cardId).trim()].filter(Boolean),
+  }));
 }
 
 function ensureNodeWorkersPanel() {
@@ -891,21 +853,35 @@ function ensureNodeWorkersPanel() {
 function positionNodeWorkersPanel(anchor) {
   const panel = ensureNodeWorkersPanel();
   if (!anchor) return;
-  const rect = anchor.getBoundingClientRect();
-  const margin = 12;
-  const panelRect = panel.getBoundingClientRect();
-  let left = rect.right + margin;
-  let top = rect.top;
-  if (left + panelRect.width > window.innerWidth - margin) {
-    left = rect.left - panelRect.width - margin;
-  }
-  if (left < margin) left = margin;
-  if (top + panelRect.height > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - panelRect.height - margin);
-  }
-  if (top < margin) top = margin;
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
+  const node = anchor.querySelector(".map-node") || anchor;
+  const rect = node.getBoundingClientRect();
+  const viewport = anchor.closest(".mindmap-viewport")?.getBoundingClientRect();
+  const bounds = {
+    left: Math.max(8, (viewport?.left || 0) + 8),
+    top: Math.max(8, (viewport?.top || 0) + 8),
+    right: Math.min(innerWidth, viewport?.right ?? innerWidth) - 8,
+    bottom: Math.min(innerHeight, viewport?.bottom ?? innerHeight) - 8,
+  };
+  panel.style.width = `${Math.min(240, bounds.right - bounds.left)}px`;
+  panel.style.maxHeight = `${Math.min(240, Math.max(80, (bounds.bottom - bounds.top) / 3))}px`;
+  const { width, height } = panel.getBoundingClientRect();
+  const obstacles = [...document.querySelectorAll(".map-node, .mindmap-view-chrome")]
+    .map(el => ({ rect: el.getBoundingClientRect(), weight: el === node ? 20 : 1 }))
+    .filter(({rect: r}) => r.right > bounds.left && r.left < bounds.right && r.bottom > bounds.top && r.top < bounds.bottom);
+  const candidates = [
+    [rect.right + 10, rect.top], [rect.left - width - 10, rect.top],
+    [rect.left, rect.bottom + 10], [rect.left, rect.top - height - 10],
+  ].map(([x, y]) => {
+    const left = Math.max(bounds.left, Math.min(x, bounds.right - width));
+    const top = Math.max(bounds.top, Math.min(y, bounds.bottom - height));
+    const score = obstacles.reduce((sum, {rect: r, weight}) => sum + weight *
+      Math.max(0, Math.min(left + width, r.right) - Math.max(left, r.left)) *
+      Math.max(0, Math.min(top + height, r.bottom) - Math.max(top, r.top)), 0);
+    return { left, top, score };
+  });
+  const best = candidates.reduce((a, b) => a.score <= b.score ? a : b);
+  panel.style.left = `${best.left}px`;
+  panel.style.top = `${best.top}px`;
 }
 
 function githubAvatarUrl(login) {
@@ -937,7 +913,7 @@ function renderNodeWorkersPanel(workers, _scopeLabel) {
     `<ul class="node-workers-panel__list" role="list">` +
     workers
       .map((w) => {
-        const login = String(w.login || "коллега").trim() || "коллега";
+        const login = String(w.login || "").trim().replace(/^@/, "");
         const avatar = resolveWorkerAvatar(login);
         const initials = escapeHtml(workerInitials(login));
         const avatarHtml = avatar
@@ -946,7 +922,7 @@ function renderNodeWorkersPanel(workers, _scopeLabel) {
         return (
           `<li class="node-workers-panel__item">` +
           avatarHtml +
-          `<span class="node-workers-panel__nick">@${escapeHtml(login)}</span>` +
+          `<span class="node-workers-panel__nick">${login ? `@${escapeHtml(login)}` : "Автор не указан"}</span>` +
           `</li>`
         );
       })
@@ -1016,6 +992,10 @@ function wireNodeWorkersHover(wrap, project, node) {
 
   const show = () => {
     const reveal = () => {
+      if (document.querySelector(".node-action-menu:popover-open") || wrap.querySelector(".node-actions:hover")) {
+        hideNodeWorkersPanel(true);
+        return;
+      }
       const workers = runningWorkersUnderNode(project, node.id);
       if (!workers.length) {
         hideNodeWorkersPanel(true);
@@ -1187,11 +1167,12 @@ function syncLabActivityOverlay() {
   syncMethodActivityZoomMode(viewport, labCamera, showOverlay);
   if (showOverlay && overlayRebuilt && !isHubMode()) {
     const layer = document.getElementById("method-activity-overlay");
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const project = state.lab.projectsById[item.projectId];
-      if (!project || !layer) continue;
+      const pin = layer?.children[index];
+      if (!project || !pin) continue;
       const board = getBoardForNode(project, item.node);
-      bindMethodLiveInspect(layer, item.node, board, project);
+      bindMethodLiveInspect(pin, item.node, board, project);
     }
   }
 }
@@ -1691,11 +1672,10 @@ function halfH(node) {
 /** Y center for each tree level (top → bottom). */
 function buildDepthY(root) {
   const maxH = {};
+  const edgeGaps = {};
   function walk(n, d) {
     maxH[d] = Math.max(maxH[d] || 0, halfH(n));
-    if (shouldShowAddSlot(n)) {
-      maxH[d + 1] = Math.max(maxH[d + 1] || 0, addNodeSize().h / 2 + 4);
-    }
+    edgeGaps[d] = Math.max(edgeGaps[d] || 0, edgeLabelHeight(n));
     (n.children || []).forEach((c) => walk(c, d + 1));
   }
   walk(root, 0);
@@ -1704,7 +1684,7 @@ function buildDepthY(root) {
   let cur = LAYOUT.topPad + (maxH[0] || 0);
   y[0] = cur;
   for (let d = 1; d <= maxDepth; d++) {
-    cur += maxH[d - 1] + LAYOUT.vGap + maxH[d];
+    cur += maxH[d - 1] + LAYOUT.vGap + (edgeGaps[d] || 0) + maxH[d];
     y[d] = cur;
   }
   return y;
@@ -1712,66 +1692,30 @@ function buildDepthY(root) {
 
 function subtreeWidth(node) {
   const kids = node.children || [];
-  const addW = shouldShowAddSlot(node) ? addNodeSize().w : 0;
-  if (!kids.length) return Math.max(nodeSize(node).w, addW);
-  let total = 0;
-  kids.forEach((child, i) => {
-    if (i > 0) total += LAYOUT.hGap;
-    total += subtreeWidth(child);
-  });
-  if (shouldShowAddSlot(node)) {
-    total += LAYOUT.hGap + addW;
-  }
-  return Math.max(nodeSize(node).w, total);
+  const childrenWidth = kids.reduce((width, child) => width + subtreeWidth(child), 0)
+    + Math.max(0, kids.length - 1) * LAYOUT.hGap;
+  return Math.max(nodeSize(node).w, edgeCaption(node) ? 200 : 0, childrenWidth);
 }
 
-/**
- * Top-down tree: problem on top, children spread horizontally below.
- */
+/** Only research nodes participate in layout; editing controls stay attached. */
 function layoutTopDown(node, depth, xLeft, yByDepth, positions) {
   const kids = node.children || [];
-  const showAdd = shouldShowAddSlot(node);
-  const childDepth = depth + 1;
-  const childY = yByDepth[childDepth];
-
-  if (!kids.length && !showAdd) {
-    const w = nodeSize(node).w;
-    positions[node.id] = { x: xLeft + w / 2, y: yByDepth[depth], node };
-    return xLeft + w;
-  }
-
-  let cursor = xLeft;
+  const width = subtreeWidth(node);
+  const childrenWidth = kids.reduce((sum, child) => sum + subtreeWidth(child), 0)
+    + Math.max(0, kids.length - 1) * LAYOUT.hGap;
+  let cursor = xLeft + (width - childrenWidth) / 2;
   const centers = [];
-
   kids.forEach((child, i) => {
     if (i > 0) cursor += LAYOUT.hGap;
-    cursor = layoutTopDown(child, childDepth, cursor, yByDepth, positions);
+    cursor = layoutTopDown(child, depth + 1, cursor, yByDepth, positions);
     centers.push(positions[child.id].x);
   });
-
-  if (showAdd) {
-    if (kids.length) cursor += LAYOUT.hGap;
-    const s = addNodeSize();
-    const aid = addSlotId(node.id);
-    positions[aid] = {
-      x: cursor + s.w / 2,
-      y: childY,
-      isAdd: true,
-      parentNode: node,
-    };
-    centers.push(positions[aid].x);
-    cursor += s.w;
-  }
-
   positions[node.id] = {
-    x:
-      centers.length > 0
-        ? (centers[0] + centers[centers.length - 1]) / 2
-        : xLeft + nodeSize(node).w / 2,
+    x: centers.length ? (centers[0] + centers[centers.length - 1]) / 2 : xLeft + width / 2,
     y: yByDepth[depth],
     node,
   };
-  return cursor;
+  return xLeft + width;
 }
 
 function collectDescendants(nodeId, nodes) {
@@ -1782,7 +1726,7 @@ function collectDescendants(nodeId, nodes) {
 }
 
 function shiftSubtree(nodeId, dx, dy, positions) {
-  for (const id of collectDescendants(nodeId, state.project.nodes)) {
+  for (const id of collectDescendants(nodeId, projectTreeNodes(state.project.nodes))) {
     if (positions[id]) {
       positions[id].x += dx;
       positions[id].y += dy;
@@ -1792,9 +1736,9 @@ function shiftSubtree(nodeId, dx, dy, positions) {
 
 /** Children always below parent with a vertical gap. */
 function enforceVerticalOrder(positions) {
-  for (const n of state.project.nodes) {
+  for (const { node: n } of Object.values(positions)) {
     if (!n.parent_id || !isVisualNode(n)) continue;
-    const parent = state.project.nodes.find((p) => p.id === n.parent_id);
+    const parent = positions[n.parent_id]?.node;
     const pPos = positions[n.parent_id];
     const cPos = positions[n.id];
     if (!parent || !pPos || !cPos) continue;
@@ -1805,22 +1749,11 @@ function enforceVerticalOrder(positions) {
       shiftSubtree(n.id, 0, needTop - cb.top, positions);
     }
   }
-  for (const [id, pos] of Object.entries(positions)) {
-    if (!pos.isAdd || !pos.parentNode) continue;
-    const pPos = positions[pos.parentNode.id];
-    if (!pPos) continue;
-    const pb = bboxFromPos(pPos, pos.parentNode);
-    const cb = bboxFromPos(pos, null);
-    const needTop = pb.bottom + LAYOUT.vGap;
-    if (cb.top < needTop - 2) {
-      pos.y += needTop - cb.top;
-    }
-  }
 }
 
 function bboxFromPos(pos, node) {
-  const s = pos.isAdd ? addNodeSize() : nodeSize(node);
-  const below = node && !pos.isAdd ? kanbanBelowExtra(node) : 0;
+  const s = nodeSize(node);
+  const below = node ? kanbanBelowExtra(node) : 0;
   return {
     left: pos.x - s.w / 2,
     right: pos.x + s.w / 2,
@@ -1845,9 +1778,9 @@ function bboxesOverlap(a, b, margin = 14) {
 }
 
 function isParentChild(idA, idB) {
-  if (isAddSlot(idA) || isAddSlot(idB)) return true;
-  const a = state.project.nodes.find((n) => n.id === idA);
-  const b = state.project.nodes.find((n) => n.id === idB);
+  const nodes = projectTreeNodes(state.project.nodes);
+  const a = nodes.find((n) => n.id === idA);
+  const b = nodes.find((n) => n.id === idB);
   if (!a || !b) return false;
   return a.parent_id === idB || b.parent_id === idA;
 }
@@ -1888,8 +1821,9 @@ function scaleTreeToFit(positions, width, height) {
     maxY = -Infinity;
   for (const p of Object.values(positions)) {
     const b = bboxFromPos(p, p.node);
-    minX = Math.min(minX, b.left);
-    maxX = Math.max(maxX, b.right);
+    const labelHalfWidth = edgeCaption(p.node) ? 100 : 0;
+    minX = Math.min(minX, b.left, p.x - labelHalfWidth);
+    maxX = Math.max(maxX, b.right, p.x + labelHalfWidth);
     minY = Math.min(minY, b.top);
     maxY = Math.max(maxY, b.bottom);
   }
@@ -1921,13 +1855,13 @@ function boundaryPoint(fromX, fromY, toX, toY, size) {
     return { x: fromX + ux * rad, y: fromY + uy * rad };
   }
   if (isOval) {
-    const a = size.w / 2 - 6;
-    const b = size.h / 2 - 6;
+    const a = size.w / 2;
+    const b = size.h / 2;
     const t = 1 / Math.sqrt((ux / a) ** 2 + (uy / b) ** 2);
     return { x: fromX + ux * t, y: fromY + uy * t };
   }
-  const hw = size.w / 2 - 6;
-  const hh = size.h / 2 - 6;
+  const hw = size.w / 2;
+  const hh = size.h / 2;
   const scale = Math.min(
     Math.abs(ux) > 1e-6 ? hw / Math.abs(ux) : Infinity,
     Math.abs(uy) > 1e-6 ? hh / Math.abs(uy) : Infinity
@@ -1936,72 +1870,32 @@ function boundaryPoint(fromX, fromY, toX, toY, size) {
 }
 
 function renderEdges(svg, positions, width, height) {
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("aria-label", "Связи дерева");
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-  svg.innerHTML = `
-    <defs>
-      <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#ff6bcb"/>
-        <stop offset="50%" stop-color="#7b5cff"/>
-        <stop offset="100%" stop-color="#3de8ff"/>
-      </linearGradient>
-      <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="2" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3de8ff"/>
-      </marker>
-    </defs>`;
-
-  const drawEdge = (from, to, fs, ts, dashed = false) => {
+  svg.innerHTML = treeEdgeDefs("focus-edge");
+  const drawEdge = (from, to, fs, ts, node) => {
     if (!from || !to) return;
-    const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
-    const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
-    const x1 = start.x;
-    const y1 = start.y;
-    const x2 = end.x;
-    const y2 = end.y;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist;
-    const curve = Math.min(LAYOUT.edgeCurve, dist * 0.08);
-    const mx = (x1 + x2) / 2 + (Math.abs(ux) > 0.5 ? curve * Math.sign(dx || 1) : 0);
-    const my = (y1 + y2) / 2;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-    path.setAttribute("class", dashed ? "edge edge-add" : "edge");
-    path.setAttribute("stroke", "url(#edge-grad)");
-    path.setAttribute("filter", "url(#edge-glow)");
-    if (!dashed) path.setAttribute("marker-end", "url(#arrow)");
-    svg.appendChild(path);
+    appendTreeEdge(svg, {x: from.x, y: from.y + fs.h / 2 + kanbanBelowExtra(from.node)},
+      {x: to.x, y: to.y - ts.h / 2}, node, "focus-edge", openEdgeEditor);
   };
 
-  state.project.nodes.forEach((n) => {
+  Object.values(positions).forEach(({ node: n }) => {
     if (!n.parent_id || !isVisualNode(n)) return;
-    const parent = state.project.nodes.find((x) => x.id === n.parent_id);
+    const parent = positions[n.parent_id]?.node;
     if (!parent || !isVisualNode(parent)) return;
     drawEdge(
       positions[n.parent_id],
       positions[n.id],
       nodeSize(parent),
-      nodeSize(n)
+      nodeSize(n),
+      n
     );
   });
 
-  for (const [id, pos] of Object.entries(positions)) {
-    if (!pos.isAdd || !pos.parentNode) continue;
-    drawEdge(
-      positions[pos.parentNode.id],
-      pos,
-      nodeSize(pos.parentNode),
-      addNodeSize(),
-      true
-    );
-  }
 }
 
 const LAB_LAYOUT = {
@@ -2038,8 +1932,9 @@ function positionsBBox(positions) {
   let maxY = -Infinity;
   for (const p of Object.values(positions)) {
     const b = bboxFromPos(p, p.node);
-    minX = Math.min(minX, b.left);
-    maxX = Math.max(maxX, b.right);
+    const labelHalfWidth = edgeCaption(p.node) ? 100 : 0;
+    minX = Math.min(minX, b.left, p.x - labelHalfWidth);
+    maxX = Math.max(maxX, b.right, p.x + labelHalfWidth);
     minY = Math.min(minY, b.top);
     maxY = Math.max(maxY, b.bottom);
   }
@@ -2052,7 +1947,7 @@ function positionsBBox(positions) {
 function computeProjectLayout(project) {
   return withProject(project, () => {
     buildSizeCache();
-    const trees = buildTree(project.nodes);
+    const trees = buildTree(projectTreeNodes(project.nodes));
     const root = trees[0];
     if (!root) return null;
     const yByDepth = buildDepthY(root);
@@ -2326,6 +2221,8 @@ function ensureLabCamera() {
 
   labCamera = new MindmapCamera(viewport, canvas, {
     onChange: () => {
+      if (nodeWorkersAnchor) positionNodeWorkersPanel(nodeWorkersAnchor);
+      document.querySelectorAll(".node-action-menu:popover-open").forEach(menu => menu.hidePopover());
       if (!attentionUpdateFrame) {
         attentionUpdateFrame = requestAnimationFrame(() => {
           attentionUpdateFrame = 0;
@@ -2350,16 +2247,7 @@ function ensureLabCamera() {
   bindMethodActivityZoomPreview(viewport, () => labCamera);
   syncLabActivityOverlay();
 
-  document.getElementById("btn-zoom-in")?.addEventListener("click", () => labCamera.zoomBy(1.2));
-  document.getElementById("btn-zoom-out")?.addEventListener("click", () => labCamera.zoomBy(1 / 1.2));
-  document.getElementById("btn-zoom-fit-lab")?.addEventListener("click", () => labCamera.fitWorld());
-  document.getElementById("btn-zoom-fit-project")?.addEventListener("click", () => {
-    const id = state.project?.id;
-    const regions = labCameraLayout()?.projectRegions;
-    if (id && regions?.[id]) {
-      labCamera.flyToRegion(regions[id]);
-    }
-  });
+
 }
 
 async function loadLab() {
@@ -2400,6 +2288,57 @@ async function loadLab() {
   void preloadAllRunningAuthors();
 }
 
+function wireMapNodeTitle(el, node, open, activate = () => {}) {
+  const title = el.querySelector(".node-title");
+  let clickTimer;
+  let editing = false;
+  const finish = async (cancel = false, restoreFocus = false) => {
+    if (!editing) return;
+    editing = false;
+    const next = title.textContent.trim();
+    title.removeAttribute("contenteditable");
+    title.removeAttribute("role");
+    title.removeAttribute("aria-label");
+    title.textContent = displayTitle(node);
+    if (!cancel && next && next !== node.title) {
+      activate();
+      await patchNodeFields(node.id, { title: next });
+    }
+    if (restoreFocus && el.isConnected) el.focus();
+  };
+  el.addEventListener("click", event => {
+    event.stopPropagation();
+    clearTimeout(clickTimer);
+    if (!editing && event.detail < 2) {
+      if (event.detail === 0) open();
+      else clickTimer = setTimeout(open, 350);
+    }
+  });
+  el.addEventListener("dblclick", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    clearTimeout(clickTimer);
+    if (editing) return;
+    editing = true;
+    title.textContent = node.title;
+    title.contentEditable = "plaintext-only";
+    title.setAttribute("role", "textbox");
+    title.setAttribute("aria-label", "Имя узла");
+    title.focus();
+    const selection = window.getSelection();
+    selection.selectAllChildren(title);
+  });
+  title.addEventListener("keydown", event => {
+    if (!editing) return;
+    event.stopPropagation();
+    if (event.key === "Enter" || event.key === "Escape") {
+      event.preventDefault();
+      void finish(event.key === "Escape", true);
+    }
+  });
+  title.addEventListener("blur", () => void finish());
+}
+
 function mountMapNode(pos, layer, project, node, nodeSizes) {
   const savedSizes = state.nodeSizes;
   state.nodeSizes = nodeSizes;
@@ -2407,7 +2346,7 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
   const hasKanban = node.node_type === "method" && !!getBoardForNode(project, node);
   const el = document.createElement("button");
   el.type = "button";
-  const verdictBadge = node.node_type === "cause" ? VERDICT_BADGES[node.verdict] : null;
+  const verdictBadge = (node.source_node?.node_type || node.node_type) === "cause" ? VERDICT_BADGES[node.verdict] : null;
   el.className = `map-node ${node.node_type}${hasKanban ? " has-kanban clickable" : ""}${verdictBadge ? ` verdict-${node.verdict}` : ""}`;
   el.innerHTML = `
     <span class="node-label">${TYPE_LABELS[node.node_type]}</span>
@@ -2421,23 +2360,14 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
     }
   };
 
-  el.addEventListener("click", (e) => {
-    e.stopPropagation();
+  wireMapNodeTitle(el, node, () => {
     activateProject();
     if (hasKanban) openKanbanModal(node);
-    else openNodeModal(node);
-  });
-  el.addEventListener("dblclick", (e) => {
-    e.stopPropagation();
-    activateProject();
-    if (hasKanban) flyToMethodNode(project, node);
-    else openNodeModal(node);
-  });
+  }, activateProject);
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     activateProject();
     if (hasKanban) openKanbanModal(node);
-    else openNodeModal(node);
   });
 
   const wrap = document.createElement("div");
@@ -2458,40 +2388,10 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
   wrap.appendChild(el);
   layer.appendChild(wrap);
 
-  if (node.node_type === "method" && (node.research_questions?.length ?? 0) > 0) {
-    const counts = researchQuestionCounts(node);
-    const mapEl = wrap.firstElementChild;
-    const core = document.createElement("div");
-    core.className = "node-core has-method-questions";
-    wrap.classList.add("has-research-questions");
-    wrap.insertBefore(core, mapEl);
-    core.appendChild(mapEl);
-    const qBtn = document.createElement("button");
-    qBtn.type = "button";
-    qBtn.className = "method-questions-trigger";
-    qBtn.setAttribute(
-      "aria-label",
-      `Выводы: ${counts.definite} с чётким ответом, ${counts.tentative} предварительных`
-    );
-    qBtn.title = "Выводы по экспериментам";
-    qBtn.innerHTML = `<span class="rq-badge-q">?</span><span class="rq-badge-def">${counts.definite}</span><span class="rq-badge-sep">|</span><span class="rq-badge-tent">${counts.tentative}</span>`;
-    qBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      activateProject();
-      openMethodQuestionsModal(node);
-    });
-    qBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-    core.appendChild(qBtn);
-    wireResearchQuestionBadge(wrap, qBtn);
-  }
-
-  mountNodeTypeHelp(wrap, node.node_type);
-
+  mountNodeActions(wrap, project, node, activateProject, size.w);
   if (hasKanban) {
     appendKanbanBelow(wrap, node, project);
   }
-  appendNodeDeleteButton(wrap, project, node);
   mountNodePageIcons(wrap, project, node, activateProject);
   wireNodeWorkersHover(wrap, project, node);
   state.nodeSizes = savedSizes;
@@ -2499,39 +2399,23 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
 }
 
 function renderLabEdges(svg, placements, worldW, worldH) {
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("aria-label", "Связи дерева");
   svg.setAttribute("width", String(worldW));
   svg.setAttribute("height", String(worldH));
   svg.setAttribute("viewBox", `0 0 ${worldW} ${worldH}`);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   svg.style.width = `${worldW}px`;
   svg.style.height = `${worldH}px`;
-  svg.innerHTML = `
-    <defs>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
-      </marker>
-    </defs>`;
-
-  const drawEdge = (group, from, to, fs, ts, dashed = false) => {
+  svg.innerHTML = treeEdgeDefs("lab-edge");
+  const drawEdge = (group, from, to, fs, ts, node, project) => {
     if (!from || !to) return;
-    const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
-    const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
-    const x1 = start.x;
-    const y1 = start.y;
-    const x2 = end.x;
-    const y2 = end.y;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist;
-    const curve = Math.min(LAYOUT.edgeCurve, dist * 0.08);
-    const mx = (x1 + x2) / 2 + (Math.abs(ux) > 0.5 ? curve * Math.sign(dx || 1) : 0);
-    const my = (y1 + y2) / 2;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-    path.setAttribute("class", dashed ? "edge edge-add" : "edge");
-    if (!dashed) path.setAttribute("marker-end", "url(#arrow)");
-    group.appendChild(path);
+    appendTreeEdge(group, {x: from.x, y: from.y + fs.h / 2 + kanbanBelowExtra(from.node)},
+      {x: to.x, y: to.y - ts.h / 2}, node, "lab-edge", (n, label) => {
+        state.project = project;
+        setActiveProjectInList(project.id);
+        openEdgeEditor(n, label);
+      });
   };
 
   for (const placement of placements) {
@@ -2546,29 +2430,20 @@ function renderLabEdges(svg, placements, worldW, worldH) {
     state.nodeSizes = placement.nodeSizes || {};
     try {
       const { positions } = placement;
-      placement.project.nodes.forEach((n) => {
+      Object.values(positions).forEach(({ node: n }) => {
         if (!n.parent_id || !isVisualNode(n)) return;
-        const parent = placement.project.nodes.find((x) => x.id === n.parent_id);
+        const parent = positions[n.parent_id]?.node;
         if (!parent || !isVisualNode(parent)) return;
         drawEdge(
           group,
           positions[n.parent_id],
           positions[n.id],
           nodeSize(parent),
-          nodeSize(n)
+          nodeSize(n),
+          n,
+          placement.project
         );
       });
-      for (const [id, pos] of Object.entries(positions)) {
-        if (!pos.isAdd || !pos.parentNode) continue;
-        drawEdge(
-          group,
-          positions[pos.parentNode.id],
-          pos,
-          nodeSize(pos.parentNode),
-          addNodeSize(),
-          true
-        );
-      }
     } finally {
       state.project = savedProject;
       state.nodeSizes = savedSizes;
@@ -2646,30 +2521,13 @@ function renderLabMindmap(options = {}) {
     nodeGroup.style.height = `${worldH}px`;
     nodeGroup.style.transformOrigin = `${region.x + region.width / 2}px ${region.y + region.height / 2}px`;
     layer.appendChild(nodeGroup);
-    project.nodes.forEach((n) => {
+    Object.values(positions).forEach(({ node: n }) => {
       if (!isVisualNode(n)) return;
       const pos = positions[n.id];
       if (!pos) return;
       mountMapNode(pos, nodeGroup, project, n, nodeSizes);
     });
 
-    for (const [, pos] of Object.entries(positions)) {
-      if (!pos.isAdd || !pos.parentNode) continue;
-      const labels = state.meta?.labels || TYPE_LABELS;
-      mountAddNodeButton({
-        pos,
-        parent: pos.parentNode,
-        projectId: project.id,
-        labels,
-        allowedTypes: allowedChildTypes(pos.parentNode.node_type),
-        readOnly: isHubMode(),
-        onOpen: (parent) => {
-          state.project = project;
-          openAddChildModal(parent);
-        },
-        mount: (addWrap) => nodeGroup.appendChild(addWrap),
-      });
-    }
   }
 
   renderLabEdges(svg, visiblePlacements, worldW, worldH);
@@ -2808,7 +2666,7 @@ function initViewControls() {
   updateViewChrome();
 }
 
-async function focusLabProject(projectId, { animate = false, reload = false } = {}) {
+async function focusLabProject(projectId, { animate = false, reload = false, fitTree = false } = {}) {
   if (!state.lab?.projectsById) return;
   if (ensureLabTreeVisible(projectId)) {
     void loadProjectList(projectId);
@@ -2841,7 +2699,7 @@ async function focusLabProject(projectId, { animate = false, reload = false } = 
   updateAgentChatScope();
   void refreshAgentChat();
   const mode = getViewMode();
-  if (mode === "teamlead") {
+  if (mode === "teamlead" && !fitTree) {
     renderLabMindmap({ fitProgram: true, flyAnimate: animate });
   } else {
     renderLabMindmap({
@@ -2906,7 +2764,7 @@ function renderMindmap(options = {}) {
     return;
   }
 
-  const trees = buildTree(state.project.nodes);
+  const trees = buildTree(projectTreeNodes(state.project.nodes));
   const root = trees[0];
   if (!root) {
     setStatus("В проекте нет корневого узла (problem)", true);
@@ -2961,7 +2819,7 @@ function renderMindmap(options = {}) {
     svg.setAttribute("height", String(h));
   }
 
-  state.project.nodes.forEach((n) => {
+  Object.values(positions).forEach(({ node: n }) => {
     if (!isVisualNode(n)) return;
     const pos = positions[n.id];
     if (!pos) return;
@@ -2970,81 +2828,35 @@ function renderMindmap(options = {}) {
     const el = document.createElement("button");
     el.type = "button";
     const verdictBadge =
-      n.node_type === "cause" ? VERDICT_BADGES[n.verdict] : null;
+      (n.source_node?.node_type || n.node_type) === "cause" ? VERDICT_BADGES[n.verdict] : null;
     el.className = `map-node ${n.node_type}${hasKanban ? " has-kanban clickable" : ""}${verdictBadge ? ` verdict-${n.verdict}` : ""}`;
     el.innerHTML = `
       <span class="node-label">${TYPE_LABELS[n.node_type]}</span>
       <span class="node-title">${escapeHtml(displayTitle(n))}</span>
       ${verdictBadge ? `<span class="node-verdict node-verdict--${n.verdict}" title="${verdictBadge.label}">${verdictBadge.mark}</span>` : ""}`;
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
+    wireMapNodeTitle(el, n, () => {
       if (hasKanban) openKanbanModal(n);
-      else openNodeModal(n);
-    });
-    el.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      if (!hasKanban) openNodeModal(n);
     });
     el.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       if (hasKanban) openKanbanModal(n);
-      else openNodeModal(n);
     });
     const wrap = mountNode(pos, el, size, hasKanban, n.id);
-    if (n.node_type === "method" && hasResearchQuestions(n)) {
-      const counts = researchQuestionCounts(n);
-      const mapEl = wrap.firstElementChild;
-      const core = document.createElement("div");
-      core.className = "node-core has-method-questions";
-      wrap.classList.add("has-research-questions");
-      wrap.insertBefore(core, mapEl);
-      core.appendChild(mapEl);
-
-      const qBtn = document.createElement("button");
-      qBtn.type = "button";
-      qBtn.className = "method-questions-trigger";
-      qBtn.setAttribute(
-        "aria-label",
-        `Выводы: ${counts.definite} с чётким ответом, ${counts.tentative} предварительных`
-      );
-      qBtn.title = "Выводы по экспериментам";
-      qBtn.innerHTML = `<span class="rq-badge-q">?</span><span class="rq-badge-def">${counts.definite}</span><span class="rq-badge-sep">|</span><span class="rq-badge-tent">${counts.tentative}</span>`;
-      qBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        openMethodQuestionsModal(n);
-      });
-      qBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-      core.appendChild(qBtn);
-      wireResearchQuestionBadge(wrap, qBtn);
-    }
-    mountNodeTypeHelp(wrap, n.node_type);
+    mountNodeActions(wrap, state.project, n, () => {}, size.w);
     if (hasKanban) appendKanbanBelow(wrap, n);
-    appendNodeDeleteButton(wrap, state.project, n);
     mountNodePageIcons(wrap, state.project, n);
     wireNodeWorkersHover(wrap, state.project, n);
   });
 
   updateLayerExtent();
 
-  for (const [id, pos] of Object.entries(positions)) {
-    if (!pos.isAdd || !pos.parentNode) continue;
-    const labels = state.meta?.labels || TYPE_LABELS;
-    mountAddNodeButton({
-      pos,
-      parent: pos.parentNode,
-      labels,
-      allowedTypes: allowedChildTypes(pos.parentNode.node_type),
-      readOnly: isHubMode(),
-      onOpen: openAddChildModal,
-      mount: (addWrap) => layer.appendChild(addWrap),
-    });
-  }
 }
 
 function showModal(id) {
   document.getElementById(id).classList.remove("hidden");
   document.body.classList.add("modal-open");
+  if (rqBellPanelOpen) setRqBellPanelOpen(false);
+  if (["kanban-modal", "card-report-modal"].includes(id)) void syncWorkspaceChatContext();
 }
 
 function hideModal(id) {
@@ -3057,10 +2869,10 @@ function hideModal(id) {
     if (frame) frame.src = "about:blank";
   }
   document.getElementById(id).classList.add("hidden");
+  if (id === "kanban-modal") for (const popup of document.querySelectorAll('.kanban-header-popover:popover-open')) popup.hidePopover();
   if (id === "node-modal") resetNodeModal();
   if (id === "method-questions-modal") resetMethodQuestionsEditMode();
-  if (id === "kanban-modal") {
-  }
+  if (["kanban-modal", "card-report-modal"].includes(id)) void syncWorkspaceChatContext();
   if (!document.querySelector(".modal:not(.hidden)")) {
     document.body.classList.remove("modal-open");
   }
@@ -3071,6 +2883,7 @@ let reportLinkedReadOnly = false;
 let reportAutoSaveTimer;
 let reportInterviewTimer;
 let reportInterviewItems = [];
+let mainConversations, cardConversations, researchChatNavigation;
 let reportInterviewSignature = "";
 let reportInterviewSending = false;
 let reportLastSyncedContent = null;
@@ -3092,6 +2905,7 @@ function getReportBlockEditor() {
       reportAutoSaveTimer = setTimeout(() => void saveCardReport(), 900);
     },
     onAgent: idea => void openReportInterview(idea),
+    onGlossary: term => void openGlossary(reportWriteProjectId(), term),
     onPaste: async (event, input, commit) => {
       const file = clipboardImageFile(event.clipboardData);
       if (!file) return;
@@ -3130,7 +2944,7 @@ function formatReportGrillAnswer(text) {
   return html + formatAgentChatReply(src.slice(last));
 }
 function reportInterviewStuck(item) {
-  if (!item || item.status === "answered") return false;
+  if (!item || item.status === "answered" || item.acp_active) return false;
   const started = Date.parse(item.processing_at || item.enqueued_at || "");
   const age = Number.isFinite(started) ? Date.now() - started : 0;
   if (isInboxAgentMode() && !isChatInboxWatcherRunning() && item.status !== "processing" && age > 15000) return true;
@@ -3147,17 +2961,18 @@ function showReportInterviewTab(tab) {
   const activity = tab === "activity";
   document.getElementById("report-interview-log")?.classList.toggle("hidden", activity);
   document.getElementById("report-interview-activity")?.classList.toggle("hidden", !activity);
-  for (const name of ["chat", "activity"]) {
-    const button = document.getElementById(`report-interview-tab-${name}`);
-    button?.classList.toggle("is-active", name === tab);
-    button?.setAttribute("aria-selected", String(name === tab));
-  }
+  const button = document.getElementById("report-interview-tab-activity");
+  button?.classList.toggle("is-active", activity);
+  button?.setAttribute("aria-pressed", String(activity));
+  button?.setAttribute("aria-label", activity ? "Показать переписку" : "Журнал работы агента");
+  button?.setAttribute("title", activity ? "Показать переписку" : "Журнал работы агента");
   if (activity) void refreshReportInterviewActivity();
 }
 function stopReportInterview() {
   clearInterval(reportInterviewTimer);
   reportInterviewTimer = null;
   reportInterviewItems = [];
+  cardConversations?.reset();
   reportInterviewSignature = "";
   reportInterviewSending = false;
   document.querySelector(".report-agent-menu")?.remove();
@@ -3166,10 +2981,18 @@ function stopReportInterview() {
   document.getElementById("report-interview-status").hidden = true;
 }
 async function openReportInterview(idea = "") {
+  if (!isHubMode() && document.body.classList.contains("unified-workspace")) {
+    await syncWorkspaceChatContext();
+    toggleAgentChatPanel(true);
+    const input = document.getElementById("agent-chat-input");
+    input.value = reportGrillDraft(idea); input.focus();
+    return;
+  }
   if (isHubMode() || reportLinkedReadOnly) return;
   const identity = reportIdentity();
   const panel = document.getElementById("report-interview");
   panel.hidden = false;
+  document.getElementById("report-agent-fab").setAttribute("aria-expanded", "true");
   void refreshCliAgents();
   await refreshReportInterview();
   if (identity !== reportIdentity() || !state.reportCardId) return;
@@ -3183,9 +3006,10 @@ async function refreshReportInterview() {
   if (!state.reportCardId) return;
   const identity = reportIdentity();
   try {
-    const data = await KoiApi.listAgentChat(reportWriteProjectId(), state.reportBoardId, state.reportCardId);
-    if (identity !== reportIdentity()) return;
-    reportInterviewItems = data.items || [];
+    const data = await cardConversations.refresh();
+    if (!data || identity !== reportIdentity()) return;
+    reportInterviewItems = withLiveAnswer(data);
+    syncConversationAgent(cardConversations, "report-interview");
     const signature = JSON.stringify(reportInterviewItems);
     if (signature !== reportInterviewSignature) {
       reportInterviewSignature = signature;
@@ -3194,8 +3018,7 @@ async function refreshReportInterview() {
     if (!document.getElementById("report-interview-activity")?.classList.contains("hidden")) {
       void refreshReportInterviewActivity();
     }
-    const pending = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i));
-    document.querySelector("#report-interview-form button").disabled = pending || reportInterviewSending;
+    cardConversations.syncSendButton();
     if (!reportInterviewSending && reportInterviewItems.some(reportInterviewStuck)) {
       setReportInterviewStatus("Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.", "error");
     }
@@ -3227,7 +3050,10 @@ async function refreshReportInterviewActivity() {
   const pid = reportWriteProjectId();
   if (!host || !pid || !state.reportCardId) return;
   try {
-    const data = await KoiApi.listAgentChatActivity(pid, state.reportBoardId, state.reportCardId);
+    if (!cardConversations.row) { host.textContent = "Пока нет запусков агента."; return; }
+    const cid = cardConversations.row.id;
+    const data = await KoiApi.conversationActivity(cid);
+    if (cid !== cardConversations.row?.id) return;
     const ids = new Set(reportInterviewItems.map((item) => item.id));
     const items = (data.items || []).filter((item) => ids.has(item.id) && item.events?.length);
     host.innerHTML = items.length ? items.map((item) =>
@@ -3241,21 +3067,23 @@ async function refreshReportInterviewActivity() {
 }
 function renderReportInterview() {
   const log = document.getElementById("report-interview-log");
+  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? { id: document.activeElement.closest("article")?.dataset.id, href: document.activeElement.getAttribute("href") } : null;
   const nearBottom = agentChatLogNearBottom(log);
   log.replaceChildren();
   if (!reportInterviewItems.length) {
-    log.innerHTML = '<p class="agent-chat-empty">Начните с идеи. Агент изучит контекст задачи и поможет уточнить постановку.</p>';
+    log.innerHTML = '<div class="agent-chat-empty"><p>Обсудите постановку или результаты этой карточки.</p></div>';
   }
   for (const item of [...reportInterviewItems].reverse()) {
     const pending = item.status !== "answered";
     const isProcessing = item.status === "processing";
     const article = document.createElement("article");
     article.className = `agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}`;
+    article.dataset.id = item.id;
     const stuck = reportInterviewStuck(item);
     const answerBody = item.purpose === "grill_me" || item.purpose === "report_grill"
       ? formatReportGrillAnswer(item.answer || "")
       : formatAgentChatReply(item.answer || "");
-    const answerHtml = item.status === "answered"
+    const answerHtml = item.status === "answered" || item.streaming
       ? `<div class="agent-chat-reply${item.answer_kind === "warning" ? " agent-chat-reply--warning" : ""}">${answerBody}</div>`
       : stuck
         ? `<div class="agent-chat-reply agent-chat-reply--warning">Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.</div>`
@@ -3266,6 +3094,8 @@ function renderReportInterview() {
       agentChatDeliveryHtml(item) +
       `</div>` +
       answerHtml +
+      (pending && item.streaming ? agentChatTypingHtml() : "") +
+      agentChatCardLinkHtml(item, cardConversations?.row) +
       `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>`;
     if (item.proposal) {
       const details = document.createElement("details");
@@ -3301,6 +3131,7 @@ function renderReportInterview() {
     }
     log.append(article);
   }
+  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink.id)}"] [data-chat-card-link][href="${CSS.escape(focusedCardLink.href)}"]`)?.focus({ preventScroll: true });
   if (nearBottom) log.scrollTop = log.scrollHeight;
 }
 async function sendReportInterview(event) {
@@ -3311,14 +3142,13 @@ async function sendReportInterview(event) {
   const question = input.value.trim();
   if (!question) return;
   const identity = reportIdentity();
-  const button = document.querySelector("#report-interview-form button");
+  const button = document.querySelector("#report-interview-form .agent-chat-send");
   reportInterviewSending = true; button.disabled = true; setReportInterviewStatus("Отправляем вопрос…");
   const command = reportChatCommand(question);
   try {
-    for (const item of reportInterviewItems.filter(reportInterviewStuck)) {
-      await KoiApi.deleteAgentChatItem(item.id);
-    }
-    await KoiApi.sendAgentQuestion({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent() });
+    const conversation = await cardConversations.ensure();
+    if (identity !== reportIdentity()) return;
+    await KoiApi.sendAgentQuestion({ conversation_id: conversation.id, project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent("report-interview") });
     if (identity !== reportIdentity()) return;
     input.value = command.purpose === "grill_me" ? "/grill-me " : "";
     input.setSelectionRange(input.value.length, input.value.length);
@@ -3326,7 +3156,7 @@ async function sendReportInterview(event) {
     await refreshReportInterview();
   } catch (err) { if (identity === reportIdentity()) setReportInterviewStatus(err.message, "error"); }
   finally {
-    if (identity === reportIdentity()) { reportInterviewSending = false; button.disabled = reportInterviewItems.some(i => i.status !== "answered" && !reportInterviewStuck(i)); }
+    if (identity === reportIdentity()) { reportInterviewSending = false; cardConversations.syncSendButton(); }
   }
 }
 
@@ -3410,6 +3240,7 @@ async function openLinkedReportMarkdown(knowledgePath) {
     document.getElementById("report-agent-fab").hidden = true;
     document.getElementById("card-report-save").hidden = true;
     document.getElementById("report-interview").hidden = true;
+  document.getElementById("report-agent-fab").setAttribute("aria-expanded", "false");
     document.getElementById("report-save-status").textContent = "Связанный документ · только чтение";
     editor.value = content;
     state.reportRelativePath = knowledgePath;
@@ -3523,6 +3354,10 @@ function closeCardReport() {
   clearInterval(reportContentPollTimer);
   reportContentPollTimer = null;
   hideModal("card-report-modal");
+  if (!document.getElementById("kanban-modal").classList.contains("hidden")) {
+    const cardButton = document.querySelector(`#kanban-board [data-card-id="${CSS.escape(state.reportCardId)}"] .card-expand-report`);
+    (cardButton || document.getElementById("kanban-filters-toggle"))?.focus({ preventScroll: true });
+  }
   state.reportCardId = null;
   state.reportBoardId = null;
   state.reportProjectId = null;
@@ -3573,6 +3408,7 @@ async function openCardReport(card, board) {
   reportLinkedReadOnly = false;
   getReportBlockEditor().readOnly = isHubMode();
   document.getElementById("report-interview").hidden = true;
+  document.getElementById("report-agent-fab").setAttribute("aria-expanded", "false");
   state.reportCardId = card.id;
   state.reportBoardId = board.id;
   state.reportProjectId = boardWriteProjectId(board);
@@ -3658,16 +3494,79 @@ async function refreshReportFilenameIfOpen(cardId) {
 }
 
 const FALLBACK_ALLOWED_CHILDREN = {
-  problem: ["cause"],
+  topic: ["problem", "direction", "program"],
+  direction: ["method", "program"],
+  program: ["program", "method"],
+  problem: ["method", "program", "cause"],
   cause: ["cause_evidence", "remediation"],
   cause_evidence: ["method"],
   remediation: ["method"],
   method: [],
 };
 
+function configureEdgeFields(form, parent, childType, node = null) {
+  const select = form.elements.edge_type;
+  const label = form.elements.edge_label;
+  const isProblem = parent?.node_type === "problem" && ["method", "program"].includes(childType);
+  const types = isProblem ? ["hypothesis", "evidence"] : ["direction"];
+  select.replaceChildren(...types.map(type => new Option(EDGE_LABELS[type], type)));
+  if (node && types.includes(node.edge_type)) select.value = node.edge_type;
+  if (node) label.value = node.edge_label || "";
+  const update = () => {
+    label.required = select.value === "hypothesis";
+    label.placeholder = label.required ? "Какое предположение проверяем?" : "Необязательно";
+  };
+  select.onchange = update;
+  update();
+}
+
+function openEdgeEditor(node, anchor) {
+  if (isHubMode() || !anchor) return;
+  const comment = anchor.querySelector(".tree-edge-comment");
+  if (!comment || comment.isContentEditable) return;
+  const target = node.edge_source || node;
+  const projectId = nodeWriteProjectId(target);
+  const previous = node.edge_source ? target.title : (node.edge_label || "");
+  const caption = comment.textContent;
+  comment.textContent = previous;
+  comment.contentEditable = "plaintext-only";
+  comment.setAttribute("role", "textbox");
+  comment.setAttribute("aria-label", "Комментарий связи");
+  let editing = true;
+  const finish = async (cancel = false) => {
+    if (!editing) return;
+    editing = false;
+    const next = comment.textContent.trim();
+    comment.removeAttribute("contenteditable");
+    comment.removeAttribute("role");
+    comment.removeAttribute("aria-label");
+    comment.onblur = null;
+    comment.onkeydown = null;
+    comment.textContent = caption;
+    if (cancel || next === previous) return;
+    try {
+      await KoiApi.patchNode(projectId, target.id, node.edge_source ? { title: next } : { edge_label: next });
+      state.project = await reloadProjectView();
+      syncLabProject(state.project);
+      renderMindmap({ preserveCamera: true });
+    } catch (error) { setStatus(error.message, true); }
+  };
+  comment.onblur = () => void finish();
+  comment.onkeydown = event => {
+    event.stopPropagation();
+    if (event.key === "Enter" || event.key === "Escape") {
+      event.preventDefault();
+      void finish(event.key === "Escape");
+      anchor.querySelector("button").focus({ preventScroll: true });
+    }
+  };
+  comment.focus({ preventScroll: true });
+  window.getSelection().selectAllChildren(comment);
+}
+
 function allowedChildTypes(parentType) {
   const fromMeta = state.meta?.allowed_children?.[parentType];
-  const list = (fromMeta?.length ? fromMeta : FALLBACK_ALLOWED_CHILDREN[parentType]) || [];
+  const list = (Array.isArray(fromMeta) ? fromMeta : FALLBACK_ALLOWED_CHILDREN[parentType]) || [];
   return list.filter((t) => t !== "experiment");
 }
 
@@ -3681,6 +3580,9 @@ function fillAddChildTypeSelect(parent) {
   const formatHint = document.getElementById("add-child-format-hint");
   const titleInput = document.querySelector("#add-child-form input[name=title]");
   const defaults = {
+    problem: "Название проблемы",
+    direction: "Название направления",
+    program: "Название инженерного решения",
     cause: "Причина: …",
     cause_evidence: "Доказательство: …",
     remediation: "Устранение: …",
@@ -3703,6 +3605,7 @@ function fillAddChildTypeSelect(parent) {
 
   const updateHints = () => {
     const nodeType = typeSelect.value || allowed[0];
+    configureEdgeFields(document.getElementById("add-child-form"), parent, nodeType);
     if (parentIntro) {
       parentIntro.textContent = formatAddParentIntro(parent.node_type, allowed, labels);
     }
@@ -3983,18 +3886,23 @@ function initKanbanModalChrome() {
     toggle.setAttribute("aria-expanded", expand ? "true" : "false");
     if (!expand) syncKanbanDescClamp();
   });
-  document.getElementById("kanban-focus-toggle")?.addEventListener("click", () => {
-    state.kanbanFocus = !state.kanbanFocus;
-    const btn = document.getElementById("kanban-focus-toggle");
-    btn?.classList.toggle("is-active", state.kanbanFocus);
-    btn?.setAttribute("aria-pressed", state.kanbanFocus ? "true" : "false");
-    const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
-    const board = node?.board_id ? state.project.boards[node.board_id] : null;
-    if (board && node) renderActiveKanbanView(board, node);
-  });
 }
 
 function fillNodeEdit(node) {
+  const rootLabel = document.getElementById("node-root-type-label");
+  const rootSelect = document.getElementById("node-root-type");
+  rootLabel.classList.toggle("hidden", !!node.parent_id || isHubMode());
+  rootSelect.value = node.node_type;
+  rootSelect.onchange = async () => {
+    rootSelect.disabled = true;
+    try {
+      const updated = await patchNodeFields(node.id, { root_type: rootSelect.value });
+      if (updated) {
+        document.getElementById("node-modal-type").textContent = TYPE_LABELS[updated.node_type];
+        fillNodeEdit(updated);
+      } else rootSelect.value = node.node_type;
+    } finally { rootSelect.disabled = false; }
+  };
   renderInlineDisplay(
     document.getElementById("node-title-display"),
     node.title,
@@ -4372,13 +4280,7 @@ function openAddChildModal(parent) {
   document.getElementById("add-child-block").classList.remove("hidden");
   document.getElementById("node-modal-type").textContent =
     TYPE_LABELS[parent.node_type];
-  const pt = parent.node_type;
-  document.getElementById("node-modal-title").textContent =
-    pt === "problem"
-      ? "Добавить причину"
-      : pt === "cause"
-        ? "Добавить доказательство или гипотезу"
-        : "Добавить метод";
+  document.getElementById("node-modal-title").textContent = "Добавить узел";
   fillAddChildTypeSelect(parent);
   document.querySelector("#add-child-form").reset();
   fillAddChildTypeSelect(parent);
@@ -4386,6 +4288,19 @@ function openAddChildModal(parent) {
 }
 
 function openNodeModal(node) {
+  node = node.source_node || node;
+  const context = document.getElementById("node-source-context");
+  context.replaceChildren();
+  const related = state.project.nodes.filter(item => item.node_type === "cause"
+    && (item.id === node.parent_id || item.parent_id === node.id));
+  for (const source of related) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn";
+    button.textContent = `Исходная причина: ${source.title}`;
+    button.addEventListener("click", () => openNodeModal(source));
+    context.append(button);
+  }
   hideModal("kanban-modal");
   state.activeNodeId = node.id;
   document.getElementById("node-edit-block").classList.remove("hidden");
@@ -4395,11 +4310,11 @@ function openNodeModal(node) {
   fillNodeEdit(node);
 
   const delBtn = document.getElementById("btn-delete-node");
-  delBtn.classList.toggle("hidden", node.node_type === "problem");
+  delBtn.classList.toggle("hidden", !node.parent_id);
 
   const addMethodBtn = document.getElementById("btn-add-method");
-  const canAddMethod =
-    node.node_type === "cause_evidence" || node.node_type === "remediation";
+  const canAddMethod = canShowAddButton(node);
+  addMethodBtn.textContent = "+ Добавить узел";
   addMethodBtn.classList.toggle("hidden", !canAddMethod);
   addMethodBtn.onclick = () => openAddChildModal(node);
 
@@ -4436,6 +4351,8 @@ async function onAddChildSubmit(e) {
     await KoiApi.addNode(nodeWriteProjectId(parent), {
       parent_id: parentId,
       node_type: nodeType,
+      edge_type: fd.get("edge_type") || "direction",
+      edge_label: fd.get("edge_label")?.toString().trim() || "",
       title,
       description: "",
     });
@@ -4453,7 +4370,7 @@ async function onAddChildSubmit(e) {
 
 async function onDeleteNode() {
   const node = state.project.nodes.find((n) => n.id === state.activeNodeId);
-  if (!node || node.node_type === "problem") return;
+  if (!node || !node.parent_id) return;
   await requestDeleteNode(node);
 }
 
@@ -4536,7 +4453,7 @@ function syncDeleteNodeConfirmInput() {
 }
 
 async function requestDeleteNode(node) {
-  if (!node || node.node_type === "problem" || isHubMode()) return;
+  if (!node || !node.parent_id || isHubMode()) return;
   const ok = await askDeleteNodeConfirm(node);
   if (!ok) return;
   setStatus("Удаление…");
@@ -4555,8 +4472,8 @@ async function requestDeleteNode(node) {
   }
 }
 
-function appendNodeDeleteButton(wrap, project, node) {
-  if (!wrap || !node || node.node_type === "problem" || isHubMode()) return;
+function appendNodeDeleteButton(wrap, project, node, mount = (button) => wrap.appendChild(button)) {
+  if (!wrap || !node || !node.parent_id || isHubMode()) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "node-delete";
@@ -4577,7 +4494,104 @@ function appendNodeDeleteButton(wrap, project, node) {
   });
   btn.addEventListener("pointerdown", (e) => e.stopPropagation());
   btn.addEventListener("mousedown", (e) => e.stopPropagation());
-  wrap.appendChild(btn);
+  mount(btn);
+}
+
+function mountNodeActions(wrap, project, node, activateProject, width) {
+  const visualType = node.node_type;
+  node = node.source_node || node;
+  const allowed = isHubMode() ? [] : allowedChildTypes(node.node_type);
+  const actions = document.createElement("div");
+  actions.className = "node-actions";
+  actions.dataset.nodeType = visualType;
+  actions.style.top = wrap.querySelector(".map-node").style.height;
+  actions.style.left = `calc(50% - ${width / 2}px)`;
+  actions.addEventListener("mouseenter", () => hideNodeWorkersPanel(true));
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "node-actions-trigger";
+  trigger.innerHTML = allowed.length
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>';
+  trigger.title = "Действия с узлом";
+  trigger.setAttribute("aria-label", `Действия с узлом «${displayTitle(node)}»`);
+  trigger.setAttribute("aria-expanded", "false");
+  const menu = document.createElement("div");
+  menu.className = "node-action-menu";
+  menu.popover = "auto";
+  menu.id = `node-actions-${project.id}-${node.id}`;
+  menu.setAttribute("role", "group");
+  trigger.setAttribute("aria-controls", menu.id);
+  menu.setAttribute("aria-label", "Действия с узлом");
+  const mount = button => {
+    button.addEventListener("click", () => {
+      menu.hidePopover();
+      trigger.focus({ preventScroll: true });
+    }, { capture: true });
+    menu.appendChild(button);
+  };
+  for (const type of allowed) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `Добавить: ${TYPE_LABELS[type] || type}`;
+    button.dataset.nodeType = type;
+    button.addEventListener("click", () => {
+      activateProject();
+      openAddChildModal(node);
+      const select = document.querySelector("#add-child-form select");
+      select.value = type;
+      select.dispatchEvent(new Event("change"));
+      document.querySelector('#add-child-form input[name="title"]').focus();
+    });
+    mount(button);
+  }
+  if (allowed.length) {
+    const divider = document.createElement("div");
+    divider.className = "node-action-menu-divider";
+    divider.setAttribute("role", "separator");
+    menu.appendChild(divider);
+  }
+  mountNodeTypeHelp(wrap, node.node_type, button => {
+    button.textContent = "О типе узла";
+    mount(button);
+  });
+  appendNodeDeleteButton(wrap, project, node, button => {
+    button.textContent = "Удалить узел";
+    mount(button);
+  });
+  trigger.addEventListener("click", event => {
+    event.stopPropagation();
+    if (menu.matches(":popover-open")) { menu.hidePopover(); return; }
+    hideNodeWorkersPanel(true);
+    menu.showPopover();
+    const anchor = trigger.getBoundingClientRect();
+    const rect = menu.getBoundingClientRect();
+    const canvasLeft = document.getElementById("mindmap-viewport").getBoundingClientRect().left;
+    const left = anchor.left - rect.width - 6 >= canvasLeft ? anchor.left - rect.width - 6 : anchor.right + 6;
+    menu.style.left = `${Math.max(8, Math.min(left, innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(anchor.top, innerHeight - rect.height - 8))}px`;
+    menu.querySelector("button")?.focus({ preventScroll: true });
+  });
+  menu.addEventListener("toggle", event => trigger.setAttribute("aria-expanded", String(event.newState === "open")));
+  menu.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      menu.hidePopover();
+      trigger.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = [...menu.querySelectorAll("button")];
+    const index = buttons.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus({ preventScroll: true });
+  });
+  actions.addEventListener("pointerdown", event => event.stopPropagation());
+  actions.addEventListener("mousedown", event => event.stopPropagation());
+  actions.append(trigger, menu);
+  wrap.appendChild(actions);
 }
 
 function formatImportance(importance) {
@@ -4990,7 +5004,7 @@ function createResearchQuestionEditRow(q, node, { expand = false } = {}) {
         `<textarea class="rq-editable-input rq-question inline-edit-field hidden" rows="2" placeholder="Формулировка понятна без знания метрик…">${escapeHtml(questionText)}</textarea>`,
         "Вопрос (без жаргона: SFT, RL, diversity…)"
       )}
-      <button type="button" class="btn btn-danger btn-remove-rq" aria-label="Удалить вопрос">×</button>
+      <button type="button" class="btn btn-danger btn-remove-rq" aria-label="Удалить вопрос" ${pending ? "disabled" : ""}>×</button>
     </div>
     <div class="method-rq-edit-details${expand ? "" : " hidden"}">
       ${rqFieldBlockHtml(
@@ -5135,13 +5149,28 @@ function openMethodQuestionsModal(node) {
 }
 
 function openKanbanModal(node) {
-  document.getElementById("kanban-method-details").open = false;
+  for (const id of ["kanban-method-details", "kanban-board-filters"]) {
+    const popup = document.getElementById(id);
+    if (popup.matches(":popover-open")) popup.hidePopover();
+  }
   state.kanbanNodeId = node.id;
+  let questions = document.getElementById("kanban-questions");
+  if (!questions) {
+    questions = document.createElement("button");
+    questions.id = "kanban-questions";
+    questions.type = "button";
+    questions.className = "btn btn-small";
+    questions.textContent = "Выводы по экспериментам";
+    document.querySelector(".kanban-modal-actions").prepend(questions);
+  }
+  questions.hidden = !hasResearchQuestions(node);
+  questions.onclick = () => openMethodQuestionsModal(node);
   const board = getBoardForNode(state.project, node);
   if (!board) return;
 
   state.kanbanDisabledTagFilters = loadKanbanDisabledTagFilters(state.project?.id, board.id);
   state.kanbanDateFilter = loadKanbanDateFilter(state.project?.id, board.id);
+  state.kanbanFavoritesOnly = loadKanbanFavoritesFilter(state.project?.id, board.id);
 
   document.getElementById("kanban-modal-type").textContent =
     TYPE_LABELS[node.node_type];
@@ -5414,6 +5443,17 @@ function bindKanbanCardEvents(boardEl, board, context = {}) {
       );
     });
 
+    cardEl.querySelector(".card-favorite")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const button = e.currentTarget;
+      button.disabled = true;
+      const c = getBoardCard(state.project.boards[board.id] || board, cardId) || card;
+      await persistCard(board, cardId, { favorite: !c.favorite }, { rerenderKanban: true });
+      button.disabled = false;
+      (boardEl.querySelector(`.kanban-card[data-card-id="${cardId}"] .card-favorite`) ||
+        document.getElementById("kanban-filters-toggle"))?.focus({ preventScroll: true });
+    });
+
     cardEl.querySelector(".card-copy-path")?.addEventListener("click", (e) => {
       e.stopPropagation();
       const c =
@@ -5607,8 +5647,23 @@ function reconcileKanbanDisabledTagFilters(board, project = state.project) {
   return disabled;
 }
 
+function loadKanbanFavoritesFilter(projectId, boardId) {
+  try {
+    return localStorage.getItem(`koi-kanban-favorites:${projectId}:${boardId}`) === "true";
+  } catch { return false; }
+}
+
+function saveKanbanFavoritesFilter(projectId, boardId, enabled) {
+  try {
+    const key = `koi-kanban-favorites:${projectId}:${boardId}`;
+    if (enabled) localStorage.setItem(key, "true");
+    else localStorage.removeItem(key);
+  } catch { /* ignore quota */ }
+}
+
 function hasActiveKanbanFilters() {
   return Boolean(
+    state.kanbanFavoritesOnly ||
     (state.kanbanDateFilter && state.kanbanDateFilter !== "all") ||
       (state.kanbanDisabledTagFilters || []).length
   );
@@ -5624,11 +5679,6 @@ function parseCardTimestamp(raw) {
 
 function cardActivityTimestamp(card) {
   return parseCardTimestamp(card?.updated_at) ?? parseCardTimestamp(card?.created_at);
-}
-
-function cardStaysInKanbanFocus(card) {
-  if (card?.column_id === "running" || card?.column_id === "backlog") return true;
-  return cardWithinDateWindow(card, "today");
 }
 
 function cardWithinDateWindow(card, windowId) {
@@ -5703,6 +5753,7 @@ function cardMatchesKanbanTagFilter(card, disabledFilters) {
 }
 
 function cardMatchesKanbanFilters(card, disabledFilters = state.kanbanDisabledTagFilters) {
+  if (state.kanbanFavoritesOnly && card.column_id === "done" && !card.favorite) return false;
   if (!cardMatchesKanbanTagFilter(card, disabledFilters)) return false;
   if (!cardWithinDateWindow(card, state.kanbanDateFilter || "all")) return false;
   return true;
@@ -5738,21 +5789,25 @@ function renderKanbanDateFilter(project, board) {
 function syncKanbanFilterChrome(project, board) {
   const clearBtn = document.getElementById("kanban-filters-clear");
   const active = hasActiveKanbanFilters();
+  const count = Number(state.kanbanFavoritesOnly) + (state.kanbanDateFilter && state.kanbanDateFilter !== "all" ? 1 : 0) + (state.kanbanDisabledTagFilters || []).length;
+  const badge = document.getElementById("kanban-filter-count");
+  badge.hidden = !count; badge.textContent = String(count);
+  document.getElementById("kanban-filters-toggle").classList.toggle("is-filtering", active);
   clearBtn?.classList.toggle("hidden", !active);
   document.getElementById("kanban-board-filters")?.classList.toggle("is-filtering", active);
   if (clearBtn && !clearBtn.dataset.bound) {
     clearBtn.dataset.bound = "1";
     clearBtn.addEventListener("click", () => {
       const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
-      const b =
-        board ||
-        (node?.board_id ? state.project?.boards?.[node.board_id] : null);
+      const b = node ? getBoardForNode(state.project, node) : board;
       if (!b) return;
       state.kanbanDateFilter = "all";
+      state.kanbanFavoritesOnly = false;
       state.kanbanDisabledTagFilters = [];
-      const pid = project?.id || state.project?.id;
+      const pid = boardWriteProjectId(b);
       if (pid && b.id) {
         saveKanbanDateFilter(pid, b.id, "all");
+        saveKanbanFavoritesFilter(pid, b.id, false);
         saveKanbanDisabledTagFilters(pid, b.id, []);
       }
       rerenderKanbanAfterFilters(b);
@@ -5764,6 +5819,14 @@ function renderKanbanTagFilter(project, board) {
   const el = document.getElementById("kanban-tag-filter");
   if (!el) return;
 
+  const glossaryButton = document.getElementById("kanban-glossary-settings");
+  if (glossaryButton) {
+    glossaryButton.hidden = isHubMode() || !boardWriteProjectId(board);
+    glossaryButton.onclick = () => {
+      document.getElementById("kanban-board-filters")?.hidePopover();
+      void openGlossary(boardWriteProjectId(board));
+    };
+  }
   const settingsButton = document.getElementById("kanban-tags-settings");
   if (settingsButton) {
     settingsButton.hidden = isHubMode() || !boardWriteProjectId(board);
@@ -5791,10 +5854,48 @@ function renderKanbanTagFilter(project, board) {
   bindKanbanTagFilter(project, board);
 }
 
+function initKanbanHeaderPopovers() {
+  for (const [popupId, triggerId] of [["kanban-board-filters", "kanban-filters-toggle"], ["kanban-method-details", "kanban-details-toggle"]]) {
+    const popup = document.getElementById(popupId), trigger = document.getElementById(triggerId);
+    popup.addEventListener("beforetoggle", event => {
+      if (event.newState !== "open") return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(popupId === "kanban-board-filters" ? 360 : 480, innerWidth - 24);
+      popup.style.width = `${width}px`;
+      popup.style.left = `${Math.max(12, Math.min(innerWidth - width - 12, rect.right - width))}px`;
+      popup.style.top = `${Math.min(rect.bottom + 8, innerHeight - 80)}px`;
+      popup.style.maxHeight = `${Math.max(60, innerHeight - rect.bottom - 24)}px`;
+    });
+    trigger.setAttribute("aria-controls", popupId);
+    trigger.setAttribute("aria-expanded", "false");
+    popup.addEventListener("toggle", event => {
+      trigger.setAttribute("aria-expanded", String(event.newState === "open"));
+      if (event.newState === "open") popup.querySelector('button:not(.hidden):not([hidden]):not(:disabled),input:not([hidden])')?.focus({preventScroll: true});
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || !popup.matches(":popover-open")) return;
+      event.preventDefault(); event.stopImmediatePropagation(); popup.hidePopover(); trigger.focus();
+    }, true);
+  }
+}
+
 function renderKanbanBoardFilters(project, board) {
+  const focused = document.activeElement;
+  const windowId = focused?.dataset.window;
+  const tag = focused?.dataset.tag;
   renderKanbanDateFilter(project, board);
+  const favorites = document.getElementById("kanban-favorites-filter");
+  favorites.classList.toggle("is-active", state.kanbanFavoritesOnly);
+  favorites.setAttribute("aria-pressed", String(state.kanbanFavoritesOnly));
+  favorites.onclick = () => {
+    state.kanbanFavoritesOnly = !state.kanbanFavoritesOnly;
+    saveKanbanFavoritesFilter(project.id, board.id, state.kanbanFavoritesOnly);
+    rerenderKanbanAfterFilters(board);
+  };
   renderKanbanTagFilter(project, board);
   syncKanbanFilterChrome(project, board);
+  if (windowId || tag) [...document.querySelectorAll('#kanban-board-filters button')]
+    .find(button => windowId ? button.dataset.window === windowId : button.dataset.tag === tag)?.focus({preventScroll: true});
 }
 
 function bindKanbanTagFilter(project, board) {
@@ -6370,6 +6471,18 @@ function kanbanCardPinControlHtml(card, { map = false } = {}) {
   return `<button type="button" class="card-pin" title="${label}" aria-label="${label}" aria-pressed="${pinned ? "true" : "false"}">${kanbanCardPinIconHtml()}</button>`;
 }
 
+function kanbanCardFavoriteIconHtml() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3-5.6-3-5.6 3 1.1-6.3L3 9.6l6.2-.9Z"/></svg>`;
+}
+
+function kanbanCardFavoriteControlHtml(card, { map = false } = {}) {
+  if (map) return card.favorite
+    ? `<span class="card-favorite-mark" aria-label="В избранном" title="В избранном">${kanbanCardFavoriteIconHtml()}</span>`
+    : "";
+  const label = card.favorite ? "Убрать из избранного" : "Добавить в избранное";
+  return `<button type="button" class="card-favorite" aria-pressed="${Boolean(card.favorite)}" aria-label="${label}" title="${label}">${kanbanCardFavoriteIconHtml()}</button>`;
+}
+
 function syncKanbanCardLiveInspect(cardEl, card, reportContent = "") {
   if (!cardEl || card.column_id !== "running") return false;
   if (cardEl.querySelector(".card-live-inspect")) return false;
@@ -6430,9 +6543,9 @@ function kanbanCardHtml(c, col, variant = "modal") {
               <input type="text" class="card-title-input inline-edit-field hidden" />`;
   const pinned = cardIsPinned(c);
   const pinControl = kanbanCardPinControlHtml(c, { map });
-  const focusMuted = variant === "modal" && state.kanbanFocus && !cardStaysInKanbanFocus(c);
+  const favoriteControl = kanbanCardFavoriteControlHtml(c, { map });
   return `
-        <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}${focusMuted ? " is-focus-muted" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
+        <div class="kanban-card${hasTags ? " has-tag-accent" : ""}${liveBtn ? " has-live" : ""}${costChip ? " has-compute-cost" : ""}${pinned ? " is-pinned" : ""}" data-card-id="${c.id}"${pinned ? ' data-pinned="true"' : ""}${accentStyle ? ` style="${accentStyle}"` : ""}>
           <div class="kanban-card-head">
             <span class="card-drag-handle" draggable="true" title="Перетащить в другую колонку" aria-label="Перетащить">${gripIcon}</span>
             <div class="card-text-block">
@@ -6444,8 +6557,8 @@ function kanbanCardHtml(c, col, variant = "modal") {
               }>${escapeHtml(displayDesc)}</p>
               <textarea class="card-desc-input inline-edit-field hidden" rows="3"></textarea>
             </div>
-            ${pinControl || deleteBtn
-              ? `<div class="kanban-card-head-tools">${pinControl}${deleteBtn}</div>`
+            ${favoriteControl
+              ? `<div class="kanban-card-head-tools">${favoriteControl}</div>`
               : ""}
           </div>
           ${todoProgress}
@@ -6454,6 +6567,7 @@ function kanbanCardHtml(c, col, variant = "modal") {
             ${cardTagsRowHtml(c.tags, { readOnly: isHubMode(), kanban: !isHubMode() })}
             ${kanbanCardTimeHtml(c)}
             <div class="kanban-card-actions">
+              ${pinControl}${deleteBtn}
               ${copyBtn}
               <button type="button" class="card-expand-report card-action-btn" title="Открыть отчёт" aria-label="Открыть отчёт">
                 <svg class="card-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M10 14L21 3M21 14v7h-7"/></svg>
@@ -6529,7 +6643,6 @@ function renderKanbanBoard(board) {
   const node = project?.nodes?.find((n) => n.id === state.kanbanNodeId) || null;
   const boardEl = document.getElementById("kanban-board");
   if (!boardEl) return;
-  boardEl.classList.toggle("is-focus", Boolean(state.kanbanFocus));
   renderKanbanBoardInto(boardEl, board, {
     variant: "modal",
     tagFilters: state.kanbanDisabledTagFilters || [],
@@ -6605,6 +6718,7 @@ const LAB_HIDDEN_TREES_KEY = "koi-lab-hidden-trees";
 const ARCHIVED_TREES_KEY = "koi-archived-trees";
 const VIEW_MODE_KEY = "koi-view-mode";
 let projectsArchiveOpen = false;
+let settingsGrouped = null;
 let archivedTreeIds = null;
 let archivedTreesReady = null;
 let archiveSavePending = false;
@@ -6752,7 +6866,7 @@ function ensureLabTreeVisible(id) {
   return true;
 }
 
-const ARCHIVE_BOX_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.54 5.23 19.15 3.55C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5 6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5h13.75l.83 1H4.29l.83-1z"/></svg>`;
+const ARCHIVE_BOX_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1.5"/><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg>`;
 const ARCHIVE_IN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>`;
 const ARCHIVE_OUT_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="m14 6 1.41 1.41L10.83 12l4.58 4.59L14 18l-6-6z"/></svg>`;
 
@@ -6865,11 +6979,6 @@ function renderProjectsArchiveBar(grouped) {
   const bar = document.getElementById("projects-archive-bar");
   if (!bar) return;
   const count = archivedTreeCount(grouped);
-  if (!projectsArchiveOpen && !count) {
-    bar.hidden = true;
-    bar.innerHTML = "";
-    return;
-  }
   bar.hidden = false;
   if (projectsArchiveOpen) {
     bar.innerHTML =
@@ -6886,21 +6995,6 @@ function renderProjectsArchiveBar(grouped) {
     `<span class="projects-archive-bar__label">Архив</span>` +
     `<span class="projects-archive-bar__count">${count}</span>` +
     `</button>`;
-}
-
-function renderProjectListEye(treeId) {
-  if (projectsArchiveOpen) return "";
-  const hidden = isLabTreeHidden(treeId);
-  const title = hidden ? "Показать дерево на карте" : "Скрыть дерево с карты";
-  return (
-    `<button type="button" class="project-list__eye${hidden ? "" : " is-on"}"` +
-    ` data-tree-id="${escapeHtml(treeId)}"` +
-    ` title="${title}"` +
-    ` aria-label="${title}"` +
-    ` aria-pressed="${hidden ? "false" : "true"}">` +
-    `${hidden ? EYE_OFF_SVG : EYE_ON_SVG}` +
-    `</button>`
-  );
 }
 
 function renderProjectListArchive(treeId) {
@@ -6991,7 +7085,6 @@ function renderProjectListButton(p, currentId) {
     (active ? ' aria-current="true"' : "") +
     `>${escapeHtml(p.title)}</button>` +
     renderProjectListPull(p.id) +
-    renderProjectListEye(p.id) +
     renderProjectListArchive(p.id) +
     `</div>` +
     `</li>`
@@ -7049,7 +7142,6 @@ function renderCompositeListButton(c, currentId, selectedBranchId) {
     (active ? ' aria-current="true"' : "") +
     `><span class="project-list__composite-mark" aria-hidden="true">⎇</span> ${escapeHtml(c.title)}</button>` +
     headerPull +
-    renderProjectListEye(virtualId) +
     renderProjectListArchive(virtualId) +
     `</div>` +
     branches +
@@ -7332,6 +7424,7 @@ async function loadProjectList(activeId) {
       ul.innerHTML = html;
     }
     applyProjectListPullStatus();
+    renderUnifiedNavigation();
     return flat;
   }
 
@@ -7375,6 +7468,7 @@ async function loadProjectList(activeId) {
     ul.innerHTML = rendered.join("");
   }
   applyProjectListPullStatus();
+  renderUnifiedNavigation();
   return list;
 }
 
@@ -7389,6 +7483,7 @@ function setActiveProjectInList(id) {
   document.querySelectorAll(".nodes-layer .node-wrap[data-project-id]").forEach((wrap) => {
     wrap.classList.toggle("is-active-tree", wrap.dataset.projectId === id);
   });
+  researchChatNavigation?.render(mainConversations);
   const selectedBranch = state.literatureBranchId;
   document.querySelectorAll(".project-list__btn").forEach((btn) => {
     const isComposite =
@@ -7517,25 +7612,14 @@ async function submitCreateProjectForm(event) {
 
   const submitBtn = document.getElementById("create-project-submit");
   if (submitBtn) submitBtn.disabled = true;
-  setStatus("Создание проекта…");
+  setStatus("Открываем интервью…");
   try {
-    const p = await KoiApi.createProject({
-      title,
-      description,
-      tag,
-      programId,
-      programTitle,
-    });
     hideModal("create-project-modal");
-    projectsArchiveOpen = false;
-    if (state.lab) {
-      state.lab.projectsById[p.id] = p;
-      state.lab.grouped = await KoiApi.listProjectsGrouped();
-    }
-    await loadProjectList(p.id);
-    await switchProject(p.id);
-    setProjectsSidebarOpen(true);
-    setStatus("Проект создан");
+    await openLocalTreeInterview({
+      title, description, tag, programId, programTitle,
+      onBack: () => showModal("create-project-modal"),
+    });
+    setStatus("Настройка дерева исследования");
   } catch (err) {
     if (errorEl) {
       errorEl.textContent = err.message || "Не удалось создать проект";
@@ -7597,6 +7681,11 @@ function initProjectsSidebar() {
     const nav = e.target.closest("[data-archive-nav]");
     if (!nav) return;
     projectsArchiveOpen = nav.dataset.archiveNav === "open";
+    const workspace = document.getElementById("workspace");
+    if (workspace.classList.contains("compact-chat")) {
+      toggleAgentChatPanel(false);
+      workspace.classList.toggle("is-managing-trees", projectsArchiveOpen);
+    }
     void loadProjectList(state.project?.id);
   });
 
@@ -7615,14 +7704,6 @@ function initProjectsSidebar() {
       e.stopPropagation();
       const projectId = pullBtn.dataset.pullProjectId;
       if (projectId) void runTreeProjectSync(projectId);
-      return;
-    }
-    const eyeBtn = e.target.closest(".project-list__eye");
-    if (eyeBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      const treeId = eyeBtn.dataset.treeId;
-      if (treeId) toggleLabTreeHidden(treeId);
       return;
     }
     const branchBtn = e.target.closest("[data-branch-id]");
@@ -7711,7 +7792,7 @@ let agentChatItems = [];
 let agentChatPollTimer = null;
 let agentChatDisplayedProjectId = null;
 let lastAgentChatInboxMessage = "";
-const AGENT_CHAT_POLL_MS = 5000;
+const AGENT_CHAT_POLL_MS = 1500;
 let appSettings = {
   agent_chat_mode: "local",
   cursor_api_key_configured: false,
@@ -7960,7 +8041,19 @@ function agentChatTypingHtml() {
 }
 
 function agentChatContext() {
-  if (agentChatProjectId() !== primaryMemberProjectId()) {
+  const conversation = mainConversations?.row;
+  const projectId = conversation?.project_id || mainConversations?.contextScope?.project_id;
+  const boardId = conversation?.board_id || mainConversations?.contextScope?.board_id;
+  const scopedProject = state.project?.id === projectId ? state.project : null;
+  const board = scopedProject?.boards?.[boardId];
+  if (board) {
+    const cardId = conversation?.card_id || mainConversations?.contextScope?.card_id;
+    const card = cardId && board.cards.find(card => card.id === cardId);
+    const node = scopedProject.nodes.find(node => node.id === board.owner_node_id);
+    return {method_id: board.owner_node_id, node_id: board.owner_node_id,
+      label: [cardId ? "Чаты карточки" : "Чаты метода", card?.title || node?.title].filter(Boolean).join(" · ")};
+  }
+  if (!agentChatProjectId() || agentChatProjectId() !== primaryMemberProjectId()) {
     return { method_id: null, node_id: null, label: null };
   }
   const project = state.project;
@@ -8006,15 +8099,99 @@ function agentChatLogNearBottom(log) {
   return log.scrollHeight - log.scrollTop - log.clientHeight <= AGENT_CHAT_SCROLL_THRESHOLD;
 }
 
+function agentChatContextSuggestionsHtml(item) {
+  const proposal = item.context_suggestions;
+  if (item.status !== "answered" || !proposal?.options?.length || proposal.resolved || mainConversations.row?.project_id || mainConversations.row?.context_suggestions_dismissed) return "";
+  const buttons = proposal.options.map((option, index) =>
+    `<button type="button" class="btn agent-chat-context-option" data-context-option="${index}">` +
+    `<span>Программа: ${escapeHtml(option.program_title)}</span>` +
+    `<strong>Дерево: ${escapeHtml(option.tree_title)}</strong>` +
+    (option.method_title ? `<span>Метод: ${escapeHtml(option.method_title)}</span>` : "") +
+    `<span class="agent-chat-context-action">${proposal.awaiting_selection ? "Выбрать и продолжить" : "Связать чат"} →</span></button>`
+  ).join("");
+  return `<section class="agent-chat-context-suggestions" aria-label="Предложенные контексты">` +
+    `<p>${proposal.awaiting_selection ? "Где продолжить работу?" : "Похоже, вопрос относится к…"}</p>` + buttons +
+    `<button type="button" class="btn agent-chat-context-dismiss" data-context-option="general">${mainConversations.row?.program_id ? "Без привязки к дереву" : "Оставить общим"}</button>` +
+    `<p role="status" data-context-error></p></section>`;
+}
+
+async function chooseAgentChatContext(event) {
+  const button = event.target.closest('[data-context-option]');
+  if (!button) return;
+  const box = button.closest('.agent-chat-context-suggestions');
+  const cid = mainConversations.row?.id;
+  if (!cid || box.dataset.busy) return;
+  box.dataset.busy = "true";
+  box.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const data = await KoiApi.chooseConversationContext(cid, {
+      item_id: button.closest('[data-id]').dataset.id,
+      option: button.dataset.contextOption === "general" ? null : Number(button.dataset.contextOption),
+    });
+    if (cid !== mainConversations.row?.id) return;
+    mainConversations.row = data.item;
+    await researchChatNavigation?.focusConversation(data.item);
+    await refreshAgentChat({scrollToBottom: true});
+    document.getElementById('agent-chat-input').focus();
+  } catch (error) {
+    if (box.isConnected) {
+      box.querySelector('[data-context-error]').textContent = error.message;
+      delete box.dataset.busy;
+      box.querySelectorAll('button').forEach(b => b.disabled = false);
+    }
+  }
+}
+
+function agentChatCardLinkHtml(item, conversation) {
+  const scope = item.card_id ? item : conversation;
+  const links = [...(item.card_links || [])];
+  if (scope?.project_id && scope.board_id && scope.card_id && !links.some(link =>
+    link.project_id === scope.project_id && link.board_id === scope.board_id && link.card_id === scope.card_id)) links.unshift(scope);
+  return links.map(link => {
+    const params = new URLSearchParams({ project: link.project_id, board: link.board_id, card: link.card_id });
+    if (new URLSearchParams(location.search).has("desktop")) params.set("desktop", "1");
+    const label = link.title ? `Открыть карточку «${link.title}»` : "Открыть карточку";
+    return `<p class="agent-chat-card-source"><a class="agent-chat-card-link" data-chat-card-link href="?${escapeHtml(params.toString())}">${escapeHtml(label)}</a></p>`;
+  }).join("");
+}
+
+async function openChatCard(params) {
+  const projectId = params.get("project"), cardId = params.get("card");
+  if (!projectId || !params.get("board") || !cardId) return;
+  if (await saveCardReport() === false) return;
+  try {
+    const grouped = state.lab?.grouped;
+    const target = resolveRequestedBranchId(projectId, grouped)
+      ? resolvePreferredProjectId(projectId, grouped, state.lab.projectsById) : projectId;
+    await focusLabProject(target, { reload: true });
+    const matches = board => boardWriteProjectId(board) === projectId && board.cards.some(card => card.id === cardId);
+    let board = getBoard(state.project, params.get("board"));
+    if (!board || !matches(board)) board = Object.values(state.project.boards || {}).find(matches);
+    const node = board && state.project.nodes.find(node => node.id === board.owner_node_id);
+    if (!node) throw new Error("Card not found");
+    openKanbanModal(node);
+    await openCardReport(getBoardCard(board, cardId), board);
+    if (state.reportCardId !== cardId || document.getElementById("card-report-modal").classList.contains("hidden")) return;
+    const title = document.getElementById("card-report-card-title");
+    title.tabIndex = -1;
+    title.focus();
+  } catch {
+    setStatus("Не удалось открыть карточку. Проверьте, что дерево подключено, а карточка не удалена.", true);
+  }
+}
+
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
+  const focusedCardLink = log.contains(document.activeElement) && document.activeElement.matches("[data-chat-card-link]") ? { id: document.activeElement.closest("article")?.dataset.id, href: document.activeElement.getAttribute("href") } : null;
   clearInlineLoaderHints(log);
   const stickToBottom = scrollToBottom || agentChatLogNearBottom(log);
   const prevScrollTop = log.scrollTop;
-  const items = [...agentChatItems].reverse();
+  const gitChat = mainConversations?.row?.kind === "git_sync";
+  const items = [...agentChatItems].reverse().filter(item =>
+    !gitChat || item.purpose !== "git_notice" || item.git_notice_version >= 3);
   if (!items.length) {
-    log.innerHTML = '<p class="agent-chat-empty">Задайте первый вопрос.</p>';
+    log.innerHTML = '<div class="agent-chat-empty"><p>Обсудите проект или дайте агенту задачу.</p></div>';
     return;
   }
   log.innerHTML = items
@@ -8025,27 +8202,33 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       const isWarning = item.answer_kind === "warning";
       const pendingLabel = agentChatPendingLabel(item);
       let answerHtml;
-      if (isProcessing) {
+      if (item.streaming) {
+        answerHtml = `<div class="agent-chat-reply">${formatAgentChatReply(item.answer)}</div>`;
+      } else if (isProcessing) {
         answerHtml = agentChatTypingHtml();
       } else if (pending) {
         answerHtml =
           `<div class="agent-chat-reply agent-chat-reply--pending" role="status">${escapeHtml(pendingLabel)}</div>`;
       } else {
-        answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(item.answer || "")}</div>`;
+        const answer = gitChat ? (item.answer || "").replace(/(?:^|\n)Изменённые файлы:[\s\S]*/, "").trim() : item.answer;
+        answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(answer || "")}</div>`;
       }
       return (
         `<article class="agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}" data-id="${escapeHtml(item.id)}">` +
-        `<div class="agent-chat-q-row">` +
+        (item.purpose === "git_notice" ? "" : `<div class="agent-chat-q-row">` +
         `<p class="agent-chat-q">${escapeHtml(item.question)}</p>` +
         agentChatDeliveryHtml(item) +
-        `<button type="button" class="btn btn-small btn-danger agent-chat-delete" title="Удалить" aria-label="Удалить вопрос">×</button>` +
-        `</div>` +
+        `</div>`) +
         answerHtml +
+        (pending && item.streaming ? agentChatTypingHtml() : "") +
+        agentChatContextSuggestionsHtml(item) +
+        agentChatCardLinkHtml(item, mainConversations?.row) +
         `<time>${escapeHtml(formatAgentChatTime(item.enqueued_at))}</time>` +
         `</article>`
       );
     })
     .join("");
+  if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink.id)}"] [data-chat-card-link][href="${CSS.escape(focusedCardLink.href)}"]`)?.focus({ preventScroll: true });
   refreshInlineLoaderHints(log);
   if (stickToBottom) {
     log.scrollTop = log.scrollHeight;
@@ -8055,16 +8238,11 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
 }
 
 async function refreshAgentChat({ scrollToBottom = false } = {}) {
-  const pid = agentChatProjectId();
-  if (!pid) {
-    agentChatItems = [];
-    renderAgentChatLog();
-    return;
-  }
   try {
-    const data = await KoiApi.listAgentChat(pid);
-    if (pid !== agentChatProjectId()) return;
-    agentChatItems = (data.items || []).filter(i => !i.card_id);
+    const data = await mainConversations.refresh();
+    if (!data) return;
+    agentChatItems = withLiveAnswer(data);
+    syncConversationAgent(mainConversations, "agent-chat");
     renderAgentChatLog({ scrollToBottom });
     if (!document.getElementById("agent-chat-activity")?.classList.contains("hidden")) {
       void refreshAgentChatActivity();
@@ -8079,13 +8257,11 @@ async function refreshAgentChatActivity() {
   const pid = agentChatProjectId();
   const host = document.getElementById("agent-chat-activity");
   if (!host) return;
-  if (!pid) {
-    host.textContent = "Выберите проект для чата.";
-    return;
-  }
   try {
-    const data = await KoiApi.listAgentChatActivity(pid);
-    if (pid !== agentChatProjectId()) return;
+    if (!mainConversations.row) { host.textContent = "Пока нет запусков агента."; return; }
+    const cid = mainConversations.row.id;
+    const data = await KoiApi.conversationActivity(cid);
+    if (cid !== mainConversations.row?.id) return;
     const items = (data.items || []).filter((item) => item.events?.length);
     host.innerHTML = items.length ? items.map((item) =>
       `<section><h3>${escapeHtml(item.question)}</h3>${item.events.map((event) =>
@@ -8102,11 +8278,11 @@ function showAgentChatTab(tab) {
   const activity = tab === "activity";
   document.getElementById("agent-chat-log")?.classList.toggle("hidden", activity);
   document.getElementById("agent-chat-activity")?.classList.toggle("hidden", !activity);
-  for (const name of ["chat", "activity"]) {
-    const button = document.getElementById(`agent-chat-tab-${name}`);
-    button?.classList.toggle("is-active", name === tab);
-    button?.setAttribute("aria-selected", String(name === tab));
-  }
+  const button = document.getElementById("agent-chat-tab-activity");
+  button?.classList.toggle("is-active", activity);
+  button?.setAttribute("aria-pressed", String(activity));
+  button?.setAttribute("aria-label", activity ? "Показать переписку" : "Журнал работы агента");
+  button?.setAttribute("title", activity ? "Показать переписку" : "Журнал работы агента");
   if (activity) void refreshAgentChatActivity();
 }
 
@@ -8125,7 +8301,8 @@ function syncAgentChatPolling() {
 }
 
 function agentChatProjectId() {
-  return primaryMemberProjectId() || null;
+  return mainConversations?.row ? mainConversations.row.project_id :
+    mainConversations?.contextScope?.project_id || (mainConversations?.currentProjectOnly ? primaryMemberProjectId() : null);
 }
 
 function resizeAgentChatInput() {
@@ -8159,19 +8336,43 @@ function updateAgentChatScope() {
   }
 }
 
+function syncWorkspaceSidebarToggle() {
+  const trigger = document.getElementById("btn-agent-chat");
+  if (!usesChatNavigation()) {
+    const open = document.getElementById("workspace")?.classList.contains("is-chat-open");
+    const label = open ? "Закрыть чат" : "Открыть чат";
+    trigger?.setAttribute("aria-expanded", String(open));
+    trigger?.setAttribute("aria-label", label);
+    if (trigger) trigger.title = label;
+    return;
+  }
+  const open = !document.getElementById("workspace")?.classList.contains("is-chat-list-hidden");
+  const label = open ? "Свернуть боковую панель" : "Развернуть боковую панель";
+  trigger?.setAttribute("aria-expanded", String(open));
+  trigger?.setAttribute("aria-label", label);
+  if (trigger) trigger.title = label;
+}
+
+function toggleWorkspaceSidebar() {
+  document.getElementById("workspace").classList.toggle("is-chat-list-hidden");
+  syncWorkspaceSidebarToggle();
+  scheduleMindmapRender();
+}
+
 function toggleAgentChatPanel(open) {
   const panel = document.getElementById("agent-chat-panel");
   const workspace = document.getElementById("workspace");
   if (!panel) return;
-  const show = open ?? panel.classList.contains("hidden");
-  panel.classList.toggle("hidden", !show);
+  const show = open ?? !workspace?.classList.contains("is-chat-open");
+  if (workspace?.classList.contains("compact-chat")) {
+    panel.querySelector(".conversation-sidebar").inert = show;
+    panel.querySelector(".conversation-content").inert = !show;
+  }
+  if (show) workspace?.classList.remove("is-sidebar-hidden");
+  panel.classList.toggle("hidden", !show && !workspace?.classList.contains("unified-navigation"));
   workspace?.classList.toggle("is-chat-open", show);
   document.body.classList.toggle("chat-open", show);
-  document.getElementById("btn-agent-chat-welcome")?.classList.toggle("hidden", show);
-  const trigger = document.getElementById("btn-agent-chat");
-  trigger?.setAttribute("aria-expanded", String(show));
-  trigger?.setAttribute("aria-label", show ? "Свернуть чат" : "Открыть чат");
-  if (trigger) trigger.title = show ? "Свернуть чат" : "Открыть чат";
+  syncWorkspaceSidebarToggle(!workspace?.classList.contains("is-sidebar-hidden"));
   if (show) {
     void refreshAppSettings();
     void refreshCliAgents();
@@ -8182,7 +8383,8 @@ function toggleAgentChatPanel(open) {
   } else {
     syncAgentChatPolling();
   }
-  scheduleMindmapRender();
+  // The two chat views share geometry; keep the map camera where the reader left it.
+  if (!workspace?.classList.contains("compact-chat")) scheduleMindmapRender();
 }
 
 function setAgentChatFormStatus(message = "", kind = "") {
@@ -8305,8 +8507,8 @@ function initVoiceInput() {
 
 const CLI_AGENT_KEY = "koi-chat-cli-agent";
 
-function chatCliAgent() {
-  const value = document.querySelector("[data-cli-agent]:not(:disabled)")?.value || "";
+function chatCliAgent(panel = "agent-chat") {
+  const value = document.querySelector(`#${panel}-form [data-cli-agent]:not(:disabled)`)?.value || "";
   return value || undefined;
 }
 
@@ -8321,7 +8523,7 @@ async function refreshCliAgents() {
   const available = agents.filter((agent) => agent.available && agent.id);
   let saved = "";
   try { saved = localStorage.getItem(CLI_AGENT_KEY) || ""; } catch { saved = ""; }
-  const chosen = available.some((agent) => agent.id === saved) ? saved : (available[0]?.id || "");
+  const chosen = (available.some(agent => agent.id === saved) ? saved : available[0]?.id) || "";
   try {
     if (chosen) localStorage.setItem(CLI_AGENT_KEY, chosen);
     else localStorage.removeItem(CLI_AGENT_KEY);
@@ -8332,11 +8534,15 @@ async function refreshCliAgents() {
       : `<option value="">Нет доступных</option>`;
     select.value = chosen;
     select.disabled = !available.length;
+    delete select.dataset.conversation;
   });
+  if (mainConversations) syncConversationAgent(mainConversations, "agent-chat");
+  if (cardConversations) syncConversationAgent(cardConversations, "report-interview");
 }
 
 async function submitAgentQuestion(e) {
   e.preventDefault();
+  if (mainConversations.live) return;
   const input = document.getElementById("agent-chat-input");
   if (document.getElementById("btn-agent-chat-send")?.disabled) return;
   const text = input?.value?.trim();
@@ -8346,12 +8552,12 @@ async function submitAgentQuestion(e) {
     return;
   }
   const projectId = agentChatProjectId();
-  if (!projectId || isCompositeVirtualId(projectId)) {
+  if (projectId && isCompositeVirtualId(projectId)) {
     setAgentChatFormStatus("Сначала выберите проект для чата.", "error");
     return;
   }
 
-  if (/^\/(?:grill-me|grill_me|prose|run|make_report)(?:\s|$)/i.test(text)) {
+  if (!mainConversations.contextScope?.card_id && /^\/(?:grill-me|grill_me|prose|run|make_report)(?:\s|$)/i.test(text)) {
     setAgentChatFormStatus("Откройте карточку, чтобы выполнить эту команду.", "error");
     return;
   }
@@ -8362,16 +8568,23 @@ async function submitAgentQuestion(e) {
 
   try {
     const command = reportChatCommand(text);
+    const conversation = await mainConversations.ensure();
+    const cid = conversation.id;
     const res = await KoiApi.sendAgentQuestion({
-      project_id: projectId,
+      project_id: conversation.project_id,
+      conversation_id: cid,
+      board_id: conversation.board_id,
+      card_id: conversation.card_id,
+      git_snapshot: conversation.git_snapshot,
       question: command.question,
-      purpose: command.purpose === "question" ? "question" : "agent",
+      purpose: conversation.card_id ? command.purpose : command.purpose === "question" ? "question" : "agent",
+      report_markdown: conversation.card_id === state.reportCardId ? document.getElementById("card-report-editor").value : undefined,
       method_id: method_id || undefined,
       node_id: node_id || undefined,
       cli_agent: chatCliAgent(),
     });
     if (!res?.item?.id) throw new Error("Сервер не подтвердил отправку. Попробуйте ещё раз.");
-    if (projectId !== agentChatProjectId()) return;
+    if (cid !== mainConversations.row?.id) return;
     agentChatItems = [res.item, ...agentChatItems.filter((i) => i.id !== res.item.id)];
     showAgentChatTab("chat");
     renderAgentChatLog({ scrollToBottom: true });
@@ -8383,7 +8596,7 @@ async function submitAgentQuestion(e) {
   } catch (err) {
     setAgentChatFormStatus(err.message || "Не удалось отправить вопрос.", "error");
   } finally {
-    if (btn) btn.disabled = false;
+    mainConversations.syncSendButton();
   }
 }
 
@@ -8449,7 +8662,6 @@ async function refreshAppSettings() {
 let syncStatus = null;
 let syncPollTimer = null;
 let rqDiscoveryPollTimer = null;
-const SYNC_POLL_MS = 30 * 60 * 1000;
 const RQ_DISCOVERY_POLL_MS = 4000;
 const RQ_DISCOVERY_AUTO_MS = 60 * 1000;
 const PROJECT_DISCOVERY_POLL_MS = 3000;
@@ -8906,15 +9118,11 @@ function initSync() {
   document.getElementById("btn-sync")?.addEventListener("click", () => {
     void runProjectSync();
   });
-  // Cached refs first (instant badges), then a live fetch in the background.
-  void refreshSyncStatus({ fetch: false }).then(() => {
-    void refreshSyncStatus({ fetch: true });
-  });
+  // Automatic remote checks belong to the daily/done scheduler.
+  void refreshSyncStatus({ fetch: false });
   void checkPendingRqDiscoveries();
   if (syncPollTimer) clearInterval(syncPollTimer);
-  syncPollTimer = setInterval(() => {
-    void refreshSyncStatus({ fetch: true });
-  }, SYNC_POLL_MS);
+  syncPollTimer = null;
   if (rqDiscoveryPollTimer) clearInterval(rqDiscoveryPollTimer);
   rqDiscoveryPollTimer = setInterval(() => {
     void checkPendingRqDiscoveries();
@@ -8925,12 +9133,14 @@ async function refreshProjectDiscovery() {
   try {
     const data = await KoiApi.getProjectDiscovery(projectDiscoveryRevision);
     if (!data?.ok) return;
-    projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
     const changes = data.changes || {};
     const added = changes.added || [];
     const removed = changes.removed || [];
     const changed = changes.changed || [];
-    if (!added.length && !removed.length && !changed.length) return;
+    if (!added.length && !removed.length && !changed.length) {
+      projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
+      return;
+    }
 
     const currentId = state.project?.id;
     await loadLab();
@@ -8944,13 +9154,10 @@ async function refreshProjectDiscovery() {
       await loadProjectList();
     }
 
-    if (added.length || removed.length) {
-      renderLabMindmap({ fitLab: getViewMode() === "chief" });
-    } else {
-      for (const item of changed) {
-        refreshKanbanActivityForProject(item.id);
-      }
-    }
+    renderLabMindmap({
+      fitLab: (added.length > 0 || removed.length > 0) && getViewMode() === "chief",
+    });
+    projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
 
     for (const item of added) {
       const title = (item.title || item.id || "проект").trim();
@@ -8993,7 +9200,332 @@ function initSettings() {
   void refreshAppSettings();
 }
 
+function syncConversationAgent(controller, panel) {
+  const select = document.querySelector(`#${panel}-form [data-cli-agent]`);
+  const backend = controller.row?.backend;
+  if (select && select.dataset.conversation !== controller.row?.id) {
+    if (backend && [...select.options].some(o => o.value === backend)) select.value = backend;
+    select.dataset.conversation = controller.row?.id || "";
+  }
+}
+
+function withLiveAnswer(data) {
+  return (data.items || []).map(item => data.live?.item_id === item.id
+    ? { ...item, acp_active: true, ...(data.live.text ? { answer: data.live.text, streaming: true } : {}) } : item);
+}
+
+function initUnifiedNavigation() {
+  if (isHubMode() || !usesChatNavigation()) return;
+  const sidebar = document.getElementById("agent-chat-conversations");
+  localStorage.removeItem(LAB_HIDDEN_TREES_KEY);
+  if (state.lab) state.lab.hiddenTreeIds = new Set();
+  const workspace = document.getElementById("workspace");
+  workspace.classList.add("unified-navigation", "compact-chat");
+  document.body.classList.add("navigation-left", "unified-workspace");
+  const header = document.querySelector(".topbar");
+  new ResizeObserver(() => {
+    workspace.style.setProperty("--workspace-header-height", `${header.getBoundingClientRect().height}px`);
+  }).observe(header);
+  const panel = document.getElementById("agent-chat-panel");
+  workspace.prepend(panel);
+  const layout = panel.querySelector(".conversation-layout");
+  layout.prepend(layout.querySelector(".conversation-rail"), sidebar);
+  const toolbar = document.querySelector(".topbar-row > .toolbar");
+  const chatToggle = document.getElementById("btn-agent-chat");
+  chatToggle.setAttribute("aria-controls", "agent-chat-conversations");
+  chatToggle.classList.remove("btn-chat-toggle");
+  chatToggle.classList.add("conversation-icon-button");
+  chatToggle.querySelector("svg path").setAttribute("d", "M9 4v16");
+  layout.querySelector(".conversation-nav-toggle").remove();
+  layout.querySelector(".conversation-rail").prepend(chatToggle);
+  const themeToggle = document.getElementById("btn-theme");
+  themeToggle.classList.add("conversation-icon-button");
+  layout.querySelector(".conversation-rail").append(themeToggle);
+  layout.querySelector(".conversation-rail").append(document.getElementById("btn-app-variant"));
+  document.body.append(toolbar.querySelector(".rq-bell-wrap"));
+  toolbar.parentElement.prepend(document.querySelector(".topbar-start"));
+  document.getElementById("agent-chat-panel").classList.remove("hidden");
+  syncWorkspaceSidebarToggle(true);
+  sidebar.setAttribute("aria-label", "Навигация по исследованиям");
+  const heading = document.createElement("h2"); heading.className = "unified-navigation-title";
+  heading.textContent = "Управление деревьями";
+  const navigationHeading = document.createElement("div"); navigationHeading.className = "unified-navigation-heading";
+  navigationHeading.append(heading);
+  layout.querySelector("[data-current-project]").remove();
+  const actions = document.createElement("div"); actions.className = "unified-navigation-actions research-tree-actions";
+  const archive = document.getElementById("projects-archive-bar");
+  const createProject = document.getElementById("btn-new-project");
+  createProject.className = "btn conversation-create";
+  createProject.textContent = "Новое дерево";
+  createProject.title = "Создать дерево исследований";
+  createProject.setAttribute("aria-label", "Создать дерево исследований");
+  createProject.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="5" rx="1.5"/><rect x="2" y="17" width="6" height="5" rx="1.5"/><rect x="16" y="17" width="6" height="5" rx="1.5"/><path d="M12 7v5M5 17v-5h14v5"/></svg>');
+  actions.append(createProject, archive);
+  const list = document.getElementById("project-list");
+  const chats = document.createElement("div"); chats.className = "unified-chat-navigation";
+  chats.append(list);
+  const management = document.createElement("div"); management.className = "research-tree-management";
+  management.append(navigationHeading, actions, chats);
+  sidebar.replaceChildren(management);
+  const openList = () => {
+    workspace.classList.remove("is-chat-list-hidden", "is-managing-trees");
+    researchChatNavigation.host.append(actions);
+    toggleAgentChatPanel(false);
+  };
+  researchChatNavigation = new ResearchChatNavigation({ sidebar,
+    rail: layout.querySelector(".conversation-rail"),
+    activeTree: () => state.project?.id,
+    groups: () => {
+      const grouped = state.lab?.grouped;
+      const groups = [...(grouped?.groups || [])];
+      if (grouped?.ungrouped?.length) groups.push({id: "ungrouped", title: "Без программы", projects: grouped.ungrouped});
+      const hidden = hiddenCompositeMemberIds(grouped);
+      const programs = groups.map((group, index) => ({ id: group.id || "program-" + index, title: group.title,
+        trees: programLayoutItems(group, hidden).filter(tree => !isTreeArchived(tree.id)).map(tree => ({ ...tree,
+          projectIds: tree.kind === "composite" ? [...(group.composites.find(c => compositeVirtualId(c.id) === tree.id)?.member_ids || [])].sort((a, b) => Number(b === state.literatureBranchId) - Number(a === state.literatureBranchId)) : [tree.id]
+        }))
+      })).filter(group => group.trees.length);
+      const trees = [...new Map(programs.flatMap(group => group.trees).map(tree => [tree.id, tree])).values()];
+      return [...programs, {id: "all", title: "Все чаты", icon: "all", trees}, {id: "global", title: "Общие чаты", icon: "chat", trees: []}];
+    },
+    chooseTree: id => {
+      if (id === "global") return;
+      if (state.lab?.projectsById?.[id]) return focusLabProject(id, {animate: true, fitTree: researchChatNavigation.quick});
+      if (isCompositeVirtualId(id)) return switchComposite(id.slice("composite:".length));
+      return switchProject(id);
+    },
+    leaveContext: async () => {
+      if (!document.getElementById("card-report-modal").classList.contains("hidden")) {
+        await closeReportModal();
+        if (!document.getElementById("card-report-modal").classList.contains("hidden")) return false;
+      }
+      hideModal("kanban-modal");
+      await syncWorkspaceChatContext();
+    }, openList, collapse: toggleWorkspaceSidebar
+  });
+  researchChatNavigation.host.append(actions);
+  if (researchChatNavigation.quick) {
+    createProject.className = 'btn conversation-icon-button research-quick-create-tree';
+    createProject.replaceChildren(createProject.querySelector('svg'));
+    document.getElementById('btn-app-variant').before(createProject);
+  }
+  for (const type of ["pointerdown", "wheel"]) document.getElementById("mindmap-viewport").addEventListener(type, () => {
+    researchChatNavigation.followActive = true;
+  }, {passive: true});
+  const manage = document.createElement("button"); manage.type = "button";
+  manage.className = "conversation-icon-button research-manage";
+  manage.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>'; manage.title = "Управление деревьями"; manage.setAttribute("aria-label", "Управление деревьями");
+  manage.setAttribute("aria-pressed", "false");
+  manage.onclick = () => document.getElementById("btn-app-variant").click();
+  layout.querySelector(".conversation-rail").insertBefore(manage, themeToggle);
+  if (researchChatNavigation.quick) document.getElementById('btn-app-variant').replaceChildren(manage.firstElementChild.cloneNode(true));
+  const chatHeader = panel.querySelector(".agent-chat-header");
+  const back = document.getElementById("btn-chat-collapse"); back.setAttribute("aria-label", "Вернуться к чатам"); back.title = "Вернуться к чатам";
+  chatHeader.prepend(back);
+  const newChat = document.createElement("button"); newChat.type = "button"; newChat.className = "conversation-icon-button research-chat-new";
+  newChat.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>'; newChat.title = "Новый чат"; newChat.setAttribute("aria-label", "Новый чат");
+  newChat.onclick = () => void researchChatNavigation.create();
+  chatHeader.append(newChat);
+  panel.querySelector(".conversation-content").inert = !workspace.classList.contains("is-chat-open");
+  const positionWorkspace = () => {
+    const rect = document.getElementById("agent-chat-panel").getBoundingClientRect();
+    document.body.style.setProperty("--workspace-chat-edge", `${rect.width ? rect.right : 0}px`);
+    document.body.style.setProperty("--workspace-header-bottom", `${document.querySelector(".topbar").getBoundingClientRect().bottom}px`);
+  };
+  new ResizeObserver(positionWorkspace).observe(document.getElementById("agent-chat-panel"));
+  new ResizeObserver(positionWorkspace).observe(document.querySelector(".topbar"));
+  window.addEventListener("resize", () => {
+    if (document.body.classList.contains("has-work-context") && innerWidth <= 900) workspace.classList.add("is-chat-list-hidden");
+    positionWorkspace();
+  });
+  attachMainChatResize(document.getElementById("agent-chat-panel"), KoiApi);
+  const clearTreeDrag = () => {
+    sidebar.classList.remove("is-tree-dragging");
+    sidebar.querySelectorAll('.is-dragging,.is-tree-drop-target').forEach(el => el.classList.remove('is-dragging','is-tree-drop-target'));
+    if (mainConversations) mainConversations.dragging = false;
+  };
+  archive.title = "Перетащите дерево в архив";
+  sidebar.addEventListener("dragstart", event => {
+    const title = event.target.closest('.project-list__btn[data-archive-tree-id]');
+    if (!title) return;
+    event.stopImmediatePropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-researcheros-tree', title.dataset.archiveTreeId);
+    title.classList.add('is-dragging'); sidebar.classList.add('is-tree-dragging');
+    mainConversations.dragging = true;
+  }, true);
+  sidebar.addEventListener("dragover", event => {
+    if (!event.dataTransfer.types.includes('application/x-researcheros-tree')) return;
+    if (!event.target.closest('#projects-archive-bar [data-archive-nav="open"]')) return;
+    event.preventDefault(); event.stopImmediatePropagation(); event.dataTransfer.dropEffect = 'move';
+    archive.classList.add('is-tree-drop-target');
+  }, true);
+  archive.addEventListener('dragleave', event => {
+    if (!archive.contains(event.relatedTarget)) archive.classList.remove('is-tree-drop-target');
+  });
+  sidebar.addEventListener('dragend', () => { if (sidebar.classList.contains('is-tree-dragging')) clearTreeDrag(); }, true);
+  sidebar.addEventListener('drop', event => {
+    const id = event.dataTransfer.getData('application/x-researcheros-tree');
+    if (!id || !event.target.closest('#projects-archive-bar [data-archive-nav="open"]')) return;
+    event.preventDefault(); event.stopImmediatePropagation(); clearTreeDrag();
+    void setTreeArchived(id, true);
+  }, true);
+
+  sidebar.addEventListener("click", event => {
+    const toggle = event.target.closest("[data-tree-branches]");
+    if (!toggle) return;
+    const branches = toggle.closest(".project-list__item").querySelector(":scope > .project-list--branches");
+    branches.hidden = !branches.hidden;
+    toggle.setAttribute("aria-expanded", String(!branches.hidden));
+  });
+}
+
+async function syncWorkspaceChatContext() {
+  if (isHubMode() || !usesChatNavigation() || !mainConversations) return;
+  const visible = id => !document.getElementById(id).classList.contains("hidden");
+  let scope = null, title = "";
+  if (visible("card-report-modal") && state.reportCardId) {
+    scope = {project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId};
+    title = document.getElementById("card-report-card-title").textContent;
+  } else if (visible("kanban-modal")) {
+    const node = state.project?.nodes.find(node => node.id === state.kanbanNodeId);
+    const board = node && getBoardForNode(state.project, node);
+    if (board) { scope = {project_id: boardWriteProjectId(board), board_id: board.id}; title = node.title; }
+  }
+  document.body.classList.toggle("has-work-context", Boolean(scope));
+  mainConversations.contextTitle = title;
+  const entering = !mainConversations.contextScope && scope;
+  const leaving = mainConversations.contextScope && !scope;
+  const workspace = document.getElementById("workspace");
+  if (entering) {
+    workspace.dataset.contextPreviousListHidden = String(workspace.classList.contains("is-chat-list-hidden"));
+    workspace.dataset.contextPreviousChatOpen = String(workspace.classList.contains("is-chat-open"));
+  }
+  if (leaving) workspace.classList.toggle("is-chat-list-hidden", workspace.dataset.contextPreviousListHidden === "true");
+  if (scope) mainConversations.collapsedProjects.delete(scope.project_id);
+  const changed = mainConversations.setContext(scope);
+  if (scope && changed) {
+    workspace.classList.remove("is-chat-list-hidden", "is-managing-trees");
+    toggleAgentChatPanel(false);
+  } else if (leaving) toggleAgentChatPanel(workspace.dataset.contextPreviousChatOpen === "true");
+  if (changed) { renderUnifiedNavigation(); agentChatItems = []; renderAgentChatLog(); await refreshAgentChat(); }
+  else renderUnifiedNavigation();
+}
+
+function renderUnifiedNavigation(controller = mainConversations) {
+  if (!researchChatNavigation) return;
+  const sidebar = controller?.sidebar;
+  if (researchChatNavigation && controller) researchChatNavigation.render(controller);
+  if (!sidebar || controller.dragging) return;
+  const managing = sidebar.closest(".workspace").classList.contains("is-managing-trees");
+  const actions = sidebar.querySelector(".research-tree-actions");
+  const host = managing ? sidebar.querySelector(".research-tree-management") : researchChatNavigation.host;
+  if (actions.parentElement !== host) host.append(actions);
+  sidebar.closest(".conversation-layout").querySelector(".research-manage").setAttribute("aria-pressed", String(managing));
+  const active = sidebar.contains(document.activeElement) ? document.activeElement : null;
+  const focusKey = active?.dataset.focusKey;
+  const scroll = sidebar.scrollTop;
+  const composites = (state.lab?.grouped?.groups || []).flatMap(group => group.composites || []);
+  const list = document.getElementById("project-list");
+  for (const title of list.querySelectorAll(".project-list__btn")) {
+    const row = title.closest(".project-list__row");
+    const item = row.parentElement;
+    item.classList.add("conversation-group");
+    const composite = composites.find(c => c.id === title.dataset.compositeId);
+    const pid = title.dataset.projectId || title.dataset.branchId || (composite?.member_ids?.length === 1 ? composite.member_ids[0] : null);
+    const key = title.dataset.compositeId ? "composite:" + title.dataset.compositeId : pid;
+    if (!title.querySelector(".unified-tree-title")) {
+      const text = document.createElement("span"); text.className = "unified-tree-title";
+      text.textContent = title.textContent.trim().replace(/^[⎇↳]\s*/, "");
+      title.replaceChildren(text);
+      title.insertAdjacentHTML("afterbegin", '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="5" rx="1.5"/><rect x="2" y="17" width="6" height="5" rx="1.5"/><rect x="16" y="17" width="6" height="5" rx="1.5"/><path d="M12 7v5M5 17v-5h14v5"/></svg>');
+    }
+    title.title = title.textContent.trim();
+    // Tree visibility is controlled through the archive, not a second eye toggle.
+    row.querySelectorAll('.project-list__eye,.project-list__archive').forEach(button => button.remove());
+    if (!title.dataset.branchId && !row.querySelector('[data-tree-menu]')) {
+      title.draggable = true; title.dataset.archiveTreeId = key;
+      const trigger = document.createElement('button'); trigger.type = 'button';
+      trigger.className = 'unified-tree-menu'; trigger.dataset.treeMenu = key;
+      trigger.setAttribute('aria-label','Действия с деревом'); trigger.title = 'Действия с деревом';
+      trigger.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+      const menu = document.createElement('div'); menu.className = 'tree-actions-popover';
+      menu.id = 'tree-actions-' + crypto.randomUUID(); menu.setAttribute('popover','auto');
+      menu.setAttribute('aria-label','Действия с деревом');
+      trigger.setAttribute('popovertarget',menu.id);
+      const action = document.createElement('button'); action.type = 'button';
+      action.className = 'tree-archive-action'; action.autofocus = true;
+      action.dataset.archiveTreeId = key;
+      action.textContent = projectsArchiveOpen ? 'Вернуть из архива' : 'В архив';
+      action.onclick = async () => {
+        const archive = !projectsArchiveOpen;
+        menu.hidePopover(); await setTreeArchived(key, archive);
+        document.querySelector('#projects-archive-bar button')?.focus();
+      };
+      menu.append(action);
+      menu.addEventListener('beforetoggle', event => {
+        if (event.newState !== 'open') return;
+        const rect = trigger.getBoundingClientRect();
+        menu.style.left = `${Math.max(8, Math.min(window.innerWidth - 208, rect.right - 200))}px`;
+        menu.style.top = `${Math.max(8, Math.min(window.innerHeight - 72, rect.bottom + 4))}px`;
+      });
+      row.append(trigger, menu);
+    }
+
+    const branches = item.querySelector(":scope > .project-list--branches");
+    if (branches && !row.querySelector("[data-tree-branches]")) {
+      const toggle = document.createElement("button"); toggle.type = "button";
+      toggle.className = "unified-project-toggle"; toggle.dataset.treeBranches = key;
+      toggle.setAttribute("aria-label", "Ветки дерева");
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
+      branches.hidden = true; row.append(toggle);
+    }
+  }
+  sidebar.scrollTop = scroll;
+  if (focusKey && !active?.isConnected) [...sidebar.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === focusKey)?.focus({preventScroll: true});
+}
+
+function initConversationLists() {
+  initUnifiedNavigation();
+  const projectName = id => state.lab?.projectsById?.[id]?.title || id;
+  mainConversations = new ChatConversations({ api: KoiApi, main: true,
+    titleForScope: isHubMode() ? null : scope => researchChatNavigation?.groups().flatMap(g => g.trees).find(t => scope?.project_id && t.projectIds.includes(scope.project_id))?.title || researchChatNavigation?.groups().find(g => g.id === scope?.program_id)?.title || (scope?.project_id ? projectName(scope.project_id) : "Общий чат"),
+    renderNavigation: isHubMode() || !usesChatNavigation() ? null : renderUnifiedNavigation,
+    sidebar: document.getElementById("agent-chat-conversations"),
+    controls: document.getElementById("agent-chat-controls"),
+    input: document.getElementById("agent-chat-input"),
+    scope: () => ({ project_id: primaryMemberProjectId() }),
+    changed: async (options = {}) => {
+      if (options.open !== false) {
+        if (mainConversations.contextScope && innerWidth <= 900) document.getElementById("workspace").classList.add("is-chat-list-hidden");
+        if (!document.getElementById("workspace").classList.contains("is-chat-open")) toggleAgentChatPanel(true);
+      }
+      agentChatItems = []; renderAgentChatLog(); await refreshAgentChat();
+    }, projectName });
+  cardConversations = new ChatConversations({ api: KoiApi,
+    sidebar: document.getElementById("report-interview-conversations"),
+    controls: document.getElementById("report-interview-controls"),
+    input: document.getElementById("report-interview-input"),
+    scope: () => ({ project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId }),
+    changed: async () => { reportInterviewItems = []; reportInterviewSignature = ""; renderReportInterview(); await refreshReportInterview(); }, projectName });
+  restoreVariantDrafts({ main: mainConversations, card: cardConversations });
+  void refreshAgentChat();
+}
+
 function initAgentChat() {
+  initConversationLists();
+  if (!usesChatNavigation()) attachMainChatResize(document.getElementById("agent-chat-panel"), KoiApi);
+  for (const id of ["agent-chat-log", "report-interview-log"]) {
+    document.getElementById(id).addEventListener("click", event => {
+      const link = event.target.closest("[data-chat-card-link]");
+      if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      void openChatCard(new URL(link.href).searchParams);
+    });
+  }
+  document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
+  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: () => mainConversations.contextScope?.card_id ? agentChatProjectId() : null });
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {
@@ -9002,11 +9534,15 @@ function initAgentChat() {
     });
   });
   void refreshCliAgents();
-  document.getElementById("btn-agent-chat-welcome")?.addEventListener("click", () => {
-    toggleAgentChatPanel(true);
+  document.getElementById("btn-chat-collapse")?.addEventListener("click", () => {
+    document.getElementById("workspace").classList.remove("is-chat-list-hidden");
+    toggleAgentChatPanel(false);
+    const selected = document.querySelector('#agent-chat-conversations [aria-pressed="true"]');
+    (selected?.offsetParent ? selected : document.querySelector('.research-program[aria-pressed="true"]') || document.getElementById('btn-agent-chat'))?.focus();
   });
   document.getElementById("btn-agent-chat")?.addEventListener("click", () => {
-    toggleAgentChatPanel();
+    if (usesChatNavigation()) toggleWorkspaceSidebar();
+    else toggleAgentChatPanel();
     void refreshAppSettings();
   });
   document.getElementById("agent-chat-form")?.addEventListener("submit", (e) => {
@@ -9022,26 +9558,7 @@ function initAgentChat() {
       e.currentTarget.form?.requestSubmit();
     }
   });
-  document.getElementById("agent-chat-tab-chat")?.addEventListener("click", () => showAgentChatTab("chat"));
-  document.getElementById("agent-chat-tab-activity")?.addEventListener("click", () => showAgentChatTab("activity"));
-  document.getElementById("agent-chat-log")?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".agent-chat-delete");
-    if (!btn) return;
-    const itemId = btn.closest(".agent-chat-thread")?.dataset.id;
-    if (itemId) void deleteAgentChatItem(itemId);
-  });
-}
-
-async function deleteAgentChatItem(itemId) {
-  if (!confirm("Удалить вопрос и ответ из чата?")) return;
-  try {
-    await KoiApi.deleteAgentChatItem(itemId);
-    agentChatItems = agentChatItems.filter((i) => i.id !== itemId);
-    renderAgentChatLog();
-    syncAgentChatPolling();
-  } catch (err) {
-    setStatus(err.message, true);
-  }
+  document.getElementById("agent-chat-tab-activity")?.addEventListener("click", () => showAgentChatTab(document.getElementById("agent-chat-activity").classList.contains("hidden") ? "activity" : "chat"));
 }
 
 const THEME_STORAGE_KEY = "koi-theme";
@@ -9101,7 +9618,7 @@ function setTheme(theme) {
 
 function initTheme() {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  const theme = stored === "dark" ? "dark" : "light";
+  const theme = document.documentElement.dataset.appVariant !== "quick" && stored === "dark" ? "dark" : "light";
   if (theme === "light") {
     document.documentElement.setAttribute("data-theme", "light");
   } else {
@@ -12268,7 +12785,27 @@ function initKnowledge() {
 }
 
 async function init() {
+  initKanbanHeaderPopovers();
   const hubMode = isHubMode();
+  if (!hubMode) await initAppVariant(KoiApi, async () => {
+    if (activeVoiceRecording) throw new Error("Завершите запись голоса и повторите попытку.");
+    if (state.reportDirty && !(await saveCardReport())) throw new Error("Сохраните отчёт и повторите попытку.");
+    if (paperState.texDirty && !(await savePaperTex())) throw new Error("Сохраните статью и повторите попытку.");
+    if (document.querySelector('.modal:not(.hidden)')) throw new Error("Закройте открытое окно и повторите попытку.");
+    preserveVariantDrafts({ main: mainConversations, card: cardConversations });
+  }, {
+    refresh: async () => {
+      await restoreArchivedTrees();
+      settingsGrouped = await KoiApi.listProjectsGrouped();
+    },
+    groups: () => sidebarGroups(settingsGrouped).map(group => ({
+      title: group.title || "Без программы",
+      trees: programLayoutItems(group, hiddenCompositeMemberIds({groups: [group]})).map(tree => ({
+        ...tree, archived: isTreeArchived(tree.id),
+      })),
+    })),
+    archive: setTreeArchived,
+  });
   initImageLightbox();
   if (!hubMode) void initWidgets({ api: KoiApi, skip: false });
   if (!hubMode) {
@@ -12308,7 +12845,9 @@ async function init() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (document.getElementById("app-variant-dialog")?.open) return;
       if (document.getElementById("tag-settings-dialog")?.open) return;
+      if (document.getElementById("glossary-dialog")?.open) return;
       if (document.activeElement?.classList.contains("inline-edit-field")) return;
       const deleteConfirmModal = document.getElementById("delete-node-confirm-modal");
       if (deleteConfirmModal && !deleteConfirmModal.classList.contains("hidden")) {
@@ -12356,10 +12895,13 @@ async function init() {
   document.getElementById("report-agent-open").onclick = () => openReportInterview("");
   document.getElementById("report-agent-fab").onclick = () => openReportInterview("");
   attachReportChatResize(document.getElementById("report-interview"));
-  document.getElementById("report-agent-close").onclick = () => { document.getElementById("report-interview").hidden = true; };
+  document.getElementById("report-agent-close").onclick = () => {
+    document.getElementById("report-interview").hidden = true;
+    document.getElementById("report-agent-fab").setAttribute("aria-expanded", "false");
+    document.getElementById("report-agent-fab").focus();
+  };
   document.getElementById("report-interview-form").onsubmit = sendReportInterview;
-  document.getElementById("report-interview-tab-chat")?.addEventListener("click", () => showReportInterviewTab("chat"));
-  document.getElementById("report-interview-tab-activity")?.addEventListener("click", () => showReportInterviewTab("activity"));
+  document.getElementById("report-interview-tab-activity")?.addEventListener("click", () => showReportInterviewTab(document.getElementById("report-interview-activity").classList.contains("hidden") ? "activity" : "chat"));
   document.getElementById("report-interview-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -12463,6 +13005,8 @@ async function init() {
     updateAgentChatScope();
     void refreshAgentChat();
     maybeOpenPaperFromDeepLink();
+    const cardParams = new URLSearchParams(location.search);
+    if (cardParams.has("card")) await openChatCard(cardParams);
   } catch (err) {
     console.error("ResearcherOS init failed:", err);
     setStatus(
@@ -12687,4 +13231,11 @@ async function openTagSettings(board) {
     document.getElementById("tag-settings-cancel").onclick = close;
     dialog.oncancel = event => { event.preventDefault(); void close(); };
   } catch (err) { status.textContent = err.message; }
+}
+
+// Global vocabulary remains reachable without opening a tree.
+const globalGlossaryButton = document.getElementById("global-glossary-settings");
+if (globalGlossaryButton) {
+  globalGlossaryButton.hidden = isHubMode();
+  globalGlossaryButton.onclick = () => void openGlossary();
 }

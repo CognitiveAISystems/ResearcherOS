@@ -13,6 +13,7 @@ from koi.adapters.workspace import get_workspace
 _ws = get_workspace()
 
 from koi.agent_chat.formatting import ANSWER_FORMAT_INSTRUCTIONS
+from koi.agent_chat.card_links import INSTRUCTIONS as CARD_LINK_INSTRUCTIONS
 from koi.adapters.agent_chat_queue import list_for_project, find_item, list_pending, mark_processing, submit_answer
 from koi.adapters.card_reports import read_report
 from koi.core.models import NodeType
@@ -90,15 +91,59 @@ def build_context(item_id: str) -> dict:
     if item is None:
         raise SystemExit(f"Queue item not found: {item_id}")
 
+    from koi.adapters.glossary import context as glossary_context
+    vocabulary = glossary_context(item.get("project_id"))
+
+    if item.get("purpose") in ("git_notice", "git_chat"):
+        from koi.agent_chat.git_changes import POLICY, snapshot, _summary, _diff, get_mount
+        mount = get_mount(item["project_id"])
+        if mount is None:
+            raise SystemExit("Дерево больше не подключено к рабочему пространству.")
+        state = snapshot(mount)
+        return {"glossary": vocabulary, "queue_id": item_id, "project_id": item["project_id"], "purpose": item["purpose"],
+                "user_question": item["question"], "git_instructions": POLICY,
+                "git_snapshot": state["token"], "summary": _summary(state), "diff": _diff(mount, state)}
+
+    if item["project_id"] is None:
+        from koi.adapters.repository import list_projects
+        from koi.agent_chat.conversations import messages, find
+        from koi.agent_chat.context_routing import catalog, for_program, INSTRUCTIONS
+        conversation = find(item["conversation_id"]) or {}
+        program_id = conversation.get("program_id")
+        contexts = for_program(catalog(), program_id)
+        allowed = {p["project_id"] for p in contexts}
+        return {
+            "glossary": vocabulary,
+            "queue_id": item["id"], "project_id": None,
+            "purpose": item.get("purpose", "agent"), "user_question": item["question"],
+            "workspace_root": str(_ws.agent_cwd()),
+            "program_id": program_id,
+            "context_catalog": contexts,
+            "context_routing_instructions": INSTRUCTIONS,
+            "context_suggestions_dismissed": conversation.get("context_suggestions_dismissed", False),
+            "projects": [{**p, "research_root": str(koi_root(p["id"])),
+                          "research_database_path": str(research_path(p["id"])),
+                          "code_root": str(code_root(p["id"]))} for p in list_projects()
+                         if not program_id or p["id"] in allowed],
+            "history": [{"user": h["question"], "assistant": h.get("answer"),
+                         **({"card_links": h["card_links"]} if h.get("card_links") else {})}
+                        for h in reversed(messages(item["conversation_id"]))
+                        if h["enqueued_at"] < item["enqueued_at"]],
+            "answer_policy": ANSWER_FORMAT_INSTRUCTIONS,
+            "card_link_instructions": CARD_LINK_INSTRUCTIONS,
+        }
+
     project = load_project(item["project_id"], sync_reports=False)
     if project is None:
         raise SystemExit(f"Project not found: {item['project_id']}")
 
+    from koi.agent_chat.conversations import item_conversation, messages
     research_db = build_research_database(project)
     scope_method = None
     scope_node = None
 
-    method_id = item.get("method_id")
+    board = next((b for b in project.boards if b.id == item.get("board_id")), None)
+    method_id = item.get("method_id") or (board.owner_node_id if board else None)
     if method_id:
         method = next((n for n in project.nodes if n.id == method_id), None)
         if method:
@@ -108,7 +153,7 @@ def build_context(item_id: str) -> dict:
                 "description": method.description,
             }
 
-    node_id = item.get("node_id")
+    node_id = item.get("node_id") or (method_id if board else None)
     if node_id:
         node = next((n for n in project.nodes if n.id == node_id), None)
         if node:
@@ -129,12 +174,14 @@ def build_context(item_id: str) -> dict:
         "prose": "koi-prose-style/SKILL.md",
     }
     if item.get("card_id"):
-        history = list_for_project(project.id, limit=10000, board_id=item.get("board_id"), card_id=item.get("card_id"))
+        history = messages(item_conversation(item))
         interview = {
             "purpose": purpose,
             "card": _card_meta(project, item.get("board_id"), item.get("card_id")),
             "current_document": item.get("report_markdown", ""),
-            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal")} for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"]],
+            "history": [{"user": h["question"], "assistant": h.get("answer"), "proposal": h.get("proposal"),
+                         **({"card_links": h["card_links"]} if h.get("card_links") else {})}
+                        for h in reversed(history) if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))],
         }
         skill = skills.get(purpose)
         if skill:
@@ -148,6 +195,7 @@ def build_context(item_id: str) -> dict:
             interview["task"] = "Собери отчёт по этой задаче, следуя скиллу koi-execute-card."
     return {
         **interview,
+        "glossary": vocabulary,
         "queue_id": item["id"],
         "enqueued_at": item["enqueued_at"],
         "user_question": item["question"],
@@ -156,9 +204,10 @@ def build_context(item_id: str) -> dict:
         "research_root": str(koi_root(project.id)),
         "code_root": str(code_root(project.id)),
         "history": interview.get("history", [
-            {"user": h["question"], "assistant": h.get("answer")}
-            for h in reversed(list_for_project(project.id, limit=20))
-            if not h.get("card_id") and h["enqueued_at"] < item["enqueued_at"]
+            {"user": h["question"], "assistant": h.get("answer"),
+             **({"card_links": h["card_links"]} if h.get("card_links") else {})}
+            for h in reversed(messages(item_conversation(item))[:20])
+            if h["enqueued_at"] < item["enqueued_at"] and (item_conversation(h) == item_conversation(item))
         ]),
         "scope_method": scope_method,
         "scope_node": scope_node,
@@ -167,6 +216,7 @@ def build_context(item_id: str) -> dict:
         ),
         "research_database": research_db,
         "answer_policy": interview.get("interview_policy", ANSWER_FORMAT_INSTRUCTIONS),
+        "card_link_instructions": CARD_LINK_INSTRUCTIONS,
     }
 
 

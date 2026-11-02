@@ -263,3 +263,10 @@ def test_codex_sandbox_only_delegated_for_protected_worker(monkeypatch, tmp_path
         assert agent_backends.run_agent('edit', backend='codex', cwd=tmp_path,
             allow_edits=edits, externally_sandboxed=external)[0] == 'done'
         assert commands[-1][commands[-1].index('-s') + 1] == expected
+        assert ('sandbox_workspace_write.network_access=true' in commands[-1]) == (edits and not external)
+    # Explicit operator settings still override the network default.
+    monkeypatch.setenv('KOI_CODEX_ARGS', '-c sandbox_workspace_write.network_access=false')
+    assert agent_backends.run_agent('edit', backend='codex', cwd=tmp_path,
+                                   allow_edits=True)[0] == 'done'
+    configs = [commands[-1][i + 1] for i, arg in enumerate(commands[-1]) if arg == '-c']
+    assert configs[-1] == 'sandbox_workspace_write.network_access=false'

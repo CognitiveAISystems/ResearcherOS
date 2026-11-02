@@ -362,7 +362,7 @@ function overlayPinScreenPosition(viewport, camera, item) {
 }
 
 function overlayItemsSignature(items) {
-  return items.map((item) => item.key).join("|");
+  return JSON.stringify(items.map((item) => [item.key, item.state.running.map((card) => card.id)]));
 }
 
 /**
@@ -581,6 +581,7 @@ export function syncMethodActivity(belowEl, node, board, context = {}) {
   } else {
     applyActivityPreviewDataset(block, state, node, context);
     block.dataset.runningCount = String(state.running.length);
+    block.dataset.cardId = String(state.running[0]?.id || "");
     if (runningSig !== block.dataset.runningSig) {
       block.dataset.runningSig = runningSig;
       const inspect = block.querySelector(".method-activity-inspect");

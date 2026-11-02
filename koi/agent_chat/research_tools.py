@@ -1,0 +1,181 @@
+"""Arbor-facing CLI tools over ResearcherOS's existing project commands.
+
+Send one JSON request on stdin. This is also usable from any agent CLI.
+"""
+from __future__ import annotations
+
+import json
+import re
+import sys
+from dataclasses import fields
+
+from koi.adapters import repository, card_reports
+from koi.core.models import NodeType, EdgeType
+from koi.projects import commands
+from koi.agent_chat import research
+
+
+def perform(run_id, operation, args):
+    if args.get("title") is not None and len(str(args["title"]).split()) > 8:
+        raise ValueError("Node and card titles must contain at most eight words")
+    # The same cross-process lock serializes tree changes from all executors.
+    # No second editable Idea Tree is created.
+    with research._db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        run = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        if run is None:
+            raise KeyError(run_id)
+        if operation == "meta":
+            allowed = {"baseline_score", "trunk_score", "eval_cmd", "eval_cmd_test", "dataset_info",
+                       "metric_direction", "trunk_branch", "test_trunk_score", "run_mode", "permissions"}
+            if set(args) - allowed:
+                raise ValueError("Only Arbor execution metadata belongs here; scientific state stays in the project")
+            metadata = {**json.loads(run["metadata"]), **args}
+            db.execute("UPDATE runs SET metadata=? WHERE id=?", (json.dumps(metadata, ensure_ascii=False), run_id))
+            return metadata
+        if operation == "contract":
+            import time
+            seconds, executors = args.get("max_seconds"), args.get("max_executors")
+            parallel = args.get("max_parallel", min(4, executors) if type(executors) is int else 1)
+            condition = args.get("stop_condition")
+            if type(seconds) is not int or not 0 < seconds <= 604800:
+                raise ValueError("max_seconds must be between 1 and 604800")
+            if type(executors) is not int or not 0 < executors <= 1000:
+                raise ValueError("max_executors must be between 1 and 1000")
+            if type(parallel) is not int or not 1 <= parallel <= min(4, executors):
+                raise ValueError("max_parallel must be between 1 and min(4, max_executors)")
+            if not isinstance(condition, str) or not condition.strip():
+                raise ValueError("A stopping criterion is required")
+            existing = db.execute("SELECT * FROM budgets WHERE run_id=?", (run_id,)).fetchone()
+            if existing:
+                raise ValueError("A recorded budget cannot be silently replaced")
+            db.execute("INSERT INTO budgets VALUES (?,?,?,0,?)", (run_id, time.time()+seconds, executors, condition))
+            metadata = {**json.loads(run["metadata"]), "max_parallel": parallel}
+            db.execute("UPDATE runs SET metadata=? WHERE id=?", (json.dumps(metadata, ensure_ascii=False), run_id))
+            return dict(db.execute("SELECT * FROM budgets WHERE run_id=?", (run_id,)).fetchone())
+        project_id = run["project_id"]
+        project = repository.load_project(project_id, sync_reports=False)
+        if project is None:
+            raise ValueError("Project not found")
+        if operation == "view":
+            budget = db.execute("SELECT * FROM budgets WHERE run_id=?", (run_id,)).fetchone()
+            return {**project.model_dump(mode="json"), "arbor_metadata": json.loads(run["metadata"]),
+                    "research_budget": dict(budget) if budget else None}
+        if operation == "phase":
+            metadata = json.loads(run["metadata"])
+            workflow = metadata.get("research_workflow", {})
+            phase = args.get("phase")
+            previous = workflow.get("phase")
+            transitions = {None: {"hypotheses"}, "hypotheses": {"hypotheses", "backlog"},
+                           "backlog": {"hypotheses", "backlog", "execution"},
+                           "execution": {"hypotheses", "execution"}}
+            if phase not in transitions.get(previous, set()):
+                raise ValueError("Publish hypotheses, prepare backlog, then start execution")
+            if phase == "hypotheses":
+                ids = args.get("node_ids", [])
+                nodes = {n.id: n for n in project.nodes}
+                if not ids or any(i not in nodes or nodes[i].parent_id is None
+                                  or not nodes[i].description.strip() for i in ids):
+                    raise ValueError("Publish non-root hypotheses with descriptions before planning")
+                workflow = {"phase": phase, "node_ids": ids}
+            elif phase == "backlog":
+                cards = args.get("cards", [])
+                if not cards:
+                    raise ValueError("Prepare a nonempty backlog wave")
+                for ref in cards:
+                    board = next((b for b in project.boards if b.id == ref["board_id"]), None)
+                    card = next((c for c in board.cards if c.id == ref["card_id"]), None) if board else None
+                    if card is None or card.column_id != "backlog":
+                        raise ValueError("Wave cards must exist in backlog")
+                    content = card_reports.read_report(project, board.id, card.id, card.title)["content"]
+                    if not all(re.search(rf"^##\s+{n}[.)]\s+\S", content, re.M) for n in (1, 2, 3)):
+                        raise ValueError("Prepare every wave card's setup (§1–§3) before execution")
+                workflow = {**workflow, "phase": phase, "cards": cards}
+            else:
+                workflow = {**workflow, "phase": phase}
+            metadata["research_workflow"] = workflow
+            db.execute("UPDATE runs SET metadata=? WHERE id=?", (json.dumps(metadata, ensure_ascii=False), run_id))
+            return workflow
+        if operation in ("update_node", "delete_node"):
+            node = next((n for n in project.nodes if n.id == args["node_id"]), None)
+            if node is None:
+                raise ValueError("Node not found")
+            if node.parent_id is None:
+                raise ValueError("The main node is protected")
+        if operation == "create_node":
+            payload = dict(args)
+            payload["node_type"] = NodeType(payload["node_type"])
+            payload["edge_type"] = EdgeType(payload.get("edge_type", "direction"))
+            result = commands.create_node(project_id, commands.CreateNodeCommand(**payload))
+        elif operation == "update_node":
+            payload = {k: v for k, v in args.items() if k != "node_id"}
+            if "edge_type" in payload:
+                payload["edge_type"] = EdgeType(payload["edge_type"])
+            if "root_type" in payload or "research_questions" in payload:
+                raise ValueError("Use the research-result protocol for conclusions; root type is protected")
+            result = commands.update_node(project_id, args["node_id"], commands.UpdateNodeCommand(**payload))
+        elif operation == "delete_node":
+            result = commands.delete_node(project_id, args["node_id"])
+        elif operation == "create_card":
+            payload = {k: v for k, v in args.items() if k != "board_id"}
+            if payload.get("column_id", "backlog") != "backlog":
+                raise ValueError("New experiments must start in backlog")
+            payload["column_id"] = "backlog"
+            result = commands.create_card(project_id, args["board_id"], commands.CreateCardCommand(**payload))
+        elif operation in ("read_report", "write_report", "update_card", "conclusion"):
+            board = next((b for b in project.boards if b.id == args["board_id"]), None)
+            card = next((c for c in board.cards if c.id == args["card_id"]), None) if board else None
+            if card is None:
+                raise ValueError("Card not found")
+            if operation == "read_report":
+                return card_reports.read_report(project, board.id, card.id, card.title)
+            if operation == "write_report":
+                return card_reports.write_report(project, board.id, card.id, card.title, args["content"])
+            if operation == "conclusion":
+                if card.column_id != "done":
+                    raise ValueError("Only a completed card can produce a final conclusion")
+                from koi.projects.done_research_cli import build_context
+                from koi.projects.done_research_auto import _save
+                from koi.adapters.done_research_queue import dequeue
+                conclusion = _save(build_context(project_id, board.id, card.id), args["conclusion"])
+                dequeue(project_id, board.id, card.id)
+                return {"question_id": conclusion.id, "card_id": card.id}
+            allowed = {f.name for f in fields(commands.UpdateCardCommand)}
+            payload = {k: v for k, v in args.items() if k in allowed}
+            unknown = set(args) - allowed - {"board_id", "card_id"}
+            if unknown:
+                raise ValueError(f"Unknown card fields: {sorted(unknown)}")
+            if payload.get("column_id") == "running":
+                workflow = json.loads(run["metadata"]).get("research_workflow", {})
+                ref = {"board_id": board.id, "card_id": card.id}
+                if workflow.get("phase") != "execution" or ref not in workflow.get("cards", []):
+                    raise ValueError("Publish hypotheses and the prepared backlog wave before execution")
+                report = card_reports.read_report(project, board.id, card.id, card.title)["content"]
+                if not all(re.search(rf"^##\s+{number}[.)]\s+\S", report, re.M) for number in (1, 2, 3)):
+                    raise ValueError("Prepare the experiment setup (§1–§3) before execution")
+            if payload.get("column_id") == "done":
+                report = card_reports.read_report(project, board.id, card.id, card.title)["content"]
+                if card.column_id != "running":
+                    raise ValueError("Execute the card in running before marking it done")
+                if re.search(r"^\s*-\s+\[ \]", report, re.M):
+                    raise ValueError("Complete or explicitly resolve all report subtasks before done")
+                if not re.search(r"^##\s+4[.)]\s+\S", report, re.M):
+                    raise ValueError("Record results and conclusions before done")
+            result = commands.update_card(project_id, board.id, card.id, commands.UpdateCardCommand(**payload))
+        else:
+            raise ValueError(f"Unknown operation: {operation}")
+        return result.model_dump(mode="json")
+
+
+def main():
+    request = json.load(sys.stdin)
+    try:
+        result = perform(request["run_id"], request["operation"], request.get("args", {}))
+    except (ValueError, KeyError, TypeError) as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        raise SystemExit(1) from exc
+    print(json.dumps(result, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

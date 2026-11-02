@@ -33,6 +33,8 @@ def _init_remote_repo(path: Path) -> None:
 
 @pytest.fixture
 def sync_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from koi.adapters import desktop_workspace
+    monkeypatch.setattr(desktop_workspace, "selected_workspace_root", lambda: None)
     engine = tmp_path / "ReseachOS"
     engine.mkdir()
     remote = tmp_path / "remote.git"

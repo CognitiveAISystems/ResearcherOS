@@ -7,38 +7,42 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260928b" />
+  <link rel="stylesheet" href="styles.css?v=20261102-explanation-card" />
   <script>
     (function () {
-      var t = localStorage.getItem("koi-theme");
-      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      var t = localStorage.getItem("koi-literature-theme");
+      document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
     })();
   </script>
 </head>
 <body class="morph-body">
-  <header class="topbar">
-    <div class="topbar-row">
-      <div class="brand">
-        <span class="logo">ResearcherOS</span>
-        <span class="tagline">морфология статьи</span>
-      </div>
-      <div class="toolbar">
-        <a href="literature.html" class="btn" id="morph-back-library">← RelatedWork</a>
-        <a href="index.html" class="btn" id="morph-back-project">Main Workspace</a>
-        <button type="button" id="btn-theme" class="btn btn-theme" title="Светлая тема" aria-label="Переключить тему">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-        </button>
-      </div>
+  <nav class="morph-navigation" aria-label="Навигация">
+    <div class="rw-project-column-header">
+      <a href="literature.html" class="btn rw-home" id="morph-back-library" aria-label="Назад к обзору литературы" title="Назад к обзору литературы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></a>
     </div>
-  </header>
+    <div class="rw-project-tools">
+      <button type="button" id="btn-theme" class="btn btn-theme" aria-label="Переключить тему" title="Переключить тему">
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5Z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </div>
+  </nav>
 
   <main class="morph-page">
-    <aside class="morph-side" aria-label="Статья и прогоны">
+    <aside id="morph-sidebar" class="morph-side" aria-label="Статья и прогоны">
       <section class="morph-paper-card" id="morph-paper-card">
         <p class="morph-paper-meta" id="morph-paper-meta">—</p>
         <a class="morph-paper-title" id="morph-paper-title" href="#" target="_blank" rel="noreferrer">Статья не выбрана</a>
         <p class="morph-paper-abstract" id="morph-paper-abstract"></p>
+      </section>
+
+      <section class="morph-build" aria-label="Разбор статьи">
+        <button type="button" class="btn btn-primary" id="morph-run">Собрать морфологию</button>
+        <details class="morph-build-settings">
+          <summary>Настройки разбора</summary>
+          <label for="morph-cli-agent">Агент</label>
+          <select id="morph-cli-agent" class="agent-cli-select"><option value="">Автоматически</option></select>
+        </details>
       </section>
 
       <section class="morph-runs">
@@ -55,20 +59,44 @@
 
     <section class="morph-main" aria-label="Морфология">
       <header class="morph-toolbar">
-        <div class="morph-tabs" role="tablist">
+        <button type="button" id="morph-toggle-sidebar" class="morph-panel-toggle" aria-controls="morph-sidebar" aria-expanded="true" aria-label="Скрыть панель статьи" title="Скрыть панель статьи"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg></button>
+        <div class="morph-tabs" role="tablist" aria-label="Разделы разбора">
+          <button type="button" class="morph-tab" data-tab="process" role="tab">Процесс</button>
           <button type="button" class="morph-tab is-active" data-tab="graph" role="tab">Граф</button>
           <button type="button" class="morph-tab" data-tab="article" role="tab">Статья</button>
           <button type="button" class="morph-tab" data-tab="shape" role="tab">Форма</button>
           <button type="button" class="morph-tab" data-tab="report" role="tab">Отчёт</button>
         </div>
-        <div class="morph-toolbar-actions">
-          <span class="morph-status" id="morph-status" aria-live="polite"></span>
-          <button type="button" class="btn btn-small morph-article-toggle hidden" id="morph-article-toggle" title="Показать текст статьи рядом с графом">текст</button>
-          <button type="button" class="btn btn-small hidden" id="morph-present">Презентация</button>
-          <button type="button" class="btn btn-primary" id="morph-run">Собрать морфологию</button>
-        </div>
+        <details class="morph-view-menu">
+          <summary aria-label="Действия с морфологией" title="Действия с морфологией">⋯</summary>
+          <div class="morph-view-menu-items">
+            <button type="button" class="btn morph-article-toggle hidden" id="morph-article-toggle">Текст рядом с графом</button>
+            <button type="button" class="btn hidden" id="morph-present">Презентация</button>
+          </div>
+        </details>
+        <button type="button" id="morph-toggle-inspector" class="morph-panel-toggle" aria-controls="morph-details" aria-expanded="true" aria-label="Скрыть панель цитат" title="Скрыть панель цитат"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
       </header>
 
+      <section class="morph-panel hidden" id="morph-panel-process" aria-label="Процесс разбора">
+        <div class="morph-process-content">
+          <h2>Процесс разбора</h2>
+          <p class="morph-process-intro">Здесь появляются действия агента, готовые материалы и результаты проверок.</p>
+          <section class="morph-job-status" aria-label="Состояние разбора">
+            <p class="morph-status" id="morph-status" role="status" aria-live="polite"></p>
+            <div id="morph-agent-permission"></div>
+            <button type="button" class="morph-stop hidden" id="morph-agent-stop" aria-label="Остановить разбор статьи"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1" fill="currentColor"/></svg><span>Остановить</span></button>
+          </section>
+          <section class="morph-process-section" aria-label="Готовые материалы">
+            <h3>Готовые материалы</h3>
+            <ul id="morph-process-artifacts" class="morph-process-artifacts"></ul>
+          </section>
+          <section class="morph-process-section" aria-label="Действия агента">
+            <h3>Действия агента</h3>
+            <ol id="morph-process-events" class="morph-process-events"></ol>
+            <div id="morph-process-message" class="rw-report-markdown"></div>
+          </section>
+        </div>
+      </section>
       <div class="morph-panel" id="morph-panel-graph">
         <div class="morph-empty" id="morph-empty">
           <h3>Морфология ещё не собрана</h3>
@@ -77,15 +105,6 @@
             в граф логических переходов. Шаблон аргументации подбирается после разбора,
             а не навязывается ему.
           </p>
-        </div>
-
-        <div class="morph-prompt-block hidden" id="morph-prompt-block">
-          <div class="morph-prompt-head">
-            <h3>Промпт скопирован — вставьте в чат Cursor</h3>
-            <button type="button" class="btn btn-small" id="morph-copy-again">Скопировать снова</button>
-          </div>
-          <p class="morph-prompt-hint" id="morph-prompt-hint">Страница сама подхватит результат, когда агент запишет morphology.json.</p>
-          <pre class="morph-prompt" id="morph-prompt"></pre>
         </div>
 
         <div class="morph-canvas-wrap hidden" id="morph-canvas-wrap">
@@ -100,10 +119,20 @@
             <pre class="morph-prompt" id="morph-presentation-prompt"></pre>
           </div>
           <div class="morph-graph-pane">
-            <div class="morph-explain-note hidden" id="morph-explain-note">
-              <p id="morph-explain-note-text"></p>
-              <button type="button" id="morph-explain-note-close" aria-label="Скрыть заметку">×</button>
+            <div id="morph-node-info" class="morph-node-info hidden">
+              <button type="button" id="morph-explain-node" aria-label="Пояснить связку" aria-describedby="morph-explain-tooltip">i</button>
+              <span id="morph-explain-tooltip" role="tooltip">Нажмите, чтобы получить пояснение связки</span>
             </div>
+            <section class="morph-explain-note hidden" id="morph-explain-note" aria-labelledby="morph-explain-title">
+              <header class="morph-explain-header">
+                <h3 id="morph-explain-title">Пояснение связки</h3>
+                <button type="button" id="morph-explain-note-close" aria-label="Закрыть пояснение">×</button>
+              </header>
+              <div class="morph-explain-content" tabindex="0" aria-label="Текст пояснения">
+                <p id="morph-explain-note-text" role="status" aria-live="polite"></p>
+                <div id="morph-explain-permission"></div>
+              </div>
+            </section>
             <div class="morph-legend" id="morph-legend"></div>
             <svg class="morph-canvas" id="morph-canvas" role="img" aria-label="Граф логических переходов"></svg>
           </div>
@@ -148,7 +177,7 @@
       </div>
     </section>
 
-    <aside class="morph-inspector" aria-label="Утверждение или формула">
+    <aside id="morph-details" class="morph-inspector" aria-label="Утверждение или формула">
       <div
         class="morph-inspector-resizer"
         id="morph-inspector-resizer"
@@ -164,9 +193,6 @@
         </button>
         <button type="button" class="morph-inspector-tab hidden" id="morph-inspector-formula-tab" role="tab" aria-selected="false">
           Формула
-        </button>
-        <button type="button" class="morph-inspector-expand" id="morph-inspector-expand" aria-pressed="false">
-          Шире
         </button>
       </div>
       <div class="morph-inspector-node" id="morph-inspector-node">
@@ -240,6 +266,7 @@
     </section>
   </div>
 
-  <script type="module" src="morphology.js?v=20260928b"></script>
+  <script type="module" src="morphology.js?v=20261102-explanation-card"></script>
+  <script type="module" src="tooltips.js"></script>
 </body>
 </html>

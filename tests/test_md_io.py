@@ -10,17 +10,18 @@ from koi.core.models import DEFAULT_KANBAN_COLUMNS, ExperimentCard, KanbanBoard
 def test_kanban_md_needs_upgrade() -> None:
     old = "| backlog | running | done |\n"
     new = "| backlog | running | done | successful |\n"
-    assert kanban_md_needs_upgrade(old) is True
-    assert kanban_md_needs_upgrade(new) is False
+    assert kanban_md_needs_upgrade(old) is False
+    assert kanban_md_needs_upgrade(new) is True
+    assert kanban_md_needs_upgrade(old + new) is True
     assert kanban_md_needs_upgrade("# no kanban\n") is False
 
 
-def test_default_kanban_has_successful_column() -> None:
+def test_default_kanban_has_three_columns() -> None:
     col_ids = [c.id for c in DEFAULT_KANBAN_COLUMNS]
-    assert col_ids == ["backlog", "running", "done", "successful"]
+    assert col_ids == ["backlog", "running", "done"]
 
 
-def test_normalize_kanban_adds_successful_column() -> None:
+def test_normalize_kanban_keeps_done_column() -> None:
     board = KanbanBoard(
         id="board-test",
         owner_node_id="m-test",
@@ -35,7 +36,7 @@ def test_normalize_kanban_adds_successful_column() -> None:
         ],
     )
     normalized = normalize_kanban_board(board)
-    assert [c.id for c in normalized.columns] == ["backlog", "running", "done", "successful"]
+    assert [c.id for c in normalized.columns] == ["backlog", "running", "done"]
     assert normalized.cards[0].column_id == "done"
 
 
@@ -161,15 +162,20 @@ Method
 """
     project = parse_project_md(text, project_id="proj-test")
     board = project.boards[0]
-    assert [c.id for c in board.columns] == ["backlog", "running", "done", "successful"]
+    assert [c.id for c in board.columns] == ["backlog", "running", "done"]
     by_id = {c.id: c.column_id for c in board.cards}
     assert by_id["c-old"] == "done"
-    assert by_id["c-win"] == "successful"
+    assert by_id["c-win"] == "done"
+    assert next(c for c in board.cards if c.id == "c-win").favorite is True
+    assert next(c for c in board.cards if c.id == "c-old").favorite is False
 
     reserialized = serialize_project_md(project)
+    assert "successful" not in reserialized
+    assert "favorite:1" in reserialized
     reloaded = parse_project_md(reserialized, project_id="proj-test")
     reloaded_by_id = {c.id: c.column_id for c in reloaded.boards[0].cards}
     assert reloaded_by_id == by_id
+    assert next(c for c in reloaded.boards[0].cards if c.id == "c-win").favorite is True
 
 
 def test_roundtrip_preserves_card_pinned() -> None:

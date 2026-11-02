@@ -88,7 +88,8 @@ def build_prompt(project: Project, board, card, chain: dict, run_path: Path) -> 
             (card.description or "").strip(),
         ]
     )
-    return f"""Ты — эксперимент-агент ResearchOS. Твоя задача — проверить гипотезу по карточке эксперимента и записать рабочий отчёт.
+    from koi.adapters.glossary import prompt as glossary_prompt
+    return glossary_prompt(project.id) + "\n\n" + f"""Ты — эксперимент-агент ResearchOS. Твоя задача — проверить гипотезу по карточке эксперимента и записать рабочий отчёт.
 
 {ctx}
 

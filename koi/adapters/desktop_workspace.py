@@ -66,6 +66,16 @@ def selected_workspace_root() -> Path | None:
     return root if _usable_directory(root) else None
 
 
+def recent_workspace_roots() -> list[Path]:
+    """Remember prior selections so onboarding can find them again."""
+    data = _read_payload()
+    saved = data.get("recent_workspace_roots", [])
+    if not isinstance(saved, list):
+        saved = []
+    roots = [data.get("workspace_root"), *saved]
+    return list(dict.fromkeys(Path(raw).expanduser() for raw in roots if isinstance(raw, str) and raw.strip()))
+
+
 def set_workspace_root(root: str | Path) -> Path:
     """Validate and atomically persist a user-selected workspace directory."""
     try:
@@ -82,7 +92,8 @@ def set_workspace_root(root: str | Path) -> Path:
     except OSError:
         pass
     temporary = destination.with_suffix(".tmp")
-    payload = json.dumps({"workspace_root": str(resolved)}, ensure_ascii=False) + "\n"
+    recent = list(dict.fromkeys([str(resolved), *(str(path) for path in recent_workspace_roots())]))
+    payload = json.dumps({"workspace_root": str(resolved), "recent_workspace_roots": recent}, ensure_ascii=False) + "\n"
     try:
         temporary.write_text(payload, encoding="utf-8")
         try:

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import threading
+from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
@@ -13,6 +17,15 @@ _ws = get_workspace()
 QUEUE_PATH = _ws.run_dir / "sync-push-queue.json"
 STATE_PATH = _ws.run_dir / "sync-state.json"
 PULL_INTERVAL_SEC = 30 * 60
+_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    @wraps(fn)
+    def call(*args, **kwargs):
+        with _LOCK:
+            return fn(*args, **kwargs)
+    return call
 
 
 class SyncPushItem(TypedDict):
@@ -39,17 +52,27 @@ def _load_queue() -> list[SyncPushItem]:
         data = json.loads(QUEUE_PATH.read_text(encoding="utf-8"))
         if isinstance(data, list):
             return [item for item in data if _valid_item(item)]
-    except (json.JSONDecodeError, OSError):
+    except (ValueError, UnicodeError, OSError):
+        logging.getLogger(__name__).warning("Cannot read Git push queue; original file preserved")
         pass
     return []
 
 
 def _save_queue(items: list[SyncPushItem]) -> None:
     QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    QUEUE_PATH.write_text(
+    if QUEUE_PATH.exists():
+        raw = QUEUE_PATH.read_bytes()
+        try:
+            json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            backup = QUEUE_PATH.with_name(QUEUE_PATH.name + ".invalid-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f"))
+            backup.write_bytes(raw)
+    temp = QUEUE_PATH.with_suffix(".tmp")
+    temp.write_text(
         json.dumps(items, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    os.replace(temp, QUEUE_PATH)
 
 
 def _valid_item(item: object) -> bool:
@@ -182,6 +205,7 @@ def should_periodic_pull() -> bool:
         return True
 
 
+@_locked
 def enqueue_push(project_id: str, reason: str, detail: str) -> None:
     items = _load_queue()
     key = (project_id, reason, detail)
@@ -202,10 +226,12 @@ def list_pending_push() -> list[SyncPushItem]:
     return _load_queue()
 
 
+@_locked
 def clear_push_queue() -> None:
     _save_queue([])
 
 
+@_locked
 def dequeue_push(project_id: str | None = None) -> int:
     items = _load_queue()
     if project_id is None:

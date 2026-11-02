@@ -6,10 +6,11 @@ from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
 
-from koi.core.models import NodeType, ResearchQuestionCertainty
+from koi.core.models import EdgeType, NodeType, ResearchQuestionCertainty
 
 
 class CreateProjectBody(BaseModel):
+    root_type: NodeType = NodeType.PROBLEM
     title: str = Field(min_length=1)
     description: str = ""
     tag: str = Field(min_length=1, max_length=48)
@@ -27,6 +28,8 @@ class CreateProgramBody(BaseModel):
 
 
 class CreateNodeBody(BaseModel):
+    edge_type: EdgeType = EdgeType.DIRECTION
+    edge_label: str = ""
     parent_id: str
     node_type: NodeType
     title: str = Field(min_length=1)
@@ -44,6 +47,9 @@ class ResearchQuestionBody(BaseModel):
 
 
 class UpdateNodeBody(BaseModel):
+    root_type: Optional[NodeType] = None
+    edge_type: Optional[EdgeType] = None
+    edge_label: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     research_questions: Optional[list[ResearchQuestionBody]] = None
@@ -61,6 +67,7 @@ class UpdateCardBody(BaseModel):
     tags: Optional[list[str]] = None
     depends_on: Optional[list[str]] = None
     pinned: Optional[bool] = None
+    favorite: Optional[bool] = None
 
 
 class CreateCardBody(BaseModel):
@@ -121,6 +128,7 @@ class PaperQuestionAgentBody(BaseModel):
 
 
 class LiteratureClusterBody(BaseModel):
+    cli_agent: Optional[str] = None
     question: str = Field(min_length=1)
     refresh: bool = False
     download_pdfs: bool = True
@@ -129,6 +137,7 @@ class LiteratureClusterBody(BaseModel):
 
 class MorphologyStageBody(BaseModel):
     paper: dict = Field(default_factory=dict)
+    cli_agent: Optional[str] = None
 
 
 class MorphologyExplainBody(BaseModel):
@@ -186,8 +195,12 @@ class LiteratureSelectionBody(BaseModel):
     papers: list[LiteratureSelectionPaper] = Field(default_factory=list, max_length=400)
 
 
+class ConversationReadBody(BaseModel):
+    answer_id: str = Field(min_length=1)
+
+
 class AgentChatBody(BaseModel):
-    project_id: str = Field(min_length=1)
+    project_id: Optional[str] = Field(default=None, min_length=1)
     question: str = Field(min_length=1)
     method_id: Optional[str] = None
     node_id: Optional[str] = None
@@ -195,7 +208,32 @@ class AgentChatBody(BaseModel):
     board_id: Optional[str] = None
     card_id: Optional[str] = None
     report_markdown: str = ""
-    cli_agent: Optional[Literal["cursor", "codex", "claude"]] = None
+    cli_agent: Optional[str] = None
+    conversation_id: Optional[str] = None
+    git_snapshot: Optional[str] = None
+
+
+class ConversationScopeBody(BaseModel):
+    project_id: Optional[str] = Field(default=None, min_length=1)
+    board_id: Optional[str] = None
+    card_id: Optional[str] = None
+
+
+class ConversationCreateBody(ConversationScopeBody):
+    title: str = Field(default="Новый чат", min_length=1, max_length=80)
+    backend: Optional[str] = None
+    program_id: Optional[str] = Field(default=None, min_length=1)
+    focus_project_id: Optional[str] = Field(default=None, min_length=1)
+
+
+class ConversationContextChoiceBody(BaseModel):
+    item_id: str = Field(min_length=1)
+    option: Optional[int] = Field(default=None, ge=0, le=1)
+
+
+class PermissionBody(BaseModel):
+    permission_id: str
+    option_id: str
 
 
 class AgentChatAnswerBody(BaseModel):
@@ -207,6 +245,10 @@ class CursorApiKeyBody(BaseModel):
 
 
 class AgentChatSettingsBody(BaseModel):
+    ui_variant: Optional[Literal["quick"]] = None
+    chat_panel_width: Optional[int] = Field(default=None, ge=280, le=10000)
+    chat_list_main_width: Optional[int] = Field(default=None, ge=160, le=440)
+    chat_list_card_width: Optional[int] = Field(default=None, ge=160, le=440)
     agent_chat_mode: Optional[str] = None
     cursor_api_key: Optional[str] = None
 

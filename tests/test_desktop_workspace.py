@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event, Thread, current_thread
 
 import pytest
 from fastapi.testclient import TestClient
@@ -79,4 +80,36 @@ def test_workspace_root_api_validates_and_refreshes_discovery(tmp_path: Path):
             "/desktop/workspace-root", json={"workspace_root": str(root / "missing")}
         ).status_code == 400
 
+    assert project_mount.get_mount("alpha-project") is not None
+
+
+def test_workspace_switch_does_not_reuse_an_in_flight_old_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    engine = tmp_path / "engine" / "ReseachOS"
+    engine.mkdir(parents=True)
+    monkeypatch.setattr(project_mount, "ENGINE_ROOT", engine)
+    root = tmp_path / "research"
+    _write_project(root, "alpha", "alpha-project")
+    started, release = Event(), Event()
+    discover = project_mount.discover_projects
+
+    def delayed_discovery():
+        snapshot = discover()
+        if current_thread().name == "old-project-scan":
+            started.set()
+            release.wait(timeout=5)
+        return snapshot
+
+    monkeypatch.setattr(project_mount, "discover_projects", delayed_discovery)
+    project_mount.rescan_projects()
+    worker = Thread(target=project_mount.list_mounts, name="old-project-scan")
+    worker.start()
+    try:
+        assert started.wait(timeout=5)
+        response = TestClient(app).put("/desktop/workspace-root", json={"workspace_root": str(root)})
+        assert response.status_code == 200
+        assert project_mount.get_mount("alpha-project") is not None
+    finally:
+        release.set()
+        worker.join(timeout=5)
+    assert not worker.is_alive()
     assert project_mount.get_mount("alpha-project") is not None

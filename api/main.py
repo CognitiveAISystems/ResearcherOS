@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import agents, collaboration, composites, cursor, desktop, knowledge, library, meta, morphology, pages, paper, programs, projects, review, sync, voice, widgets
+from api.routers import agents, collaboration, composites, glossary, cursor, desktop, knowledge, library, meta, morphology, pages, paper, programs, projects, review, sync, voice, widgets
 
 app = FastAPI(
     title="KOI API",
@@ -22,6 +22,7 @@ app.add_middleware(
 
 for router in (
     meta.router,
+    glossary.router,
     library.router,
     programs.router,
     composites.router,
@@ -48,7 +49,18 @@ def _startup() -> None:
     from koi.adapters.settings_store import load_env_file
 
     load_env_file()
+    from koi.adapters.agent_chat_queue import _load, submit_answer
+    from koi.agent_chat import live, research
+    for item in _load():
+        if item.get("conversation_id") and item.get("status") in ("pending", "processing"):
+            if research.owns_live_turn(item["id"]):
+                continue
+            text = (live.text(item["id"]) + "\n\nЗапуск прерван перезапуском приложения. Продолжите работу новым сообщением.").strip()
+            submit_answer(item["id"], text, answer_kind="warning")
     start_project_discovery_watch()
+    from koi.agent_chat.git_changes import start as start_git_changes
+
+    start_git_changes()
     from koi.projects.done_research_auto import kick_recent
 
     kick_recent()
@@ -62,6 +74,9 @@ def _shutdown() -> None:
     from koi.adapters.project_discovery_watch import stop_project_discovery_watch
 
     stop_project_discovery_watch()
+    from koi.agent_chat.git_changes import stop as stop_git_changes
+
+    stop_git_changes()
     from koi.paper.collaboration.session import shutdown_all_sessions
 
     shutdown_all_sessions()

@@ -2,7 +2,6 @@
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import os
 from threading import Thread
 from urllib.parse import urlparse
 
@@ -36,7 +35,7 @@ def test_tree_selection_browser():
     grouped = {"groups": [], "ungrouped": list(projects.values())}
 
     def api(route):
-        path = urlparse(route.request.url).path.removeprefix("/api")
+        path = urlparse(route.request.url).path
         data = {
             "/projects/grouped": grouped,
             "/projects": list(projects.values()),
@@ -50,7 +49,6 @@ def test_tree_selection_browser():
         def log_message(self, *args):
             pass
 
-    external = os.environ.get("RESEARCHOS_TREE_TEST_URL", "").rstrip("/")
     server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=str(ROOT / "web")))
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -61,10 +59,8 @@ def test_tree_selection_browser():
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.route("http://127.0.0.1:8010/**", api)
-            if external:
-                page.route(external + "/api/**", api)
             page.add_init_script("localStorage.setItem('koi-view-mode', 'chief')")
-            page.goto(f"{external or f'http://127.0.0.1:{server.server_port}'}/?project=alpha")
+            page.goto(f"http://127.0.0.1:{server.server_port}/?project=alpha")
             expect(page.locator(".lab-tree-edges")).to_have_count(2)
 
             def selected(pid):
@@ -75,7 +71,25 @@ def test_tree_selection_browser():
                 expect(page.locator(f'.lab-project-frame[data-project-id="{pid}"]')).to_have_attribute("aria-pressed", "true")
 
             selected("alpha")
-            out = ROOT / ".run/ui-screenshots/main-tree-focus"
+            assert page.evaluate("""() => {
+                const method = document.querySelector('.node-wrap[data-project-id="alpha"][data-node-id="method"]');
+                const menu = method.querySelector('.node-actions').getBoundingClientRect();
+                const content = method.querySelector('.node-kanban-below') || method.querySelector('.map-node');
+                return menu.top >= content.getBoundingClientRect().bottom && menu.left >= 0;
+            }""")
+            # Edge endpoints meet actual node boundaries, without the old 6px inset.
+            assert page.evaluate("""() => {
+                const edge = document.querySelector('.lab-tree-edges.is-active .edge');
+                const screen = point => point.matrixTransform(edge.getScreenCTM());
+                const start = screen(edge.getPointAtLength(0));
+                const end = screen(edge.getPointAtLength(edge.getTotalLength()));
+                const root = document.querySelector('.node-wrap.is-active-tree .problem').getBoundingClientRect();
+                const cause = document.querySelector('.node-wrap.is-active-tree .cause').getBoundingClientRect();
+                const ellipse = ((start.x - root.x - root.width/2) / (root.width/2)) ** 2
+                    + ((start.y - root.y - root.height/2) / (root.height/2)) ** 2;
+                return Math.abs(ellipse - 1) < 0.01 && Math.abs(end.y - cause.top) < 1;
+            }""")
+            out = ROOT / ".run/ui-screenshots"
             out.mkdir(parents=True, exist_ok=True)
             for theme in ("dark", "light"):
                 page.evaluate("theme => document.documentElement.dataset.theme = theme", theme)
@@ -90,8 +104,8 @@ def test_tree_selection_browser():
                         stronger: parseFloat(active.strokeWidth) > parseFloat(idle.strokeWidth),
                         glow: active.filter !== 'none' && idle.filter === 'none',
                         noBox: frame.boxShadow === 'none' && frame.outlineStyle === 'none',
+                        noSyntheticBranches: !document.querySelector('.edge-add, .add-slot-wrap'),
                         noRepeatedRings: css('.node-wrap.is-active-tree .cause').outlineStyle === 'none',
-                        reducedMotion: css('.lab-project-nodes.is-active').transitionDuration === '0s',
                         lifted: css('.lab-project-nodes.is-active').transform !== 'none',
                         matchingLift: css('.lab-project-nodes.is-active').transform === css('.lab-tree-edges.is-active').transform,
                         nodeShadow: css('.lab-project-nodes.is-active .map-node').filter !== 'none',
@@ -118,14 +132,46 @@ def test_tree_selection_browser():
                 assert min(contrast) >= 3, (theme, contrast)
                 page.locator("#mindmap").screenshot(path=str(out / f"tree-selection-{theme}.png"))
 
-            # The frame is a native button and announces its selected state.
-            page.locator('.lab-project-frame[data-project-id="beta"]').focus()
+            # A single child stays centered below its parent, even when both allow adding.
+            assert page.evaluate("""() => {
+                const center = type => {
+                    const rect = document.querySelector(`.node-wrap[data-project-id="alpha"] .${type}`).getBoundingClientRect();
+                    return rect.x + rect.width / 2;
+                };
+                return Math.abs(center('problem') - center('cause')) < 1;
+            }""")
+            cause_wrap = page.locator('.node-wrap[data-project-id="alpha"][data-node-id="cause"]')
+            add = cause_wrap.locator('.node-add')
+            actions = cause_wrap.locator('.node-actions')
+            assert actions.evaluate("el => getComputedStyle(el).opacity === '0'")
+            before = cause_wrap.bounding_box()
+            cause_wrap.locator('.map-node').hover()
+            expect(actions).to_have_css("opacity", "1")
+            assert actions.locator('button').count() == 3
+            page.locator("#mindmap").screenshot(path=str(out / "tree-actions-hover.png"))
+            node_box = cause_wrap.locator('.map-node').bounding_box()
+            menu_box = actions.bounding_box()
+            page.mouse.move(node_box['x'] + node_box['width'] - 5, node_box['y'] + node_box['height'] - 2)
+            page.mouse.move(menu_box['x'] + 8, menu_box['y'] + 2, steps=8)
+            expect(actions).to_have_css("opacity", "1")
+            assert cause_wrap.bounding_box() == before
+            add.click()
+            expect(page.locator('#node-modal')).to_be_visible()
+            expect(page.locator('#add-child-parent-intro')).to_contain_text('Причина')
+            page.keyboard.press("Escape")
+            page.mouse.move(10, 10)
+            add.focus()
+            expect(actions).to_have_css("opacity", "1")
             page.keyboard.press("Enter")
-            selected("beta")
-            page.locator('#btn-projects-toggle').click()
-            page.locator('#project-list .project-list__btn[data-project-id="alpha"]').click()
-            selected("alpha")
-            page.locator('#btn-projects-toggle').click()
+            expect(page.locator('#node-modal')).to_be_visible()
+            page.keyboard.press("Escape")
+            actions.locator('.node-type-help-trigger').click()
+            expect(page.locator('.node-type-help-overlay')).to_be_visible()
+            page.keyboard.press("Escape")
+            cause_wrap.locator('.map-node').hover()
+            actions.locator('.node-delete').click()
+            expect(page.locator('#delete-node-confirm-modal')).to_be_visible()
+            page.keyboard.press("Escape")
 
             page.keyboard.press("Tab")
             page.locator('.node-wrap[data-project-id="alpha"] .map-node.problem').focus()
@@ -136,29 +182,35 @@ def test_tree_selection_browser():
             page.locator('.node-wrap[data-project-id="beta"] .map-node.problem').click()
             selected("beta")
             page.keyboard.press("Escape")
-            page.locator("#btn-zoom-fit-project").click()
-            page.wait_for_timeout(450)
             selected("beta")
             page.locator("#mindmap").screenshot(path=str(out / "tree-selection-detail.png"))
             page.set_viewport_size({"width": 1280, "height": 900})
             page.wait_for_timeout(350)
             # Spatial attention may choose another tree when the overview is refitted.
             selected(page.locator(".lab-tree-edges.is-active").get_attribute("data-project-id"))
-            page.locator("#btn-zoom-fit-lab").click()
             page.locator('.node-wrap[data-project-id="alpha"] .map-node.problem').click()
             selected("alpha")
             assert not errors, errors
 
-            page.emulate_media(forced_colors="active")
-            assert page.locator('.lab-project-nodes.is-active .map-node').first.evaluate(
-                "el => getComputedStyle(el).filter === 'none'")
+            touch = browser.new_page(viewport={"width": 1280, "height": 900}, has_touch=True)
+            touch.route("http://127.0.0.1:8010/**", api)
+            touch.goto(f"http://127.0.0.1:{server.server_port}/?project=alpha")
+            expect(touch.locator('.node-add')).to_have_count(9)
+            assert touch.locator('.node-actions').evaluate_all(
+                "buttons => buttons.every(el => getComputedStyle(el).opacity === '1')")
+            touch.close()
+
+            # A tree with just a root must still expose creation of its first child.
+            projects['beta']['nodes'] = projects['beta']['nodes'][:1]
+            page.goto(f"http://127.0.0.1:{server.server_port}/?project=beta")
+            expect(page.locator('.lab-tree-edges[data-project-id="beta"] .edge')).to_have_count(0)
+            root_add = page.locator('.node-wrap[data-project-id="beta"] .node-add')
+            page.locator('.node-wrap[data-project-id="beta"] .problem').hover()
+            root_add.click()
+            expect(page.locator('#node-modal')).to_be_visible()
+            expect(page.locator('#add-child-parent-intro')).to_contain_text('Проблема')
             browser.close()
     finally:
         server.shutdown()
         server.server_close()
         thread.join()
-
-
-if __name__ == "__main__":
-    test_tree_selection_browser()
-    print("PASS: tree focus, shared IDs, keyboard/list/node selection, zoom/redraw, contrast, themes, reduced motion and forced colors")

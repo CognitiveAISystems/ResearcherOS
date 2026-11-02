@@ -17,6 +17,11 @@ is packaged for macOS, Windows, and Linux.
 
 ## Install from a clone
 
+The `main` branch uses **Quick Navigation** as its only interface. The gear
+button opens settings for managing current and archived trees. Older saved
+interface selections are ignored. The `beta` branch retains experimental
+interface modes.
+
 Double-click `installers/Установить ResearcherOS.command` in Finder.
 The installer downloads checksum-verified uv and Node.js archives, provisions a
 private Python 3.12 environment under `.tools/mac-installer/`, and builds the app.

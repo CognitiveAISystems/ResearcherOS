@@ -37,6 +37,7 @@ def post_project(body: CreateProjectBody) -> dict:
                 description=body.description,
                 program_id=body.program_id,
                 program_title=body.program_title,
+                root_type=body.root_type,
             )
         )
     except ValueError as e:
@@ -84,6 +85,8 @@ def post_node(project_id: str, body: CreateNodeBody) -> dict:
             project_commands.CreateNodeCommand(
                 parent_id=body.parent_id,
                 node_type=body.node_type,
+                edge_type=body.edge_type,
+                edge_label=body.edge_label,
                 title=body.title,
                 description=body.description,
             ),
@@ -119,6 +122,9 @@ def patch_node(project_id: str, node_id: str, body: UpdateNodeBody) -> dict:
                 title=body.title,
                 description=body.description,
                 research_questions=research_questions,
+                root_type=body.root_type,
+                edge_type=body.edge_type,
+                edge_label=body.edge_label,
             ),
         )
     except project_commands.EntityNotFoundError as e:
@@ -180,6 +186,7 @@ def patch_card(
                 tags=tuple(body.tags) if body.tags is not None else None,
                 depends_on=tuple(body.depends_on) if body.depends_on is not None else None,
                 pinned=body.pinned,
+                favorite=body.favorite,
             ),
         )
     except project_commands.EntityNotFoundError as e:

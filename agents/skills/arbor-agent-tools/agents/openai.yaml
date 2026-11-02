@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor State Tools"
+  short_description: "Provides deterministic Arbor helper tools"
+  default_prompt: "Use $arbor-agent-tools to emulate Arbor tree, eval, merge, and report tools locally."

@@ -59,16 +59,16 @@ cd ReseachOS
           <pre><code>Подключи ../my_experiment к ResearcherOS.
 
 Следуй agents/skills/koi-project-onboard/SKILL.md до конца:
-сократовский диалог (проблема → программа → причины/гипотезы → методы),
-prose-проверка, запись в tree/my_experiment/koi-structure/,
+описание проекта → предварительное дерево и бриф → короткие вопросы о структуре,
+после согласования запись в tree/my_experiment/koi-structure/,
 затем python -m koi.projects.install_cli install my_experiment
 (ветка koi/research + worktree в tree/).
 
 Не меняй git config. Не коммить секреты (.env).</code></pre>
         </div>
         <p>
-          Агент задаст несколько академических вопросов, предложит формулировки
-          узлов и только после вашего «пиши» запишет файлы. Подробности сценария —
+          Агент сначала предложит дерево и заполнит бриф, затем задаст короткие вопросы
+          только о структуре и после вашего согласия запишет файлы. Подробности сценария —
           <a href="../skills/koi-project-onboard.html">koi-project-onboard</a>.
         </p>
       </li>

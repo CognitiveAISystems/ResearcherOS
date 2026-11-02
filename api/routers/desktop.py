@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from api.schemas import DesktopWorkspaceBody
 from koi.adapters.desktop_onboarding import (
     connect_git_project,
+    find_existing_trees,
     inspect_existing_projects,
     inspect_existing_tree,
     inspect_git_project,
@@ -37,6 +38,8 @@ router = APIRouter(tags=["desktop"])
 
 class DesktopFolderBody(BaseModel):
     path: str = Field(min_length=1)
+    branch: str | None = None
+    workspace_root: str | None = None
 
 
 class DesktopConnectBody(BaseModel):
@@ -45,12 +48,41 @@ class DesktopConnectBody(BaseModel):
     require_existing: bool | None = None
     program_id: str | None = None
     program_title: str | None = None
+    branch: str | None = None
 
 
 class DesktopInterviewReplyBody(BaseModel):
-    repo_path: str = Field(min_length=1)
+    repo_path: str | None = None
     answer: str = Field(default="", max_length=12000)
     decision: str = "answer"
+    branch: str | None = None
+    phase: str | None = None
+    session_id: str | None = None
+    cli_agent: str | None = None
+    node: dict | None = None
+
+
+class TreeInterviewStartBody(BaseModel):
+    repo_path: str | None = None
+    workspace_root: str | None = None
+    program_id: str | None = None
+    program_title: str | None = None
+    branch: str | None = None
+    project_tag: str | None = None
+    title: str = "Новый проект"
+    session_id: str | None = None
+    onboarding: bool = False
+
+
+class TreeInterviewFinishBody(BaseModel):
+    path: str | None = None
+    branch: str | None = None
+    session_id: str | None = None
+
+
+@router.get("/desktop/onboarding/tree-locations")
+def get_existing_tree_locations() -> dict:
+    return {"trees": find_existing_trees()}
 
 
 @router.get("/desktop/onboarding/default-location")
@@ -100,7 +132,7 @@ def post_existing_tree(body: DesktopFolderBody) -> dict:
 @router.post("/desktop/onboarding/git-project")
 def post_git_project(body: DesktopFolderBody) -> dict:
     try:
-        return inspect_git_project(body.path)
+        return inspect_git_project(body.path, workspace_raw=body.workspace_root)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -109,7 +141,7 @@ def post_git_project(body: DesktopFolderBody) -> dict:
 def post_connect_project(body: DesktopConnectBody) -> dict:
     try:
         result = connect_git_project(
-            body.repo_path, body.workspace_root, require_existing=body.require_existing
+            body.repo_path, body.workspace_root, require_existing=body.require_existing, branch=body.branch
         )
         program = resolve_program(body.program_id, body.program_title)
         if program is not None:
@@ -121,12 +153,17 @@ def post_connect_project(body: DesktopConnectBody) -> dict:
 
 
 @router.post("/desktop/onboarding/interview/start")
-def post_start_interview(body: DesktopConnectBody) -> dict:
+def post_start_interview(body: TreeInterviewStartBody) -> dict:
     try:
         return start_interview(
             body.repo_path,
             body.workspace_root,
             resolve_program(body.program_id, body.program_title),
+            branch=body.branch,
+            project_tag=body.project_tag,
+            title=body.title,
+            session_id=body.session_id,
+            onboarding=body.onboarding,
         )
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -135,15 +172,15 @@ def post_start_interview(body: DesktopConnectBody) -> dict:
 @router.post("/desktop/onboarding/interview/reply")
 def post_interview_reply(body: DesktopInterviewReplyBody) -> dict:
     try:
-        return reply_interview(body.repo_path, body.answer, body.decision)
+        return reply_interview(body.repo_path, body.answer, body.decision, branch=body.branch, phase=body.phase, session_id=body.session_id, cli_agent=body.cli_agent, node_payload=body.node)
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/desktop/onboarding/interview/finish")
-def post_finish_interview(body: DesktopFolderBody) -> dict:
+def post_finish_interview(body: TreeInterviewFinishBody) -> dict:
     try:
-        result = finish_interview(body.path)
+        result = finish_interview(body.path, branch=body.branch, session_id=body.session_id)
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
     reset_workspace_cache()

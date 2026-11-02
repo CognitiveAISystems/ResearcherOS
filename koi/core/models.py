@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 
 class NodeType(str, Enum):
+    TOPIC = "topic"
+    DIRECTION = "direction"
+    PROGRAM = "program"
     PROBLEM = "problem"
     CAUSE = "cause"
     CAUSE_EVIDENCE = "cause_evidence"
@@ -20,8 +23,11 @@ class NodeType(str, Enum):
 
 # Which child types are allowed under each parent type.
 ALLOWED_CHILDREN: dict[Optional[NodeType], list[NodeType]] = {
-    None: [NodeType.PROBLEM],
-    NodeType.PROBLEM: [NodeType.CAUSE],
+    None: [NodeType.TOPIC, NodeType.PROBLEM, NodeType.DIRECTION, NodeType.PROGRAM],
+    NodeType.TOPIC: [NodeType.PROBLEM, NodeType.DIRECTION, NodeType.PROGRAM],
+    NodeType.DIRECTION: [NodeType.METHOD, NodeType.PROGRAM],
+    NodeType.PROGRAM: [NodeType.PROGRAM, NodeType.METHOD],
+    NodeType.PROBLEM: [NodeType.METHOD, NodeType.PROGRAM, NodeType.CAUSE],
     NodeType.CAUSE: [NodeType.CAUSE_EVIDENCE, NodeType.REMEDIATION],
     NodeType.CAUSE_EVIDENCE: [NodeType.METHOD],
     NodeType.REMEDIATION: [NodeType.METHOD],
@@ -31,6 +37,12 @@ ALLOWED_CHILDREN: dict[Optional[NodeType], list[NodeType]] = {
 
 # Node types that own a kanban board for experiments.
 KANBAN_OWNER_TYPES = {NodeType.METHOD}
+
+
+class EdgeType(str, Enum):
+    DIRECTION = "direction"
+    HYPOTHESIS = "hypothesis"
+    EVIDENCE = "evidence"
 
 
 class Verdict(str, Enum):
@@ -64,6 +76,8 @@ class Node(BaseModel):
     title: str
     description: str = ""
     verdict: Verdict = Verdict.OPEN
+    edge_type: EdgeType = EdgeType.DIRECTION
+    edge_label: str = ""
     research_questions: list[MethodResearchQuestion] = Field(default_factory=list)
 
 
@@ -85,6 +99,7 @@ class ExperimentCard(BaseModel):
     created_at: Optional[str] = None  # ISO-8601 UTC, set on create
     updated_at: Optional[str] = None  # ISO-8601 UTC, bumped on every card update
     pinned: bool = False  # stay at the top of the kanban column
+    favorite: bool = False
 
 
 class KanbanBoard(BaseModel):
@@ -109,7 +124,6 @@ DEFAULT_KANBAN_COLUMNS = [
     KanbanColumn(id="backlog", title="Backlog", order=0),
     KanbanColumn(id="running", title="Running", order=1),
     KanbanColumn(id="done", title="Done", order=2),
-    KanbanColumn(id="successful", title="Успешные", order=3),
 ]
 
 KANBAN_CONCLUSION_COLUMN_IDS = frozenset({"done", "successful"})

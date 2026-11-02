@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Research Agent"
+  short_description: "Public entrypoint for Arbor research runs"
+  default_prompt: "Use $arbor-research-agent to run an Arbor-style research workflow from a natural-language goal."

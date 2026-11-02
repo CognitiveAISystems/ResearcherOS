@@ -62,7 +62,6 @@ def test_add_method_creates_its_board_without_persistence() -> None:
         "backlog",
         "running",
         "done",
-        "successful",
     ]
 
 

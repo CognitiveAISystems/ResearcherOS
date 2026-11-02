@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +12,7 @@ import yaml
 
 from koi.core.models import (
     DEFAULT_KANBAN_COLUMNS,
+    EdgeType,
     LEGACY_COLUMN_PLANNED,
     ExperimentCard,
     KanbanBoard,
@@ -25,10 +27,13 @@ from koi.core.models import (
 
 
 def normalize_kanban_board(board: KanbanBoard) -> KanbanBoard:
-    """Drop legacy ``planned`` column; move its cards to backlog."""
+    """Normalize legacy columns, preserving successful cards as favorites."""
     for card in board.cards:
         if card.column_id == LEGACY_COLUMN_PLANNED:
             card.column_id = "backlog"
+        elif card.column_id == "successful":
+            card.column_id = "done"
+            card.favorite = True
     default_by_id = {c.id: c for c in DEFAULT_KANBAN_COLUMNS}
     existing = {c.id: c for c in board.columns if c.id != LEGACY_COLUMN_PLANNED}
     board.columns = [
@@ -46,7 +51,7 @@ def normalize_kanban_board(board: KanbanBoard) -> KanbanBoard:
     return board
 
 HEADING_RE = re.compile(
-    r"^(#{1,6})\s+(problem|cause|cause_evidence|remediation|method|experiment):\s*(\S+)\s*$",
+    r"^(#+)\s+(topic|direction|program|problem|cause|cause_evidence|remediation|method|experiment):\s*(\S+)\s*$",
     re.IGNORECASE,
 )
 KANBAN_START_RE = re.compile(r"^<!--\s*koi:kanban\s+(\S+)\s*-->\s*$", re.IGNORECASE)
@@ -145,7 +150,7 @@ _PINNED_TRUE = {"1", "true", "yes", "on"}
 
 def _parse_card_comment(
     meta: str,
-) -> tuple[Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool]:
+) -> tuple[Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool, bool]:
     card_id: Optional[str] = None
     desc = ""
     tags: list[str] = []
@@ -153,6 +158,7 @@ def _parse_card_comment(
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     pinned = False
+    favorite = False
 
     id_m = re.search(r"\bid:(\S+)", meta)
     if id_m:
@@ -179,10 +185,13 @@ def _parse_card_comment(
     pinned_m = re.search(r"\bpinned:([^\s]+)", meta)
     if pinned_m:
         pinned = pinned_m.group(1).strip().lower() in _PINNED_TRUE
+    favorite_m = re.search(r"\bfavorite:([^\s]+)", meta)
+    if favorite_m:
+        favorite = favorite_m.group(1).strip().lower() in _PINNED_TRUE
 
     meta_for_desc = meta
     for m in sorted(
-        (m for m in (deps_m, tags_m, created_m, updated_m, pinned_m) if m),
+        (m for m in (deps_m, tags_m, created_m, updated_m, pinned_m, favorite_m) if m),
         key=lambda m: m.start(),
         reverse=True,
     ):
@@ -192,23 +201,23 @@ def _parse_card_comment(
     if desc_m:
         desc = _decode_card_desc(desc_m.group(1).strip())
 
-    return card_id, desc, tags, depends_on, created_at, updated_at, pinned
+    return card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite
 
 
 def _parse_card_cell(
     raw: str,
-) -> tuple[str, Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool]:
+) -> tuple[str, Optional[str], str, list[str], list[str], Optional[str], Optional[str], bool, bool]:
     m = CARD_META_RE.match(raw)
     if not m:
-        return raw.strip(), None, "", [], [], None, None, False
+        return raw.strip(), None, "", [], [], None, None, False, False
     title = m.group(1).strip()
     comment = m.group(2)
     if not comment:
-        return title, None, "", [], [], None, None, False
-    card_id, desc, tags, depends_on, created_at, updated_at, pinned = _parse_card_comment(
+        return title, None, "", [], [], None, None, False, False
+    card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite = _parse_card_comment(
         comment
     )
-    return title, card_id, desc, tags, depends_on, created_at, updated_at, pinned
+    return title, card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -299,7 +308,7 @@ def _parse_kanban_table(lines: list[str], board_id: str, owner_node_id: str) -> 
         for col_id, raw in zip(header_cells, cells):
             if not raw or raw in ("—", "-", ""):
                 continue
-            title, card_id, desc, tags, depends_on, created_at, updated_at, pinned = (
+            title, card_id, desc, tags, depends_on, created_at, updated_at, pinned, favorite = (
                 _parse_card_cell(raw)
             )
             cards.append(
@@ -314,6 +323,7 @@ def _parse_kanban_table(lines: list[str], board_id: str, owner_node_id: str) -> 
                     created_at=created_at,
                     updated_at=updated_at,
                     pinned=pinned,
+                    favorite=favorite,
                 )
             )
 
@@ -376,6 +386,7 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
             title = ""
             description_lines: list[str] = []
             verdict = Verdict.OPEN
+            edge = {}
 
             while i < len(lines):
                 if (
@@ -385,6 +396,11 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
                 ):
                     break
                 line = lines[i]
+                edge_match = re.fullmatch(r"<!--\s*koi:edge\s+(.+?)\s*-->", line.strip())
+                if not title and edge_match:
+                    edge = json.loads(edge_match.group(1))
+                    i += 1
+                    continue
                 vm = VERDICT_RE.match(line.strip())
                 if vm and not title:
                     verdict = Verdict(vm.group(1).lower())
@@ -408,6 +424,8 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
                     title=title or node_id,
                     description="\n".join(description_lines).strip(),
                     verdict=verdict,
+                    edge_type=EdgeType(edge.get("type", "direction")),
+                    edge_label=edge.get("label", ""),
                 )
             )
             continue
@@ -452,6 +470,8 @@ def _format_card(cell: ExperimentCard) -> str:
         parts.append(f"id:{cell.id}")
     if cell.pinned:
         parts.append("pinned:1")
+    if cell.favorite:
+        parts.append("favorite:1")
     if cell.created_at:
         parts.append(f"created:{cell.created_at}")
     if cell.updated_at:
@@ -521,8 +541,8 @@ def serialize_project_md(project: Project) -> str:
         "",
     ]
 
-    root = next((n for n in project.nodes if n.node_type == NodeType.PROBLEM), None)
-    if not root:
+    roots = [n for n in project.nodes if n.parent_id is None]
+    if not roots:
         return "\n".join(out)
 
     children = _children_map(project.nodes)
@@ -531,6 +551,9 @@ def serialize_project_md(project: Project) -> str:
         hashes = "#" * depth
         out.append(f"{hashes} {node.node_type.value}: {node.id}")
         out.append("")
+        if node.parent_id and (node.edge_type != EdgeType.DIRECTION or node.edge_label):
+            out.append("<!-- koi:edge " + json.dumps({"type": node.edge_type.value, "label": node.edge_label}, ensure_ascii=False) + " -->")
+            out.append("")
         if node.verdict != Verdict.OPEN:
             out.append(f"verdict: {node.verdict.value}")
             out.append("")
@@ -545,5 +568,6 @@ def serialize_project_md(project: Project) -> str:
         for ch in children.get(node.id, []):
             walk(ch, depth + 1)
 
-    walk(root, 1)
+    for root in roots:
+        walk(root, 1)
     return "\n".join(out).rstrip() + "\n"

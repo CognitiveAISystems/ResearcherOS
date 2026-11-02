@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Resume Report"
+  short_description: "Resumes Arbor runs and writes reports"
+  default_prompt: "Use $arbor-agent-resume-report to resume an Arbor run or write REPORT.md."

@@ -355,6 +355,10 @@ def load_morphology_run(project_id: str, run_id: str) -> dict[str, object] | Non
         payload["prompt"] = prompt
         payload["cursor_message"] = prompt
 
+    chat = _read_json(run_dir / "chat.json")
+    if isinstance(chat, dict):
+        payload["conversation_id"] = chat.get("conversation_id")
+
     payload["has_article"] = resolve_article_source(run_dir) is not None
     return payload
 

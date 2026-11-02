@@ -1,141 +1,86 @@
 ---
 name: koi-project-sync
 description: >-
-  Auto-sync KOI projects/ with git: commit and push significant changes (experiments
-  done, reports, research questions, kanban); pull on Cursor startup and every 30
-  minutes. Use when sync-push queue has items, after KOI workflows, on session
-  start, or when the user mentions git sync, push, or pull for projects.
+  Inspect research Git changes and propose synchronization in the corresponding
+  tree chat. Commit, merge, pull or push only after an explicit human instruction
+  for the reviewed state. Use when research files change or the user asks about
+  Git status or synchronization.
 ---
 
-# KOI: синхронизация projects/ с git
+# KOI: синхронизация исследования по поручению человека
 
-Репозиторий — корень `KOI/` (remote `origin`). Данные проектов — только `projects/<id>/`.
+Исследовательские файлы находятся в `tree/<repo>/koi-structure/`, обычно в
+отдельном worktree на ветке `koi/research`; фактическая ветка задана
+`git_sync_branch` проекта. Код эксперимента живёт в соседнем каталоге.
 
-## Когда запускать
+## Уведомление не разрешает действия
 
-| Триггер | Действие |
-|---------|----------|
-| `sessionStart` hook | **pull** (см. ниже) |
-| `stop` hook, прошло ≥30 мин | **pull** снова |
-| Очередь push не пуста или dirty `projects/` | **commit + push** |
-| После `koi-done-research`, сохранения отчёта, переноса в done | проверь `pending-push` |
-| Пользователь просит синхронизировать | оба направления |
+Наличие dirty-файлов, очереди push, нового отчёта или завершённой карточки
+разрешает проверить изменения и предложить действия. Оно не разрешает
+коммит, pull, merge, push или создание ветки. Не запускай автоматическую
+синхронизацию при старте/завершении сессии или после оформления вывода.
 
-При старте сессии с KOI **сначала pull, потом очереди** (done-research, agent-chat, push).
+Запущенный ResearcherOS замечает изменения и добавляет их в постоянный чат
+«Изменения исследования» соответствующего дерева. Агент проверяет короткий черновик по diff и пишет собственный
+комментарий: 3–5 коротких пунктов о содержании задач и изменениях в знаниях
+или статье, до 900 символов. Он работает в режиме чтения. Повторные проверки того же состояния не создают уведомлений.
 
-## CLI
+Проверки выполняются ежедневно в 18:00 по времени ноутбука и после каждого
+перехода карточки в done, даже если вывод по ней уже есть. Пропущенная при
+закрытом приложении ежедневная проверка выполняется при следующем запуске.
+Обычная правка файла не запускает дополнительную проверку Git.
 
-```bash
-KOI/.venv/bin/python -m koi.projects.sync_cli status
-KOI/.venv/bin/python -m koi.projects.sync_cli pull
-KOI/.venv/bin/python -m koi.projects.sync_cli pending-push
-KOI/.venv/bin/python -m koi.projects.sync_cli complete-push --all
-```
+Уведомление — несколько коротких пунктов: какие задачи завершены, обновились
+ли знания, отчёты и текст статьи. Для входящих коммитов укажи автора из Git.
+Не вставляй список путей, хеши и полный diff без запроса человека.
 
-## Pull (входящие изменения)
+Предлагай коммит и отправку после перехода карточки в done или если изменилось
+более 20% текста хотя бы одной статьи относительно последнего отправленного
+коммита. Считай долю по словам текста отдельно для каждой статьи; служебные
+файлы сборки не учитывай. До выполнения жди явной команды человека.
 
-1. `pull` — скрипт делает `git fetch` и `git pull --ff-only`, если origin впереди и нет незакоммиченных файлов в `projects/`.
-2. Если pull заблокирован (локальные изменения + remote впереди) — **сначала push-workflow** для локальных правок, затем pull. При конфликте — сообщи пользователю, не делай force.
-3. На первой сессии дня: если нет фонового loop — запусти мониторинг раз в 30 минут (скилл `loop`):
+## Порядок работы
 
-```bash
-# Loop every 30m: koi-project-sync pull
-```
+1. Проверь Git-статус нужного дерева и diff научных файлов. Не выводи секреты.
+2. Объясни изменения человеку и предложи конкретное действие.
+3. Дождись явного поручения для показанного состояния. Однозначное «да» относится к последнему единственному
+   предложению для показанного состояния. После нескольких вариантов попроси
+   точное поручение.
+4. Перед выполнением снова проверь файлы и ветки. Если состояние изменилось,
+   обнови сводку и дождись нового поручения.
+5. Выполни только выбранное действие в нужном дереве; сообщи результат в тот
+   же чат. Сохранение коммита само по себе не разрешает отправку.
+6. При конфликте предложи открыть различия и спроси, какой текст оставить. Не выбирай
+   содержание за человека, не используй force-push и не теряй локальные правки.
 
-## Push (исходящие изменения)
+Git-кнопок в чате нет. Человек пишет поручение текстом, например «сохрани и
+отправь», «сделай коммит» или «объедини изменения». На одно предложение можно
+ответить «да». Перед действием сервер проверяет снимок: новые правки требуют
+нового поручения. Агент объясняет изменения, Git-действия выполняет сервер.
+Код и чужие staged-файлы в коммит не включаются. Отдельные команды коммита и
+отправки доступны по прямому поручению независимо от порога предложения.
 
-### Значимые изменения (коммитить)
-
-- карточка перешла в **done** или сменила колонку
-- новый/обновлённый **отчёт** (`reports/`)
-- **research.json** / research_questions
-- новая карточка, узел дерева, правки канбана или project.md
-
-### Не коммитить
-
-- `.run/`, `.venv/`, `__pycache__/`
-- код KOI (`koi/`, `api/`, `web/`) — только если пользователь явно правил платформу
-- секреты (`.env`)
-
-### Workflow
-
-1. `pending-push` — очередь `.run/sync-push-queue.json` + `git status projects/`.
-2. Если `needs_push` — сгруппируй по проектам, stage только `projects/`:
-
-```bash
-cd KOI
-git add projects/<project_id>/
-git status
-```
-
-3. Commit message (русский или английский, кратко):
-
-```
-projects(<id>): <суть>
-
-- <деталь из очереди>
-```
-
-Примеры:
-- `projects(ai-agents-embodied): эксперимент Diversity-only → done`
-- `projects(isaaclab-dexsuite-reorient): отчёт baseline PPO`
-
-4. Push (только по явному триггеру скилла или очереди — пользователь настроил авто-sync):
+## CLI для явного поручения вне чата
 
 ```bash
-cd KOI && git push origin HEAD
+.venv/bin/python -m koi.projects.sync_cli status
+.venv/bin/python -m koi.projects.sync_cli pending-push
+.venv/bin/python -m koi.projects.sync_cli pull --project-id <id>
+.venv/bin/python -m koi.projects.sync_cli push --project-id <id>
 ```
 
-5. `complete-push --all` после успешного push.
+`status` может получать remote refs. `pull` меняет локальные файлы.
+`push` CLI объединяет создание коммита и отправку: используй его только при
+поручении на оба действия. Для раздельных действий используй чат дерева.
+После успешной отправки можно очистить события очереди этого проекта через
+`complete-push --project-id <id>`. Не очищай очередь других деревьев.
 
-### Если push отклонён (non-fast-forward)
+Не добавляй секреты, `.env`, ключи, `.run/`, `.venv/`, `__pycache__/`.
+Не переноси данные обратно в code-ветку. Новые ветки и worktree создавай
+только по явному поручению.
 
-Сначала `pull`, разреши конфликты в `projects/`, затем push. Без `--force`.
+## Cursor hooks
 
-## Очередь push
-
-API и агент добавляют записи при значимых изменениях. Поля: `project_id`, `reason`, `detail`.
-
-Приоритет: после обработки done-research / отчёта — сразу проверь push, чтобы выводы ушли в remote.
-
-## Cursor hooks (ResearchOS workspace)
-
-Скрипты: `agents/skills/koi-project-sync/hooks/`. Подключение: скопируй
-`agents/cursor-hooks.json` → `.cursor/hooks.json`.
-
-| Hook | Скрипт | Поведение |
-|------|--------|-----------|
-| `sessionStart` | `koi-project-sync-session.sh` | pull + `additional_context` при очереди push или проблемах |
-| `stop` | `koi-project-sync-stop.sh` | если ≥30 мин — followup pull; если очередь push — followup commit+push |
-
-## Связанные скиллы
-
-- `koi-project-onboard` — после attach пишет в `tree/<repo>/koi-structure/` и
-  вызывает `install_cli` + первый `push` (§6c); дальше обычный sync здесь
-- `koi-done-research` — после вывода проверь push
-- `koi-dev-server` — API пишет в mounts, очередь push пополняется автоматически
-- `loop` — фоновый pull каждые 30 мин
-
-## Sibling repos (`tree/<repo>/koi-structure` + orphan branch)
-
-Канон: working copy research-данных — `tree/<repo>/koi-structure/` (git worktree
-на `git_sync_branch`, обычно `koi/research`). Code-репо — sibling `<repo>/`.
-
-Если layout ещё не `tree/`:
-
-```bash
-python -m koi.projects.install_cli status
-python -m koi.projects.install_cli install <repo>   # или migrate
-```
-
-Для проектов с `git_repo: true` и `git_sync_branch` каноничный sync CLI:
-
-```bash
-python -m koi.projects.sync_cli init-sync-branch --project-id <id>
-python -m koi.projects.sync_cli push --project-id <id>
-python -m koi.projects.sync_cli pull --project-id <id>
-python -m koi.projects.sync_cli status
-```
-
-Push/pull работают с mount `koi_root` (под `tree/`); не копируй дерево обратно
-в code-ветку.
+`sessionStart` сообщает локальный статус и напоминает о режиме чтения.
+`stop` не запускает синхронизацию и не создаёт поручений на коммит/отправку.
+Периодическая проверка remote refs в приложении не сливает изменения.

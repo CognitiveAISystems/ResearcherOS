@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ResearcherOS — о платформе</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="tour.css" />
+  <script>
+    (function () {
+      var t = localStorage.getItem("koi-theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+</head>
+<body class="tour-page">
+  <div id="tour-progress" class="tour-progress" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand">
+        <a href="index.html" class="logo-link"><span class="logo">ResearcherOS</span></a>
+        <span class="tagline">Обзор возможностей</span>
+      </div>
+      <div class="toolbar">
+        <a href="index.html?project=%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80-%D1%80%D0%B5%D1%88%D0%B5%D0%BD%D0%B8%D0%B5-%D0%BA%D0%B2%D0%B0%D0%B4%D1%80%D0%B0%D1%82%D0%BD%D1%8B%D1%85" class="btn">Эталонный проект</a>
+        <button type="button" id="btn-theme" class="btn btn-theme" title="Светлая тема" aria-label="Переключить тему">
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="tour-canvas-wrap" aria-hidden="true">
+    <canvas id="tour-canvas"></canvas>
+  </div>
+
+  <div id="tour-loader" class="tour-loader" role="status" aria-live="polite">
+    <div class="tour-loader__ring"></div>
+    <p class="tour-loader__text">Загрузка…</p>
+  </div>
+
+  <div id="tour-scroll-hint" class="tour-scroll-hint">
+    <span>Листайте вниз</span>
+    <span class="tour-scroll-hint__chevron" aria-hidden="true"></span>
+  </div>
+
+  <div id="tour-stage" class="tour-stage" aria-hidden="true" hidden>
+    <div class="tour-stage__layout">
+      <div class="tour-stage-kanban">
+        <p class="tour-stage-kanban__title">Канбан метода</p>
+        <div class="tour-stage-kanban__board">
+          <div class="tour-kanban-col">
+            <div class="tour-kanban-col__head">Бэклог</div>
+            <div class="tour-kanban-col__cards" id="tour-col-backlog">
+              <div class="tour-kanban-card tour-kanban-card--static">Повторность n=3</div>
+              <div class="tour-kanban-card tour-kanban-card--flow" id="tour-flow-card">Сравнение с порогом</div>
+            </div>
+          </div>
+          <div class="tour-kanban-col">
+            <div class="tour-kanban-col__head tour-kanban-col__head--run">В работе</div>
+            <div class="tour-kanban-col__cards" id="tour-col-running"></div>
+          </div>
+          <div class="tour-kanban-col">
+            <div class="tour-kanban-col__head tour-kanban-col__head--done">Готово</div>
+            <div class="tour-kanban-col__cards" id="tour-col-done"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tour-stage-agent" id="tour-stage-agent">
+        <span class="tour-stage-agent__orb" aria-hidden="true"></span>
+        <span class="tour-stage-agent__beam" aria-hidden="true"></span>
+        <span class="tour-stage-agent__label">Агент пишет отчёт</span>
+      </div>
+
+      <div class="tour-stage-report" id="tour-stage-report">
+        <p class="tour-stage-report__title">Отчёт</p>
+        <ul class="tour-stage-report__lines">
+          <li data-reveal="0.58">Эксперимент завершён</li>
+          <li data-reveal="0.61">Метрика: 0,94 &gt; 0,8</li>
+          <li data-reveal="0.64">Вердикт: подтверждена</li>
+          <li data-reveal="0.67">Инсайт — в базу знаний проекта</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="tour-stage-knowledge" class="tour-stage tour-stage--solo" aria-hidden="true" hidden>
+    <div class="tour-kb-panel" id="tour-kb-panel">
+      <p class="tour-kb-panel__title">База знаний проекта</p>
+      <p class="tour-kb-panel__hint">Выводы из экспериментов лаборатории</p>
+      <ul class="tour-kb-insights">
+        <li data-reveal="0.15">
+          <span class="tour-kb-verdict tour-kb-verdict--ok">подтверждена</span>
+          Аналитика эффективнее перебора на тестовых уравнениях
+        </li>
+        <li data-reveal="0.35">
+          <span class="tour-kb-verdict tour-kb-verdict--ok">подтверждена</span>
+          Формула Виета даёт стабильный корень при больших коэффициентах
+        </li>
+        <li data-reveal="0.55">
+          <span class="tour-kb-verdict tour-kb-verdict--open">открыта</span>
+          Точность дискриминанта при экстремальных b — нужен ещё эксперимент
+        </li>
+      </ul>
+      <p class="tour-kb-source">Каждый пункт ссылается на отчёт по карточке канбана</p>
+    </div>
+  </div>
+
+  <div id="tour-stage-lit-search" class="tour-stage tour-stage--solo" aria-hidden="true" hidden>
+    <div class="tour-lit-panel" id="tour-lit-search">
+      <p class="tour-lit-panel__title">Поиск в библиотеке</p>
+      <p class="tour-lit-query">Как агенты удерживают контекст в длинных диалогах?</p>
+      <ul class="tour-lit-results">
+        <li>Memory-Augmented LLM Agents — 0,92</li>
+        <li>Context Windows in Dialogue — 0,87</li>
+        <li>Tool-Use and State Tracking — 0,71</li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="tour-stage-lit-clusters" class="tour-stage tour-stage--solo" aria-hidden="true" hidden>
+    <div class="tour-lit-panel" id="tour-lit-clusters">
+      <p class="tour-lit-panel__title">Кластеры по литературе</p>
+      <p class="tour-lit-panel__hint">Разные линии ответов на исследовательский вопрос</p>
+      <div class="tour-lit-cluster">
+        <span class="tour-lit-cluster__name">Внешняя память</span>
+        <span class="tour-lit-cluster__papers">2 статьи</span>
+      </div>
+      <div class="tour-lit-cluster">
+        <span class="tour-lit-cluster__name">Расширение контекста</span>
+        <span class="tour-lit-cluster__papers">1 статья</span>
+      </div>
+    </div>
+  </div>
+
+  <main class="tour-scroll">
+    <section class="tour-section tour-section--center" data-step="hero">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Исследования по шагам</p>
+        <h1 class="tour-title tour-title--hero">ResearcherOS</h1>
+        <p class="tour-lead">
+          Веб-интерфейс для исследовательских проектов. Все данные хранятся
+          в текстовых файлах в репозитории, без отдельной базы данных.
+          Цикл экспериментов: проблема → гипотезы → канбан → отчёт → база знаний.
+          Обзор публикаций — отдельно, на своей странице.
+        </p>
+        <p class="tour-note">Листайте вниз — шаги совпадают с этапами в интерфейсе.</p>
+      </div>
+    </section>
+
+    <section class="tour-section" data-step="problem">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 1</p>
+        <h2 class="tour-title">Проблема</h2>
+        <p class="tour-lead">
+          Корень дерева — формулировка исследуемой проблемы.
+          От неё добавляют гипотезы о том, почему проблема возникает
+          и как её можно проверить или устранить.
+        </p>
+        <div class="tour-pill-row">
+          <span class="tour-pill tour-pill--pink">Проблема</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tour-section tour-section--right" data-step="tree">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 2</p>
+        <h2 class="tour-title">Дерево гипотез</h2>
+        <p class="tour-lead">
+          Цепочка: причина → доказательство или способ устранения → метод проверки.
+          У каждого узла есть статус: открыта, подтверждена или опровергнута.
+          Дерево показывается на карте гипотез в рабочем пространстве.
+        </p>
+        <div class="tour-pill-row">
+          <span class="tour-pill tour-pill--orange">Причина</span>
+          <span class="tour-pill tour-pill--cyan">Доказательство</span>
+          <span class="tour-pill tour-pill--purple">Устранение</span>
+          <span class="tour-pill tour-pill--lime">Метод</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tour-section" data-step="kanban">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 3</p>
+        <h2 class="tour-title">Канбан экспериментов</h2>
+        <p class="tour-lead">
+          У каждого метода своя доска: бэклог, в работе, готово.
+          Одна карточка — один эксперимент. Перед запуском фиксируете,
+          при каких числах гипотеза считается подтверждённой или опровергнутой.
+        </p>
+        <pre class="tour-flow">Пример правила:
+подтверждена — если метрика больше порога
+опровергнута — если условие не выполнилось
+иначе гипотеза остаётся открытой</pre>
+      </div>
+    </section>
+
+    <section class="tour-section tour-section--right" data-step="verdict">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 4</p>
+        <h2 class="tour-title">Отчёт и вердикт</h2>
+        <p class="tour-lead">
+          По итогам эксперимента пишется отчёт с привязкой к карточке,
+          явным вердиктом и краткими выводами — до трёх на карточку.
+          После проверки формата инсайты попадают в базу знаний проекта —
+          это знания из ваших экспериментов, не из статей.
+        </p>
+        <p class="tour-note">Повторная загрузка того же отчёта ничего не меняет; при правке отчёта выводы карточки обновляются.</p>
+      </div>
+    </section>
+
+    <section class="tour-section tour-section--center" data-step="knowledge">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 5 · знания лаборатории</p>
+        <h2 class="tour-title">База знаний</h2>
+        <p class="tour-lead">
+          Накопленные выводы из экспериментов вашей лаборатории: вердикты
+          по гипотезам и инсайты из отчётов по карточкам канбана.
+          Каждый пункт ссылается на свой отчёт-источник.
+          Обзорные заметки команды — отдельно, вручную.
+        </p>
+        <p class="tour-note">Это не обзор литературы: чужие статьи и их кластеры — на шагах 7–8.</p>
+      </div>
+    </section>
+
+    <section class="tour-section" data-step="agent">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 6</p>
+        <h2 class="tour-title">Агент в редакторе</h2>
+        <p class="tour-lead">
+          Агент в среде разработки помогает проводить эксперименты и писать отчёты,
+          отвечает на вопросы из панели «Спросить агента» и формулирует
+          выводы по завершённым карточкам.
+        </p>
+        <div class="tour-pill-row">
+          <span class="tour-pill tour-pill--pink">Спросить агента</span>
+          <span class="tour-pill tour-pill--purple">Синхронизация</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tour-section tour-section--right" data-step="literature-search">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 7 · обзор публикаций</p>
+        <h2 class="tour-title">Обзор литературы — поиск</h2>
+        <p class="tour-lead">
+          Отдельный контур от базы знаний по экспериментам. На своей странице
+          ищете в библиотеке команды по исследовательскому вопросу —
+          ранжирование по заголовку и аннотации. Отбираете статьи для обзора.
+        </p>
+        <div class="tour-pill-row">
+          <span class="tour-pill tour-pill--cyan">Библиотека команды</span>
+          <span class="tour-pill tour-pill--purple">Набор для обзора</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tour-section" data-step="literature-review">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Шаг 8 · обзор публикаций</p>
+        <h2 class="tour-title">Обзор литературы — кластеры</h2>
+        <p class="tour-lead">
+          Агент резюмирует отобранные статьи и группирует их в кластеры —
+          разные линии из публикаций, как авторы отвечают на ваш вопрос.
+          Это карта чужих работ; вердикты по вашим гипотезам остаются
+          в базе знаний из экспериментов.
+        </p>
+        <div class="tour-pill-row">
+          <span class="tour-pill tour-pill--pink">Резюме статей</span>
+          <span class="tour-pill tour-pill--lime">Кластеры статей</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="tour-section tour-section--center" data-step="cta">
+      <div class="tour-section__inner">
+        <p class="tour-kicker">Готово</p>
+        <h2 class="tour-title">Эталонный проект</h2>
+        <p class="tour-lead">
+          В боковой панели откройте «Пример: квадратные уравнения» —
+          там уже есть карта гипотез, канбан с готовым отчётом
+          и база знаний с вердиктами. Можно смотреть и кликать, ничего не сломается.
+        </p>
+        <div class="tour-cta-row">
+          <a href="index.html?project=%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80-%D1%80%D0%B5%D1%88%D0%B5%D0%BD%D0%B8%D0%B5-%D0%BA%D0%B2%D0%B0%D0%B4%D1%80%D0%B0%D1%82%D0%BD%D1%8B%D1%85" class="btn btn-primary">Открыть эталонный проект</a>
+          <a href="literature.html" class="btn btn-tour-lit">Обзор литературы</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.170.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module">
+    import { initTour } from "./tour.js";
+    initTour();
+
+    const themeBtn = document.getElementById("btn-theme");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", () => {
+        const root = document.documentElement;
+        const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+        root.setAttribute("data-theme", next);
+        localStorage.setItem("koi-theme", next);
+        themeBtn.title = next === "light" ? "Тёмная тема" : "Светлая тема";
+      });
+    }
+  </script>
+</body>
+</html>

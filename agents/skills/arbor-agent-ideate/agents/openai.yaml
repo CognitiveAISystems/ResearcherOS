@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Ideation Gate"
+  short_description: "Drafts constrained Arbor research ideas"
+  default_prompt: "Use $arbor-agent-ideate after TreeView constraints to draft valid Arbor ideas."

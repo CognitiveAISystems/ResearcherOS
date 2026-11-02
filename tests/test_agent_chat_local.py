@@ -132,8 +132,11 @@ def test_cli_agents_report_only_installed_bins(monkeypatch) -> None:
     monkeypatch.setattr(cursor_agent_terminal, "find_agent_bin", lambda: Path("/usr/bin/agent"))
     monkeypatch.setattr(agent_backends, "_codex_ready", lambda: False)
     monkeypatch.setattr(agent_backends, "_claude_bin", lambda: None)
+    from koi.adapters import acp_agents
+    monkeypatch.setattr(acp_agents, "agents", lambda: [])
+    monkeypatch.setattr(agent_backends.shutil, "which", lambda _: None)
     listed = {row["id"]: row["available"] for row in agent_backends.cli_agents()}
-    assert listed == {"cursor": True, "codex": False, "claude": False}
+    assert listed == {"cursor": True, "codex": False, "claude": False, "opencode": False}
 
 
 def test_chosen_cli_does_not_fall_back(monkeypatch, tmp_path: Path) -> None:
@@ -169,3 +172,67 @@ def test_queue_keeps_chosen_cli(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(queue, "QUEUE_PATH", tmp_path / "chat.json")
     item = queue.enqueue_question("demo", "Что известно?", cli_agent="claude")
     assert queue.find_item(item["id"])["cli_agent"] == "claude"
+
+
+@pytest.mark.parametrize('project_id', [None, 'demo'])
+@pytest.mark.parametrize('purpose,allow_edits', [('agent', True), ('question', False)])
+def test_chat_edit_permissions_do_not_depend_on_project_binding(monkeypatch, project_id, purpose, allow_edits):
+    from koi.adapters import glossary
+    monkeypatch.setattr(glossary, 'prompt', lambda _project=None: '')
+    item = {'id': 'aq-global', 'project_id': project_id, 'question': 'Исправь описание дерева BP35', 'status': 'pending', 'purpose': purpose}
+    monkeypatch.setattr(runner, 'find_item', lambda _id: item)
+    monkeypatch.setattr(runner, 'is_cursor_manual_agent_mode', lambda: False)
+    monkeypatch.setattr(runner, 'is_api_agent_mode', lambda: False)
+    monkeypatch.setattr(runner, 'find_agent_bin', lambda: Path('/usr/bin/agent'))
+    monkeypatch.setattr(runner, 'mark_processing', lambda _id: None)
+    monkeypatch.setattr(runner, 'record', lambda *_args: None)
+    monkeypatch.setattr(runner, 'build_context', lambda _id: {'project_id': project_id, 'purpose': purpose, 'user_question': item['question']})
+    calls = []
+    monkeypatch.setattr(runner, '_run_local_agent', lambda _prompt, _id, **kw: calls.append(kw) or ('Ответ', 'Cursor CLI'))
+    monkeypatch.setattr(runner, 'submit_answer', lambda *_args: None)
+    assert runner.process_item(item['id'])
+    assert calls == ([{'mode': None, 'force': True}] if allow_edits else [{}])
+    prompt = runner._sdk_prompt(item['id'])
+    if purpose == 'question':
+        assert 'Не меняй файлы' in prompt
+    elif project_id is None:
+        assert 'редактируй деревья, карточки и отчёты' in prompt
+        assert 'без обязательной привязки чата' in prompt
+        assert 'до уточнения не меняй файлы' in prompt
+        assert 'research_context' in prompt
+    monkeypatch.setattr(runner, 'is_api_agent_mode', lambda: True)
+    monkeypatch.setattr(runner, 'backend_status', lambda: {'order': ['codex'], 'codex': {'available': True}})
+    monkeypatch.setattr(runner, 'run_agent', lambda _prompt, **kw: calls.append(kw) or ('Ответ', 'codex'))
+    assert runner.process_item(item['id']) and calls[-1]['allow_edits'] is allow_edits
+
+
+@pytest.mark.parametrize('backend', ['codex', 'claude'])
+def test_local_write_permissions_reach_selected_backend(monkeypatch, tmp_path, backend):
+    calls = []
+    monkeypatch.setattr(runner, 'run_agent', lambda _prompt, **kwargs: calls.append(kwargs) or ('Готово', backend))
+    assert runner._run_local_agent('Исправь дерево', 'test-edit', mode=None, force=True,
+                                   cwd=tmp_path, cli_agent=backend) == ('Готово', backend)
+    assert calls == [{'cwd': tmp_path, 'backend': backend, 'timeout': 1800, 'allow_edits': True}]
+
+
+
+def test_arbor_without_project_routes_before_creating_coordinator(monkeypatch):
+    context = {'project_id': None, 'purpose': 'agent',
+               'user_question': '/koi-arbor-autoresearch обучи модель',
+               'context_catalog': [{'project_id': 'demo', 'tree_title': 'Dataset research'}]}
+    monkeypatch.setattr(runner, 'build_context', lambda _: context)
+    from koi.agent_chat import research
+    monkeypatch.setattr(research, 'coordinator_prompt', lambda *a: pytest.fail('Select context first'))
+    prompt = runner._sdk_prompt('aq-routing')
+    assert 'Dataset research' in prompt
+    assert 'awaiting_selection=true' in prompt
+    assert '/koi-arbor-autoresearch' in prompt
+
+
+def test_arbor_selected_project_enters_coordinator(monkeypatch):
+    context = {'project_id': 'demo', 'user_question': '/koi-arbor-autoresearch обучи модель'}
+    monkeypatch.setattr(runner, 'build_context', lambda _: context)
+    monkeypatch.setattr(runner, 'find_item', lambda _: {'id': 'aq-routing'})
+    from koi.agent_chat import research
+    monkeypatch.setattr(research, 'coordinator_prompt', lambda item, ctx: 'research coordinator')
+    assert runner._base_sdk_prompt('aq-routing') == 'research coordinator'
