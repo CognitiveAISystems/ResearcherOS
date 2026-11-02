@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261011archive-ui" />
+  <link rel="stylesheet" href="styles.css?v=20261101node-actions" />
   <link rel="stylesheet" href="desktop-onboarding.css" />
   <link rel="stylesheet" href="onboarding-interview.css" />
 </head>
@@ -232,6 +232,7 @@
       <p class="modal-type">Новое дерево</p>
       <h2 id="create-project-title" class="inline-edit-title">Создать дерево исследований</h2>
       <form id="create-project-form" class="form create-project-form">
+
         <label for="create-project-title-input">Название проекта</label>
         <input
           id="create-project-title-input"
@@ -292,7 +293,7 @@
 
         <div class="form-actions">
           <button type="button" class="btn" data-close="create-project-modal">Отмена</button>
-          <button type="submit" class="btn btn-primary" id="create-project-submit">Создать</button>
+          <button type="submit" class="btn btn-primary" id="create-project-submit">Построить дерево</button>
         </div>
       </form>
     </div>
@@ -304,12 +305,19 @@
     <div class="modal-panel modal-panel--narrow">
       <button type="button" class="modal-close" data-close="node-modal" aria-label="Закрыть">×</button>
       <p class="modal-type" id="node-modal-type"></p>
+      <div id="node-source-context"></div>
       <div id="node-edit-block" class="node-edit-block">
         <h2 id="node-title-display" class="inline-edit-text inline-edit-title" title="Двойной клик — редактировать"></h2>
         <input type="text" id="node-title-input" class="inline-edit-field hidden" />
         <p id="node-content-hint" class="node-content-hint"></p>
         <p id="node-desc-display" class="inline-edit-text inline-edit-desc" data-placeholder="Описание (двойной клик)"></p>
         <textarea id="node-desc-input" class="inline-edit-field hidden" rows="4"></textarea>
+        <label id="node-root-type-label" class="form hidden">Начальный узел
+          <select id="node-root-type">
+            <option value="topic">Тема</option><option value="problem">Проблема</option>
+            <option value="direction">Направление</option><option value="program">Инженерное решение</option>
+          </select>
+        </label>
         <div class="form-actions form-actions--split">
           <button type="button" id="btn-add-method" class="btn btn-primary hidden">
             + Добавить метод
@@ -334,6 +342,8 @@
           </label>
           <p id="add-child-context-hint" class="add-child-context-hint"></p>
           <p id="add-child-format-hint" class="add-child-format-hint"></p>
+          <label>Связь с родителем <select name="edge_type"></select></label>
+          <label>Подпись связи <textarea name="edge_label" rows="2" maxlength="500"></textarea></label>
           <label>Заголовок <input type="text" name="title" placeholder="Заголовок" required /></label>
           <div class="form-actions">
             <button type="button" class="btn" data-close="node-modal">Отмена</button>
@@ -345,6 +355,19 @@
   </div>
 
   <!-- Подтверждение удаления узла -->
+  <div id="edge-modal" class="modal hidden" role="dialog" aria-labelledby="edge-modal-title">
+    <div class="modal-backdrop" data-close="edge-modal"></div>
+    <div class="modal-panel modal-panel--narrow">
+      <button type="button" class="modal-close" data-close="edge-modal" aria-label="Закрыть">×</button>
+      <h2 id="edge-modal-title">Связь с родителем</h2>
+      <form id="edge-form" class="form">
+        <label>Тип связи <select name="edge_type"></select></label>
+        <label>Подпись связи <textarea name="edge_label" rows="3" maxlength="500"></textarea></label>
+        <p id="edge-error" role="alert"></p>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">Сохранить</button></div>
+      </form>
+    </div>
+  </div>
   <div id="delete-node-confirm-modal" class="modal hidden" role="dialog" aria-labelledby="delete-node-confirm-heading">
     <div class="modal-backdrop" data-close="delete-node-confirm-modal"></div>
     <div class="modal-panel modal-panel--narrow">
@@ -856,7 +879,7 @@
   <div id="koi-widgets-root" aria-live="polite"></div>
 
   <script type="module" src="desktop-onboarding.js"></script>
-  <script type="module" src="app.js?v=20261021paper-edits"></script>
+  <script type="module" src="app.js?v=20261101node-actions"></script>
   <script type="module" src="tooltips.js"></script>
 </body>
 </html>

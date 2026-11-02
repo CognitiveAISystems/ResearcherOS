@@ -194,6 +194,11 @@ export const KoiApi = {
       method: "POST",
       body: JSON.stringify({ question, refresh, download_pdfs, papers }),
     }),
+  launchLiteratureCluster: (projectId, { question = "", papers = [], cli_agent = null } = {}) =>
+    api(`/projects/${encodeURIComponent(projectId)}/literature/cluster/agent`, {
+      method: "POST",
+      body: JSON.stringify({ question, papers, cli_agent }),
+    }),
   stageLiteratureCluster: (
     projectId,
     { question = "", papers = [] } = {}
@@ -206,14 +211,24 @@ export const KoiApi = {
     api(`/projects/${encodeURIComponent(projectId)}/literature`),
   getLiteratureRun: (projectId, runId) =>
     api(`/projects/${encodeURIComponent(projectId)}/literature/${encodeURIComponent(runId)}`),
-  deleteLiteratureRun: (projectId, runId) =>
-    api(`/projects/${encodeURIComponent(projectId)}/literature/${encodeURIComponent(runId)}`, {
+  deleteLiteratureRun: (projectId, runId, deleteReport = false) =>
+    api(`/projects/${encodeURIComponent(projectId)}/literature/${encodeURIComponent(runId)}${deleteReport ? "?delete_report=true" : ""}`, {
       method: "DELETE",
+    }),
+  launchPaperMorphology: (projectId, paper, cli_agent = null) =>
+    api(`/projects/${encodeURIComponent(projectId)}/morphology/agent`, {
+      method: "POST",
+      body: JSON.stringify({ paper, cli_agent }),
     }),
   stagePaperMorphology: (projectId, paper) =>
     api(`/projects/${encodeURIComponent(projectId)}/morphology/stage`, {
       method: "POST",
       body: JSON.stringify({ paper }),
+    }),
+  explainMorphology: (projectId, prompt, { runId, nodeId } = {}) =>
+    api(`/projects/${encodeURIComponent(projectId)}/morphology/explain`, {
+      method: "POST",
+      body: JSON.stringify({ prompt, run_id: runId, node_id: nodeId }),
     }),
   explainMorphologyInTerminal: (projectId, prompt, { runId, nodeId } = {}) =>
     api(`/projects/${encodeURIComponent(projectId)}/morphology/explain-terminal`, {
@@ -303,13 +318,14 @@ export const KoiApi = {
     const q = encodeURIComponent(String(path || ""));
     return `${apiBase()}/projects/${encodeURIComponent(projectId)}/live/file?path=${q}`;
   },
-  createProject: ({ title, description, tag, programId, programTitle }) =>
+  createProject: ({ title, description, tag, programId, programTitle, rootType }) =>
     api("/projects", {
       method: "POST",
       body: JSON.stringify({
         title,
         description: description || "",
         tag,
+        root_type: rootType || "problem",
         program_id: programId || undefined,
         program_title: programTitle || undefined,
       }),
@@ -594,6 +610,7 @@ export const KoiApi = {
   moveConversation: (id, body) => api(`/agent-conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   chooseConversationContext: (id, body) => api(`/agent-conversations/${encodeURIComponent(id)}/context-choice`, { method: "POST", body: JSON.stringify(body) }),
   deleteConversation: id => api(`/agent-conversations/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  participantActivity: (cid, agentId) => api(`/agent-conversations/${encodeURIComponent(cid)}/participants/${encodeURIComponent(agentId)}`),
   getConversation: id => api(`/agent-conversations/${encodeURIComponent(id)}`),
   markConversationRead: (id, answerId) => api(`/agent-conversations/${encodeURIComponent(id)}/read`, { method: "POST", body: JSON.stringify({ answer_id: answerId }) }),
   conversationActivity: id => api(`/agent-conversations/${encodeURIComponent(id)}/activity`),

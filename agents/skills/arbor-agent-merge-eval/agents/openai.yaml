@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Merge Evaluation"
+  short_description: "Guards Arbor merges and evaluation splits"
+  default_prompt: "Use $arbor-agent-merge-eval to protect B_test and evaluate Arbor merge candidates."

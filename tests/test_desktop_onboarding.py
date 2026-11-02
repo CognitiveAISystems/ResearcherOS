@@ -314,7 +314,17 @@ def test_tree_locations_remember_previous_selections(tmp_path: Path, monkeypatch
     assert [tree['workspace_root'] for tree in found] == [str(second)]
 
 
-def test_second_tree_interview_preserves_existing_tree_and_code(tmp_path: Path) -> None:
+def test_second_tree_interview_preserves_existing_tree_and_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from koi.adapters import onboarding_interview
+    response = {
+        "nodes": [
+            {"id": "problem", "node_type": "problem", "parent_id": None, "title": "Агент теряет цель", "description": "На длинных задачах цель теряется."},
+            {"id": "method", "node_type": "method", "parent_id": "problem", "title": "Сравнить задачи с резюме и без", "description": "Проверить удержание цели с резюме.", "edge_type": "hypothesis", "edge_label": "Резюме поможет удерживать цель"},
+        ],
+        "brief": {key: {"answer": "Не определено", "source": "Описание проекта", "needs_clarification": False, "clarification": ""} for key, *_ in onboarding_interview.BRIEF_FIELDS},
+        "method_status": "provided", "question": None, "message": "Дерево построено.",
+    }
+    monkeypatch.setattr(onboarding_interview, "_ask_agent", lambda *_: response)
     repo = code_repo(tmp_path)
     workspace = tmp_path / 'research'
     workspace.mkdir()
@@ -335,7 +345,7 @@ def test_second_tree_interview_preserves_existing_tree_and_code(tmp_path: Path) 
     assert not (workspace / 'tree' / 'example-2').exists()
     # Going back and reopening resumes this tree's own draft.
     assert client.post('/desktop/onboarding/interview/start', json=payload).json() == started.json()
-    for answer in ('Агент теряет цель', 'История шагов короткая', 'Развить гипотезу решения', 'Резюме удерживает цель', 'Сравнить задачи с резюме и без'):
+    for answer in ('Агент теряет цель, хочу проверить, поможет ли резюме.',):
         reply = client.post('/desktop/onboarding/interview/reply', json={
             'repo_path': str(repo), 'branch': branch, 'answer': answer,
         })
@@ -447,3 +457,36 @@ def test_malformed_existing_tree_returns_a_recoverable_error(tmp_path: Path) -> 
     assert response.status_code == 400
     assert 'Проверьте репозиторий' in response.json()['detail']
     assert project.read_text() == '---\ntitle: [unfinished\n---\n'
+
+
+def test_local_tree_without_git_branch_offers_a_separate_free_tree(tmp_path: Path) -> None:
+    repo = code_repo(tmp_path)
+    workspace = tmp_path / 'research'
+    legacy = workspace / 'tree' / 'example' / 'koi-structure'
+    legacy.mkdir(parents=True)
+    content = '---\nid: old-example\ntitle: Старое исследование\n---\n\n# direction: root\n\nСтарое исследование\n'
+    (legacy / 'project.md').write_text(content)
+    # Occupied folders and code aliases must reserve their numbers too.
+    second = workspace / 'tree' / 'example-2'
+    second.mkdir()
+    (second / 'keep.txt').write_text('Не менять')
+    (workspace / 'example-3').mkdir()
+    with TestClient(app) as client:
+        response = client.post('/desktop/onboarding/git-project', json={'path': str(repo), 'workspace_root': str(workspace)})
+        assert response.status_code == 200, response.text
+        inspected = response.json()
+        assert inspected['branch_exists'] is False
+        assert inspected['tree_folder_occupied'] is True
+        assert inspected['next_branch'] == 'koi/research-4'
+        assert inspected['local_tree']['title'] == 'Старое исследование'
+        assert inspected['local_tree']['project_id'] == 'old-example'
+        assert inspected['local_tree']['nodes'][0]['type'] == 'direction'
+        started = client.post('/desktop/onboarding/interview/start', json={
+            'repo_path': str(repo), 'workspace_root': str(workspace), 'branch': inspected['next_branch'],
+        })
+        assert started.status_code == 200, started.text
+        assert started.json()['phase'] == 'description'
+    assert (legacy / 'project.md').read_text() == content
+    assert (second / 'keep.txt').read_text() == 'Не менять'
+    assert not (workspace / 'tree' / 'example-4').exists()
+    assert subprocess.check_output(['git', '-C', str(repo), 'branch', '--show-current']).strip() == b'main'

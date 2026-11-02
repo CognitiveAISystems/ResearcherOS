@@ -78,7 +78,8 @@ def get_conversations(project_id: str | None = None, board_id: str | None = None
         raise HTTPException(400, "Project required")
     if project_id:
         _check_scope(project_id, board_id, card_id)
-    return {"items": conversations.list_conversations(project_id, board_id, card_id)}
+    return {"items": [row for row in conversations.list_conversations(project_id, board_id, card_id)
+                      if row.get("kind") not in ("literature", "morphology", "morphology_explain")]}
 
 
 @router.post("/agent-conversations")
@@ -107,10 +108,23 @@ def _conversation(cid):
 
 @router.get("/agent-conversations/{cid}")
 def get_conversation(cid: str):
+    from koi.agent_chat import research
+    from koi.agent_chat import acp_client
     row = _conversation(cid)
     items = conversations.messages(cid)
     active = next((i for i in items if i["status"] != "answered"), None)
-    return {"conversation": row, "items": items, "live": live.snapshot(active) if active else None}
+    return {"conversation": row, "items": items, "live": acp_client.snapshot(cid) or (live.snapshot(active) if active else None),
+            "participants": research.participants(cid)}
+
+
+@router.get("/agent-conversations/{cid}/participants/{agent_id}")
+def get_research_participant(cid: str, agent_id: str):
+    from koi.agent_chat import research
+    _conversation(cid)
+    try:
+        return {"events": research.events(cid, agent_id)}
+    except KeyError as exc:
+        raise HTTPException(404, "Agent not found in this conversation") from exc
 
 
 @router.delete("/agent-conversations/{cid}")
@@ -211,7 +225,11 @@ def get_conversation_activity(cid: str):
 def cancel_conversation(cid: str):
     _conversation(cid)
     item = next((i for i in conversations.messages(cid) if i["status"] != "answered"), None)
-    return {"ok": _cancel_turn(item) if item else False}
+    from koi.agent_chat import research
+    from koi.agent_chat import acp_client
+    acp_cancelled = acp_client.cancel(cid)
+    research_cancelled = research.request_cancel(cid)
+    return {"ok": (_cancel_turn(item) if item else False) or research_cancelled or acp_cancelled}
 
 
 @_locked
@@ -237,7 +255,12 @@ def cancel_agent_chat_item(item_id: str):
 @router.post("/agent-conversations/{cid}/permission")
 def decide_permission(cid: str, body: PermissionBody):
     _conversation(cid)
-    raise HTTPException(409, "Нет активного запроса разрешения")
+    from koi.agent_chat import acp_client
+    try:
+        acp_client.decide(cid, body.permission_id, body.option_id)
+    except ValueError as exc:
+        raise HTTPException(409, "Нет активного запроса разрешения") from exc
+    return {"ok": True}
 
 
 def _run_agent_chat_item(item_id: str) -> None:

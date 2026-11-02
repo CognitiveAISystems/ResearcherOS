@@ -17,7 +17,7 @@ import {
   mergeComputeCost,
 } from "./compute-cost.js";
 import { KoiApi } from "./api.js?v=20261021paper-edits";
-import { openNewProjectWizard } from "./desktop-onboarding.js";
+import { openNewProjectWizard, openLocalTreeInterview } from "./desktop-onboarding.js";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
 import {
   refreshInlineLoaderHints,
@@ -667,7 +667,8 @@ function syncKanbanProgressBar(el, s) {
 
 function activityContextForProject(project) {
   const pid = project?.id;
-  const authors = pid ? runningAuthorsByProject.get(pid) || {} : {};
+  const people = pid ? runningAuthorsByProject.get(pid) || {} : {};
+  const authors = Object.fromEntries(Object.entries(people).map(([id, names]) => [id, names.join(", ")]));
   const hubOwner = window.__HUB__?.meta?.owner_login || "";
   return {
     projectTitle: project?.title || pid || "",
@@ -747,7 +748,10 @@ async function ensureRunningAuthors(projectId, { force = false } = {}) {
     } else {
       const data = await KoiApi.getKanbanRunningActivity(projectId);
       authors = Object.fromEntries(
-        (data.items || []).map((item) => [item.card_id, item.author || "коллега"])
+        (data.items || []).map((item) => [
+          item.card_id,
+          Array.isArray(item.authors) ? item.authors : (item.author ? [item.author] : []),
+        ])
       );
     }
     runningAuthorsByProject.set(projectId, authors);
@@ -772,7 +776,6 @@ function applyRunningCardAuthorTitles(root, projectId) {
     state.lab?.projectsById?.[projectId] ||
     (state.project?.id === projectId ? state.project : null);
   if (!project) return;
-  const fallbackAuthor = window.__HUB__?.meta?.owner_login || "";
 
   const cardsById = new Map();
   for (const board of Object.values(project.boards || {})) {
@@ -784,7 +787,7 @@ function applyRunningCardAuthorTitles(root, projectId) {
     const cardId = el.dataset.cardId;
     const card = cardsById.get(cardId);
     if (!card || card.column_id !== "running") return;
-    const author = authors[cardId] || fallbackAuthor;
+    const author = (authors[cardId] || []).join(", ");
     if (!author) return;
     let task = card.title;
     const body = String(card.description || "").replace(/\\n/g, "\n");
@@ -840,12 +843,9 @@ function authorMapsForProject(project) {
   return maps;
 }
 
-function resolveRunningAuthor(project, cardId) {
-  for (const map of authorMapsForProject(project)) {
-    const who = String(map[cardId] || "").trim();
-    if (who) return who;
-  }
-  return String(window.__HUB__?.meta?.owner_login || "").trim();
+function resolveRunningAuthors(project, cardId) {
+  const authors = authorMapsForProject(project).flatMap((map) => map[cardId] || []);
+  return [...new Map(authors.filter(Boolean).map((name) => [name.toLowerCase(), name])).values()];
 }
 
 /**
@@ -863,10 +863,12 @@ function runningWorkersUnderNode(project, nodeId) {
     const board = getBoardForNode(project, node);
     for (const card of board?.cards || []) {
       if (card.column_id !== "running") continue;
-      const login = resolveRunningAuthor(project, card.id) || "коллега";
+      const authors = resolveRunningAuthors(project, card.id);
       const task = String(card.title || card.id).trim();
-      if (!byAuthor.has(login)) byAuthor.set(login, []);
-      if (task) byAuthor.get(login).push(task);
+      for (const login of authors.length ? authors : [""]) {
+        if (!byAuthor.has(login)) byAuthor.set(login, []);
+        if (task && !byAuthor.get(login).includes(task)) byAuthor.get(login).push(task);
+      }
     }
   }
 
@@ -881,8 +883,10 @@ function runningWorkersForCard(project, cardId) {
     if (card) break;
   }
   if (!card || card.column_id !== "running") return [];
-  const login = resolveRunningAuthor(project, cardId) || "коллега";
-  return [{ login, tasks: [String(card.title || cardId).trim()].filter(Boolean) }];
+  const authors = resolveRunningAuthors(project, cardId);
+  return (authors.length ? authors : [""]).map((login) => ({
+    login, tasks: [String(card.title || cardId).trim()].filter(Boolean),
+  }));
 }
 
 function ensureNodeWorkersPanel() {
@@ -951,7 +955,7 @@ function renderNodeWorkersPanel(workers, _scopeLabel) {
     `<ul class="node-workers-panel__list" role="list">` +
     workers
       .map((w) => {
-        const login = String(w.login || "коллега").trim() || "коллега";
+        const login = String(w.login || "").trim().replace(/^@/, "");
         const avatar = resolveWorkerAvatar(login);
         const initials = escapeHtml(workerInitials(login));
         const avatarHtml = avatar
@@ -960,7 +964,7 @@ function renderNodeWorkersPanel(workers, _scopeLabel) {
         return (
           `<li class="node-workers-panel__item">` +
           avatarHtml +
-          `<span class="node-workers-panel__nick">@${escapeHtml(login)}</span>` +
+          `<span class="node-workers-panel__nick">${login ? `@${escapeHtml(login)}` : "Автор не указан"}</span>` +
           `</li>`
         );
       })
@@ -1201,11 +1205,12 @@ function syncLabActivityOverlay() {
   syncMethodActivityZoomMode(viewport, labCamera, showOverlay);
   if (showOverlay && overlayRebuilt && !isHubMode()) {
     const layer = document.getElementById("method-activity-overlay");
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const project = state.lab.projectsById[item.projectId];
-      if (!project || !layer) continue;
+      const pin = layer?.children[index];
+      if (!project || !pin) continue;
       const board = getBoardForNode(project, item.node);
-      bindMethodLiveInspect(layer, item.node, board, project);
+      bindMethodLiveInspect(pin, item.node, board, project);
     }
   }
 }
@@ -7543,25 +7548,14 @@ async function submitCreateProjectForm(event) {
 
   const submitBtn = document.getElementById("create-project-submit");
   if (submitBtn) submitBtn.disabled = true;
-  setStatus("Создание проекта…");
+  setStatus("Открываем интервью…");
   try {
-    const p = await KoiApi.createProject({
-      title,
-      description,
-      tag,
-      programId,
-      programTitle,
-    });
     hideModal("create-project-modal");
-    projectsArchiveOpen = false;
-    if (state.lab) {
-      state.lab.projectsById[p.id] = p;
-      state.lab.grouped = await KoiApi.listProjectsGrouped();
-    }
-    await loadProjectList(p.id);
-    await switchProject(p.id);
-    setProjectsSidebarOpen(true);
-    setStatus("Проект создан");
+    await openLocalTreeInterview({
+      title, description, tag, programId, programTitle,
+      onBack: () => showModal("create-project-modal"),
+    });
+    setStatus("Настройка дерева исследования");
   } catch (err) {
     if (errorEl) {
       errorEl.textContent = err.message || "Не удалось создать проект";
@@ -8960,12 +8954,14 @@ async function refreshProjectDiscovery() {
   try {
     const data = await KoiApi.getProjectDiscovery(projectDiscoveryRevision);
     if (!data?.ok) return;
-    projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
     const changes = data.changes || {};
     const added = changes.added || [];
     const removed = changes.removed || [];
     const changed = changes.changed || [];
-    if (!added.length && !removed.length && !changed.length) return;
+    if (!added.length && !removed.length && !changed.length) {
+      projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
+      return;
+    }
 
     const currentId = state.project?.id;
     await loadLab();
@@ -8979,13 +8975,10 @@ async function refreshProjectDiscovery() {
       await loadProjectList();
     }
 
-    if (added.length || removed.length) {
-      renderLabMindmap({ fitLab: getViewMode() === "chief" });
-    } else {
-      for (const item of changed) {
-        refreshKanbanActivityForProject(item.id);
-      }
-    }
+    renderLabMindmap({
+      fitLab: (added.length > 0 || removed.length > 0) && getViewMode() === "chief",
+    });
+    projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
 
     for (const item of added) {
       const title = (item.title || item.id || "проект").trim();
@@ -12723,3 +12716,19 @@ async function openTagSettings(board) {
     dialog.oncancel = event => { event.preventDefault(); void close(); };
   } catch (err) { status.textContent = err.message; }
 }
+
+// Settings share the existing archive persistence and canvas refresh path.
+let settingsGrouped = null;
+export const settingsTrees = {
+  refresh: async () => {
+    await restoreArchivedTrees();
+    settingsGrouped = await KoiApi.listProjectsGrouped();
+  },
+  groups: () => sidebarGroups(settingsGrouped).map(group => ({
+    title: group.title || "Без программы",
+    trees: programLayoutItems(group, hiddenCompositeMemberIds({groups: [group]})).map(tree => ({
+      ...tree, archived: isTreeArchived(tree.id),
+    })),
+  })),
+  archive: setTreeArchived,
+};

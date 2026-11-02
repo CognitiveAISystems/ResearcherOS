@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +12,7 @@ import yaml
 
 from koi.core.models import (
     DEFAULT_KANBAN_COLUMNS,
+    EdgeType,
     LEGACY_COLUMN_PLANNED,
     ExperimentCard,
     KanbanBoard,
@@ -49,7 +51,7 @@ def normalize_kanban_board(board: KanbanBoard) -> KanbanBoard:
     return board
 
 HEADING_RE = re.compile(
-    r"^(#{1,6})\s+(problem|cause|cause_evidence|remediation|method|experiment):\s*(\S+)\s*$",
+    r"^(#+)\s+(topic|direction|program|problem|cause|cause_evidence|remediation|method|experiment):\s*(\S+)\s*$",
     re.IGNORECASE,
 )
 KANBAN_START_RE = re.compile(r"^<!--\s*koi:kanban\s+(\S+)\s*-->\s*$", re.IGNORECASE)
@@ -384,6 +386,7 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
             title = ""
             description_lines: list[str] = []
             verdict = Verdict.OPEN
+            edge = {}
 
             while i < len(lines):
                 if (
@@ -393,6 +396,11 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
                 ):
                     break
                 line = lines[i]
+                edge_match = re.fullmatch(r"<!--\s*koi:edge\s+(.+?)\s*-->", line.strip())
+                if not title and edge_match:
+                    edge = json.loads(edge_match.group(1))
+                    i += 1
+                    continue
                 vm = VERDICT_RE.match(line.strip())
                 if vm and not title:
                     verdict = Verdict(vm.group(1).lower())
@@ -416,6 +424,8 @@ def parse_project_md(text: str, project_id: Optional[str] = None) -> Project:
                     title=title or node_id,
                     description="\n".join(description_lines).strip(),
                     verdict=verdict,
+                    edge_type=EdgeType(edge.get("type", "direction")),
+                    edge_label=edge.get("label", ""),
                 )
             )
             continue
@@ -531,8 +541,8 @@ def serialize_project_md(project: Project) -> str:
         "",
     ]
 
-    root = next((n for n in project.nodes if n.node_type == NodeType.PROBLEM), None)
-    if not root:
+    roots = [n for n in project.nodes if n.parent_id is None]
+    if not roots:
         return "\n".join(out)
 
     children = _children_map(project.nodes)
@@ -541,6 +551,9 @@ def serialize_project_md(project: Project) -> str:
         hashes = "#" * depth
         out.append(f"{hashes} {node.node_type.value}: {node.id}")
         out.append("")
+        if node.parent_id and (node.edge_type != EdgeType.DIRECTION or node.edge_label):
+            out.append("<!-- koi:edge " + json.dumps({"type": node.edge_type.value, "label": node.edge_label}, ensure_ascii=False) + " -->")
+            out.append("")
         if node.verdict != Verdict.OPEN:
             out.append(f"verdict: {node.verdict.value}")
             out.append("")
@@ -555,5 +568,6 @@ def serialize_project_md(project: Project) -> str:
         for ch in children.get(node.id, []):
             walk(ch, depth + 1)
 
-    walk(root, 1)
+    for root in roots:
+        walk(root, 1)
     return "\n".join(out).rstrip() + "\n"

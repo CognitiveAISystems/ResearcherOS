@@ -1,6 +1,7 @@
 import { KoiApi } from "./api.js?v=20261021paper-edits";
 import { initAppVariant } from "./app-variant.js";
 
+let light;
 const DRAFT_KEY = "researchos-light-draft";
 await initAppVariant(KoiApi, async () => {
   if (document.querySelector(".agent-chat-mic.is-recording")) {
@@ -12,12 +13,17 @@ await initAppVariant(KoiApi, async () => {
   const input = document.getElementById("agent-chat-input");
   const project = document.querySelector('.lab-project-frame[aria-pressed="true"]')?.dataset.projectId;
   sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ project, text: input.value }));
+}, {
+  refresh: async () => (await light).settingsTrees.refresh(),
+  groups: () => lightSettings.groups(),
+  archive: (...args) => lightSettings.archive(...args),
 });
 
 // ponytail: keep main's UI intact while it differs substantially from Chats.
 // Only these view files are pinned; backend, onboarding and other modules share
 // their existing implementation. Extract common UI features as they change.
-await import("./app.js?v=20261021paper-edits");
+light = import("./app.js?v=20261101node-actions");
+const lightSettings = (await light).settingsTrees;
 document.getElementById("agent-chat-input").addEventListener("focus", event => {
   let draft;
   try { draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); } catch { return; }

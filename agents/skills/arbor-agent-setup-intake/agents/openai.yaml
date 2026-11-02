@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Setup Intake"
+  short_description: "Builds Arbor contracts and session state"
+  default_prompt: "Use $arbor-agent-setup-intake to create the Arbor run contract and session state."

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from contextlib import suppress
 from uuid import uuid4
@@ -72,11 +73,23 @@ class UIClient(Client):
             return
         event = update.model_dump(by_alias=True, exclude_none=True)
         kind = event.get("sessionUpdate")
+        if self.state.get("transient"):
+            if kind == "agent_message_chunk" and event.get("content", {}).get("type") == "text":
+                message = event["content"].get("text", "")
+                self.state["text"] += message
+            elif kind in ("tool_call", "tool_call_update"):
+                message = event.get("title") or "Инструмент: " + event.get("status", "в работе")
+            else:
+                return
+            self.state["on_event"](message)
+            return
         if kind == "agent_message_chunk":
             content = event.get("content", {})
             if content.get("type") == "text":
                 with LOCK:
                     self.state["text"] += content.get("text", "")
+                if self.state.get("on_event"):
+                    self.state["on_event"]({"type":"assistant", "message":{"content":[{"type":"text", "text":content.get("text", "")}]}})
         elif kind in ("tool_call", "tool_call_update"):
             record(self.state["item_id"], event.get("title") or "Инструмент: " + event.get("status", "в работе"))
         elif kind == "plan":
@@ -84,6 +97,9 @@ class UIClient(Client):
 
     async def request_permission(self, session_id, tool_call, options, **kwargs):
         state = self.state
+        if state.get("transient"):
+            state["on_event"]("Требуется разрешение: " + (tool_call.title or "операция"))
+            return RequestPermissionResponse(outcome={"outcome": "cancelled"})
         if state.get("cancelled"):
             return RequestPermissionResponse(outcome={"outcome": "cancelled"})
         future = asyncio.get_running_loop().create_future()
@@ -107,23 +123,35 @@ class UIClient(Client):
         return None
 
 
-async def _run(cid, item_id, prompt, cwd, backend, timeout):
+async def _run(cid, item_id, prompt, cwd, backend, timeout, *, transient=False, on_event=None,
+               is_cancelled=None, on_started=None):
     command = next((r["command"] for r in agents() if r["id"] == backend and r["available"]), None)
     if not command:
         raise ValueError("ACP-агент не установлен или не настроен")
     state = {"loop": asyncio.get_running_loop(), "task": asyncio.current_task(),
-             "item_id": item_id, "text": "", "permission": None}
+             "item_id": item_id, "text": "", "permission": None,
+             "transient": transient, "on_event": on_event}
     with LOCK:
         if cid in ACTIVE:
             raise ValueError("Дождитесь ответа в этом чате")
         ACTIVE[cid] = state
     proc = None
     conn = None
+    watcher = None
     try:
+        if is_cancelled:
+            async def watch_cancel():
+                while not is_cancelled():
+                    await asyncio.sleep(0.2)
+                cancel(cid)
+            watcher = asyncio.create_task(watch_cancel())
         async with asyncio.timeout(timeout):
             proc = await asyncio.create_subprocess_exec(*command, cwd=str(cwd),
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL, limit=4 * 1024 * 1024)
+                stderr=asyncio.subprocess.DEVNULL, limit=4 * 1024 * 1024,
+                start_new_session=os.name != "nt")
+            if on_started:
+                on_started(proc.pid)
             client = UIClient(state)
             conn = connect_to_agent(client, proc.stdin, proc.stdout)
             state["conn"] = conn
@@ -131,7 +159,7 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout):
                 client_info=Implementation(name="researcheros", version="0.1.0"))
             if init.protocol_version != 1:
                 raise ValueError("Агент не поддерживает ACP v1")
-            row = conversations.find(cid)
+            row = None if transient else conversations.find(cid)
             sid = row.get("acp_session_id") if row and row.get("acp_backend") == backend else None
             if sid and init.agent_capabilities.load_session:
                 client.replaying = True
@@ -148,7 +176,8 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout):
                 session = await conn.new_session(cwd=str(cwd), mcp_servers=[])
                 sid = session.session_id
             state["session_id"] = sid
-            conversations.update(cid, acp_session_id=sid, acp_backend=backend)
+            if not transient:
+                conversations.update(cid, acp_session_id=sid, acp_backend=backend)
             if state.get("cancelled"):
                 return state["text"] or "Остановлено пользователем."
             record(item_id, "ACP-сессия подключена.")
@@ -159,6 +188,10 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout):
     except asyncio.CancelledError:
         return state["text"] + "\n\nОстановлено пользователем."
     finally:
+        if watcher:
+            watcher.cancel()
+            with suppress(asyncio.CancelledError):
+                await watcher
         with LOCK:
             ACTIVE.pop(cid, None)
         if conn:
@@ -176,5 +209,13 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout):
                     await proc.wait()
 
 
-def run(cid, item_id, prompt, cwd, backend, timeout=1800):
-    return asyncio.run(_run(cid, item_id, prompt, cwd, backend, timeout))
+def run(cid, item_id, prompt, cwd, backend, timeout=1800, *, on_started=None, is_cancelled=None, on_event=None):
+    return asyncio.run(_run(cid, item_id, prompt, cwd, backend, timeout,
+                            on_started=on_started, is_cancelled=is_cancelled, on_event=on_event))
+
+
+def run_executor(agent_id, item_id, prompt, cwd, backend, on_event, timeout=1800,
+                 is_cancelled=None, on_started=None):
+    """Independent child session, without creating a sidebar conversation."""
+    return asyncio.run(_run(agent_id, item_id, prompt, cwd, backend, timeout,
+                            transient=True, on_event=on_event, is_cancelled=is_cancelled, on_started=on_started))

@@ -6,10 +6,11 @@ from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
 
-from koi.core.models import NodeType, ResearchQuestionCertainty
+from koi.core.models import EdgeType, NodeType, ResearchQuestionCertainty
 
 
 class CreateProjectBody(BaseModel):
+    root_type: NodeType = NodeType.PROBLEM
     title: str = Field(min_length=1)
     description: str = ""
     tag: str = Field(min_length=1, max_length=48)
@@ -27,6 +28,8 @@ class CreateProgramBody(BaseModel):
 
 
 class CreateNodeBody(BaseModel):
+    edge_type: EdgeType = EdgeType.DIRECTION
+    edge_label: str = ""
     parent_id: str
     node_type: NodeType
     title: str = Field(min_length=1)
@@ -44,6 +47,9 @@ class ResearchQuestionBody(BaseModel):
 
 
 class UpdateNodeBody(BaseModel):
+    root_type: Optional[NodeType] = None
+    edge_type: Optional[EdgeType] = None
+    edge_label: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     research_questions: Optional[list[ResearchQuestionBody]] = None
@@ -122,6 +128,7 @@ class PaperQuestionAgentBody(BaseModel):
 
 
 class LiteratureClusterBody(BaseModel):
+    cli_agent: Optional[str] = None
     question: str = Field(min_length=1)
     refresh: bool = False
     download_pdfs: bool = True
@@ -130,6 +137,7 @@ class LiteratureClusterBody(BaseModel):
 
 class MorphologyStageBody(BaseModel):
     paper: dict = Field(default_factory=dict)
+    cli_agent: Optional[str] = None
 
 
 class MorphologyExplainBody(BaseModel):

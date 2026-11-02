@@ -19,7 +19,7 @@ _lock = threading.Lock()
 _revision = 0
 _running = False
 _last_fingerprint: dict[str, float] = {}
-_pending_changes: dict[str, list[dict[str, str]]] = {
+_pending_changes: dict[str, list[dict[str, Any]]] = {
     "added": [],
     "removed": [],
     "changed": [],
@@ -97,15 +97,19 @@ def _apply_scan_result(result: DiscoveryScanResult, *, initial: bool) -> None:
         if initial:
             return
         _revision += 1
+        # Keep the latest event per project so each browser can poll independently.
+        affected = set(result.added) | set(result.removed) | set(result.changed)
+        for events in _pending_changes.values():
+            events[:] = [event for event in events if event["id"] not in affected]
         for pid in result.added:
             _pending_changes["added"].append(
-                {"id": pid, "title": titles.get(pid, pid)}
+                {"id": pid, "title": titles.get(pid, pid), "revision": _revision}
             )
         for pid in result.removed:
-            _pending_changes["removed"].append({"id": pid})
+            _pending_changes["removed"].append({"id": pid, "revision": _revision})
         for pid in result.changed:
             _pending_changes["changed"].append(
-                {"id": pid, "title": titles.get(pid, pid)}
+                {"id": pid, "title": titles.get(pid, pid), "revision": _revision}
             )
         log.info(
             "Project discovery revision %s: +%s -%s ~%s",
@@ -141,12 +145,12 @@ def discovery_status(*, since_revision: int = 0) -> dict[str, Any]:
                 "changes": {"added": [], "removed": [], "changed": []},
             }
         changes = {
-            "added": list(_pending_changes["added"]),
-            "removed": list(_pending_changes["removed"]),
-            "changed": list(_pending_changes["changed"]),
+            kind: [
+                {key: value for key, value in event.items() if key != "revision"}
+                for event in events if event["revision"] > since_revision
+            ]
+            for kind, events in _pending_changes.items()
         }
-        for key in _pending_changes:
-            _pending_changes[key].clear()
         return {
             "ok": True,
             "running": running,

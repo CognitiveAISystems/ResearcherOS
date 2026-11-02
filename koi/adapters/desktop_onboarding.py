@@ -137,7 +137,7 @@ def _fetch_research_branch_if_needed(repo: Path) -> None:
             raise ValueError(f"Не удалось загрузить ветку {branch} из origin.")
 
 
-def inspect_git_project(raw: str, *, fetch_remote: bool = True) -> dict:
+def inspect_git_project(raw: str, *, fetch_remote: bool = True, workspace_raw: str | None = None) -> dict:
     repo = _directory(raw)
     try:
         top = _git(repo, "rev-parse", "--show-toplevel")
@@ -203,8 +203,29 @@ def inspect_git_project(raw: str, *, fetch_remote: bool = True) -> dict:
             "Проверьте репозиторий или выберите другой."
         )
 
+    workspace = _directory(workspace_raw) if workspace_raw else None
+    target = workspace / "tree" / repo.name if workspace else None
+    occupied = target is not None and (target.is_symlink() or (target.exists() and (not target.is_dir() or any(target.iterdir()))))
+    local_tree = None
+    if occupied and (target / "koi-structure" / "project.md").is_file() and not any(
+        tree.get("worktree_path") and Path(tree["worktree_path"]).resolve() == target.resolve()
+        for tree in trees
+    ):
+        try:
+            parsed = parse_project_md((target / "koi-structure" / "project.md").read_text(encoding="utf-8"), project_id=repo.name)
+        except (ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:
+            raise ValueError("Не удалось прочитать локальное дерево. Проверьте файл project.md в папке исследования.") from exc
+        local_tree = {
+            "branch": None, "project_id": parsed.id, "title": parsed.title,
+            "workspace_root": str(workspace),
+            "nodes": [{"id": node.id, "parent_id": node.parent_id, "type": node.node_type.value,
+                       "title": node.title, "description": node.description} for node in parsed.nodes],
+        }
     number = 2
-    while f"koi/research-{number}" in branches:
+    while f"koi/research-{number}" in branches or (workspace is not None and any(
+        path.exists() or path.is_symlink()
+        for path in (workspace / "tree" / f"{repo.name}-{number}", workspace / f"{repo.name}-{number}")
+    )):
         number += 1
     return {
         "repo_path": str(repo),
@@ -213,6 +234,8 @@ def inspect_git_project(raw: str, *, fetch_remote: bool = True) -> dict:
         "branch_exists": bool(trees),
         "trees": trees,
         "next_branch": f"koi/research-{number}",
+        "tree_folder_occupied": occupied,
+        "local_tree": local_tree,
     }
 
 

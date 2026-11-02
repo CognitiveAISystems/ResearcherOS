@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Coordinator Loop"
+  short_description: "Runs the Arbor Idea Tree control loop"
+  default_prompt: "Use $arbor-agent-coordinator to run the Arbor Idea Tree coordinator loop."

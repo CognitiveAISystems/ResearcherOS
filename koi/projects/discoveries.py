@@ -116,11 +116,12 @@ def _project_id_for_repo_path(repo_root: Path, git_path: str) -> Optional[str]:
 
 def _project_md_git_candidates(project_id: str) -> list[tuple[Path, str]]:
     from koi.adapters.project_mount import get_mount_or_raise
+    from koi.adapters.project_sync import _koi_git_cwd, _koi_rel
 
     candidates: list[tuple[Path, str]] = []
     try:
         mount = get_mount_or_raise(project_id)
-        candidates.append((mount.repo_root, f"{KOI_STRUCTURE_PREFIX}project.md"))
+        candidates.append((_koi_git_cwd(mount), f"{_koi_rel(mount)}/project.md"))
     except KeyError:
         pass
     legacy = f"{PROJECTS_PREFIX}{project_id}/project.md"
@@ -312,30 +313,80 @@ def author_for_card_touch(project_id: str, card_id: str) -> Optional[str]:
     return None
 
 
+def _git_contributors(cwd: Path, path: str, *, card_id: str = "") -> list[str]:
+    """People who edited a report or this exact card row, newest first."""
+    args = ["log", "--format=%x1e%aN%x1f%aE"]
+    if card_id:
+        args.extend(["-p", f"-G<!--[[:space:]]*id:{re.escape(card_id)}([[:space:]]|-->)"])
+    else:
+        args.append("--follow")
+    result = _run_git(cwd, *args, "--", path)
+    if result.returncode:
+        return []
+    authors = []
+    for entry in result.stdout.split("\x1e"):
+        identity, _, patch = entry.partition("\n")
+        name, separator, email = identity.partition("\x1f")
+        if not separator:
+            continue
+        if card_id and not any(
+            line.startswith(("+", "-")) and line[1:].lstrip().startswith("|")
+            and re.search(rf"<!--\s*id:{re.escape(card_id)}(?:\s|-->)", line)
+            for line in patch.splitlines()
+        ):
+            continue
+        # GitHub noreply email identifies a login; ordinary git names do not.
+        match = re.fullmatch(r"(?:\d+\+)?([^@]+)@users\.noreply\.github\.com", email.strip())
+        author = match[1] if match else name.strip()
+        if author and not author.endswith("[bot]"):
+            authors.append(author)
+    return authors
+
+
 def running_kanban_activity(project_id: str) -> list[dict[str, Any]]:
-    """Running kanban cards with git author and current task text."""
+    """Running cards and contributors from their reports and card-specific commits."""
+    from koi.adapters import card_reports
+
     cwd, project_md_path = _project_md_git_path(project_id)
     if cwd is None:
         return []
-    text = _git_show_file(cwd, "HEAD", project_md_path)
+    path = cwd / project_md_path
+    text = (
+        path.read_text(encoding="utf-8")
+        if path.is_file()
+        else _git_show_file(cwd, "HEAD", project_md_path)
+    )
     if not text:
         return []
     project = parse_project_md(text, project_id=project_id)
+    report_index = card_reports.load_index(project_id)
     items: list[dict[str, Any]] = []
     for board in project.boards:
         for card in board.cards:
             if card.column_id != "running":
                 continue
-            author = (
-                author_for_card_column(project_id, card.id, "running")
-                or author_for_card_touch(project_id, card.id)
-                or "коллега"
+            contributors = []
+            report = card_reports.resolve_card_report_path(
+                project_id, project, board, card, report_index
             )
+            if report:
+                for report_path in (report, report.with_suffix(".run.md")):
+                    try:
+                        relative = report_path.resolve().relative_to(cwd.resolve()).as_posix()
+                    except ValueError:
+                        continue
+                    contributors.extend(_git_contributors(cwd, relative))
+            contributors.extend(_git_contributors(cwd, project_md_path, card_id=card.id))
+            by_name = {}
+            for name in contributors:
+                by_name.setdefault(name.casefold(), name)
+            authors = list(by_name.values())
             items.append(
                 {
                     "card_id": card.id,
                     "board_id": board.id,
-                    "author": author,
+                    "author": ", ".join(authors),
+                    "authors": authors,
                     "title": card.title,
                     "task": _open_subtask(card),
                 }

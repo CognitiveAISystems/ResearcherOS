@@ -120,6 +120,21 @@ def list_literature_runs(project_id: str) -> list[dict[str, object]]:
             normalized.setdefault("query_hash", query_hash_from_run_id(run_id))
             # History often keeps status=staged even after the agent writes report.md.
             normalized["status"] = "ready" if (root / run_id / "report.md").exists() else "staged"
+        chat_path = root / run_id / "chat.json"
+        if chat_path.exists() and normalized.get("status") != "ready":
+            from koi.agent_chat import conversations
+            try:
+                chat = json.loads(chat_path.read_text(encoding="utf-8"))
+                items = conversations.messages(chat["conversation_id"])
+                last = items[0] if items else None
+                if last:
+                    if last["status"] != "answered":
+                        normalized["status"] = last["status"]
+                    else:
+                        normalized["status"] = "cancelled" if "Остановлено пользователем" in str(last.get("answer")) else "failed"
+                        normalized["error"] = last.get("answer") or "Агент не сохранил обзор."
+            except (OSError, ValueError, KeyError):
+                pass
         rows.append(normalized)
     return sorted(rows, key=lambda row: str(row.get("created_at") or ""), reverse=True)
 
@@ -163,6 +178,9 @@ def load_literature_run(project_id: str, run_id: str) -> dict[str, object] | Non
     if not payload:
         return None
 
+    chat_path = run_dir / "chat.json"
+    if chat_path.exists():
+        payload.update(json.loads(chat_path.read_text(encoding="utf-8")))
     report_path = run_dir / "report.md"
     related_path = run_dir / "related_work.md"
     prompt_path = run_dir / "PROMPT.md"
@@ -183,8 +201,8 @@ def load_literature_run(project_id: str, run_id: str) -> dict[str, object] | Non
     return _normalize_literature_payload_for_ui(payload)
 
 
-def delete_literature_run(project_id: str, run_id: str) -> dict[str, object]:
-    """Remove a staged literature run (before report.md exists).
+def delete_literature_run(project_id: str, run_id: str, *, delete_report: bool = False) -> dict[str, object]:
+    """Remove a literature run, requiring explicit opt-in to delete a report.
 
     Ready runs with a report cannot be cancelled this way — raise ValueError.
     Missing runs raise LookupError.
@@ -205,7 +223,7 @@ def delete_literature_run(project_id: str, run_id: str) -> dict[str, object]:
         raise LookupError(f"Literature run '{run_id}' was not found.")
 
     report_path = run_dir / "report.md"
-    if report_path.exists():
+    if report_path.exists() and not delete_report:
         raise ValueError("Cannot cancel a literature run that already has a report.")
 
     shutil.rmtree(run_dir)

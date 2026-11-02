@@ -85,3 +85,47 @@
 @media (prefers-reduced-motion: reduce) {
   .onboarding-interview__step { transition: none; }
 }
+
+.onboarding-interview__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.onboarding-interview__toolbar .desktop-onboarding__steps { margin-top: 19px; }
+
+.onboarding-interview__brief-dialog {
+  width: min(1040px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--onboarding-border, #dce3e6);
+  border-radius: 24px;
+  background: var(--onboarding-surface, #fff);
+  color: var(--onboarding-text, #34303e);
+  box-shadow: 0 24px 70px rgba(44, 29, 70, .22);
+}
+.onboarding-interview__brief-dialog::backdrop { background: rgba(28, 22, 43, .35); }
+.onboarding-interview__brief-dialog .desktop-onboarding__header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.onboarding-interview__brief-dialog h2 { margin: 0; font-size: 20px; }
+.onboarding-interview__brief { padding: 0 30px 30px; }
+.onboarding-interview__brief > h2 { display: none; }
+.onboarding-interview__brief h3 { margin: 20px 0 8px; font-size: 14px; }
+.onboarding-interview__brief-scroll { overflow: auto; max-width: 100%; }
+.onboarding-interview__brief table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.onboarding-interview__brief th,
+.onboarding-interview__brief td { border: 1px solid var(--onboarding-border, #dce3e6); padding: 8px; text-align: left; vertical-align: top; }
+.onboarding-interview__brief-scroll:focus-visible { outline: 2px solid var(--onboarding-purple, #8561d8); outline-offset: -2px; }
+.onboarding-interview__input-wrap .agent-cli-select { grid-column: 1; grid-row: 2; justify-self: start; max-width: 160px; }
+ .onboarding-interview__actions { top: 100%; left: 0; opacity: 0; pointer-events: none; }
+.onboarding-interview__node:hover .onboarding-interview__actions,
+.onboarding-interview__node:focus-within .onboarding-interview__actions { opacity: 1; pointer-events: auto; }
+.onboarding-interview__node.is-tutorial { outline: 3px solid var(--onboarding-purple); outline-offset: 6px; animation: onboarding-node-hint 1.6s ease-in-out infinite; }
+@keyframes onboarding-node-hint { 50% { outline-color: transparent; outline-offset: 12px; } }
+.onboarding-interview__node:focus-visible { outline: 2px solid var(--onboarding-purple); outline-offset: 5px; }
+.onboarding-interview__node-form { display: grid; gap: 16px; padding: 0 30px 30px; }
+.onboarding-interview__node-form input,
+.onboarding-interview__node-form textarea,
+.onboarding-interview__node-form select { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--onboarding-border, #dce3e6); border-radius: 10px; background: var(--onboarding-surface, #fff); color: var(--onboarding-text); font: inherit; }
+.onboarding-interview__node-form textarea { resize: vertical; }
+@media (hover: none) { .onboarding-interview__node .onboarding-interview__add { opacity: 1; pointer-events: auto; } }
+@media (prefers-reduced-motion: reduce) { .onboarding-interview__node.is-tutorial { animation: none; } }
+
+.onboarding-interview__tabs { flex: 0 0 auto; align-self: flex-start; margin: 14px 24px 0; }
+.onboarding-interview__brief-panel { flex: 1; min-height: 0; overflow: auto; padding: 8px 24px 24px; }
+.onboarding-interview__brief-panel .onboarding-interview__brief { padding: 0; }
+.onboarding-interview [hidden] { display: none !important; }

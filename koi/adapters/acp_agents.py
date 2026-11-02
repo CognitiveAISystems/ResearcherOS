@@ -8,7 +8,8 @@ from koi.adapters.workspace import get_workspace
 
 def agents():
     # Local executable discovery never downloads code or silently changes transport.
-    defaults = {"codex-acp": ["codex-acp"], "claude-acp": ["claude-agent-acp"]}
+    defaults = {"codex-acp": ["codex-acp"], "claude-acp": ["claude-agent-acp"],
+                "opencode": ["opencode", "acp"]}
     try:
         configured = json.loads(os.environ.get("KOI_ACP_AGENTS", "{}"))
     except ValueError:

@@ -134,8 +134,9 @@ def test_cli_agents_report_only_installed_bins(monkeypatch) -> None:
     monkeypatch.setattr(agent_backends, "_claude_bin", lambda: None)
     from koi.adapters import acp_agents
     monkeypatch.setattr(acp_agents, "agents", lambda: [])
+    monkeypatch.setattr(agent_backends.shutil, "which", lambda _: None)
     listed = {row["id"]: row["available"] for row in agent_backends.cli_agents()}
-    assert listed == {"cursor": True, "codex": False, "claude": False}
+    assert listed == {"cursor": True, "codex": False, "claude": False, "opencode": False}
 
 
 def test_chosen_cli_does_not_fall_back(monkeypatch, tmp_path: Path) -> None:
@@ -210,3 +211,26 @@ def test_local_write_permissions_reach_selected_backend(monkeypatch, tmp_path, b
     assert runner._run_local_agent('Исправь дерево', 'test-edit', mode=None, force=True,
                                    cwd=tmp_path, cli_agent=backend) == ('Готово', backend)
     assert calls == [{'cwd': tmp_path, 'backend': backend, 'timeout': 1800, 'allow_edits': True}]
+
+
+
+def test_arbor_without_project_routes_before_creating_coordinator(monkeypatch):
+    context = {'project_id': None, 'purpose': 'agent',
+               'user_question': '/koi-arbor-autoresearch обучи модель',
+               'context_catalog': [{'project_id': 'demo', 'tree_title': 'Dataset research'}]}
+    monkeypatch.setattr(runner, 'build_context', lambda _: context)
+    from koi.agent_chat import research
+    monkeypatch.setattr(research, 'coordinator_prompt', lambda *a: pytest.fail('Select context first'))
+    prompt = runner._sdk_prompt('aq-routing')
+    assert 'Dataset research' in prompt
+    assert 'awaiting_selection=true' in prompt
+    assert '/koi-arbor-autoresearch' in prompt
+
+
+def test_arbor_selected_project_enters_coordinator(monkeypatch):
+    context = {'project_id': 'demo', 'user_question': '/koi-arbor-autoresearch обучи модель'}
+    monkeypatch.setattr(runner, 'build_context', lambda _: context)
+    monkeypatch.setattr(runner, 'find_item', lambda _: {'id': 'aq-routing'})
+    from koi.agent_chat import research
+    monkeypatch.setattr(research, 'coordinator_prompt', lambda item, ctx: 'research coordinator')
+    assert runner._sdk_prompt('aq-routing') == 'research coordinator'

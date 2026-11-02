@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261008f" />
+  <link rel="stylesheet" href="styles.css?v=20261101-report-answer1" />
   <script>
     (function () {
       var t = localStorage.getItem("koi-literature-theme");
@@ -16,27 +16,27 @@
   </script>
 </head>
 <body class="rw-body">
-  <header class="topbar">
-    <div class="topbar-row">
-      <div class="brand">
-        <span class="logo">ResearcherOS</span>
-        <span class="tagline" id="brand-tagline" aria-live="polite"></span>
-      </div>
-      <div class="toolbar">
-        <a href="index.html" class="btn">Main Workspace</a>
-        <button type="button" id="btn-rw-settings" class="btn btn-settings" title="Настройки" aria-label="Настройки">
-          <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.63.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.04.71 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6z"/></svg>
-        </button>
-        <button type="button" id="btn-theme" class="btn btn-theme" title="Светлая тема" aria-label="Переключить тему">
-          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="currentColor" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-        </button>
-      </div>
-    </div>
-  </header>
+
 
   <main class="rw-page" id="rw-page">
     <div class="rw-workspace" id="rw-workspace">
+      <aside class="rw-project-column" id="rw-project-column" aria-label="Проекты">
+        <header class="rw-project-column-header">
+          <button type="button" id="rw-report-back" class="btn rw-home hidden" aria-label="Назад к коллекции" title="Назад к коллекции"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></button>
+          <a href="index.html" class="btn rw-home" aria-label="На главный экран" title="На главный экран"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></a>
+          <h2 class="sr-only">Проекты <span id="rw-project-count" class="rw-project-count"></span></h2>
+        </header>
+        <div class="rw-project-tools">        <button type="button" id="btn-rw-settings" class="btn btn-settings" title="Настройки" aria-label="Настройки">
+          <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.63.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.49.49 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.04.71 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6z"/></svg>
+        </button>
+        <button type="button" id="btn-theme" class="btn btn-theme" title="Светлая тема" aria-label="Переключить тему">
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
+        </button>
+</div>
+        <nav id="rw-project-rail" class="rw-project-rail" aria-label="Проекты"></nav>
+      </aside>
+
       <aside class="rw-library-column" id="rw-library-column" aria-label="Моя литература">
         <header class="rw-library-header">
           <button type="button" id="rw-back-to-collection" class="rw-back-to-collection rw-library-back hidden">← К списку</button>
@@ -46,8 +46,8 @@
             <div class="rw-library-header-tools">
               <div id="rw-library-toolbar" class="rw-library-toolbar hidden">
                 <div class="literature-selection-actions">
-                  <button type="button" id="literature-select-all" class="btn btn-small">Все</button>
-                  <button type="button" id="literature-clear-selection" class="btn btn-small">Сброс</button>
+                  <button type="button" id="literature-select-all" class="btn btn-small">Выбрать все</button>
+                  <button type="button" id="literature-clear-selection" class="btn btn-small hidden" hidden>Сброс</button>
                   <button type="button" id="rw-library-add" class="btn btn-small rw-library-add-btn" title="Добавить статьи" aria-label="Добавить статьи" aria-expanded="false" aria-controls="rw-library-add-menu">
                     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                   </button>
@@ -61,13 +61,16 @@
           <button type="button" id="rw-library-switch-source" class="rw-library-switch-source hidden">
             Сменить папку
           </button>
+          <div id="rw-zotero-folders" class="rw-folder-picker hidden"></div>
         </header>
 
         <div class="rw-library-body" id="rw-library-body">
-          <nav id="rw-zotero-folders" class="rw-zotero-folders hidden" aria-label="Папки Zotero"></nav>
           <div class="rw-library-papers">
+            <div class="rw-zotero-loading" role="status">
+              <span class="rw-zotero-loading-animation" aria-hidden="true"></span>
+              <span>Загружаем статьи из Zotero…</span>
+            </div>
         <div id="rw-library-empty" class="rw-library-empty">
-          <p class="rw-library-empty-lead">Подключите Zotero, чтобы собрать статьи для вопроса.</p>
           <div class="rw-library-sources" role="group" aria-label="Источник литературы">
             <button type="button" id="rw-library-zotero" class="rw-library-source-btn">
               <span class="rw-library-source-icon" aria-hidden="true">
@@ -82,7 +85,6 @@
         </div>
 
         <div id="literature-results" class="rw-library-list" aria-live="polite"></div>
-        <nav class="rw-cluster-nav hidden" id="rw-cluster-nav" aria-label="Список кластеров"></nav>
         <p id="literature-search-status" class="rw-library-status" role="status" aria-live="polite"></p>
           </div>
         </div>
@@ -92,8 +94,6 @@
         <div class="rw-browser" id="rw-browser">
           <div class="rw-search-stage" id="rw-search-stage">
             <div class="rw-search-context">
-              <a href="index.html" id="rw-project-back" class="rw-project-back" title="К проекту" aria-label="К проекту">←</a>
-              <span class="rw-search-context-label">Обзор литературы</span>
               <label class="rw-project-picker" for="literature-project-select">
                 <span class="sr-only">Проект для Related Work</span>
                 <select id="literature-project-select" class="sr-only" aria-label="Проект для Related Work"></select>
@@ -102,7 +102,7 @@
             <h1 class="rw-search-stage-title" id="rw-project-title">Обзор литературы</h1>
           </div>
           <form id="literature-search-form" class="rw-search-form">
-            <label class="rw-search-form-label" for="literature-query">Исследовательский вопрос</label>
+            <label class="sr-only" for="literature-query">Исследовательский вопрос</label>
             <div class="rw-search-bar">
               <input
                 id="literature-query"
@@ -111,16 +111,16 @@
                 autocomplete="off"
                 placeholder="Какие модели CTR используют в поисковой рекламе?"
               />
-              <button type="submit" id="literature-search-button" class="rw-search-submit btn btn-primary" aria-label="Скопировать промпт для агента">
-                <svg class="rw-search-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7.5 2.5a1 1 0 0 1 1.9 0l.4 1.2a1 1 0 0 0 .63.63l1.2.4a1 1 0 0 1 0 1.9l-1.2.4a1 1 0 0 0-.63.63l-.4 1.2a1 1 0 0 1-1.9 0l-.4-1.2a1 1 0 0 0-.63-.63l-1.2-.4a1 1 0 0 1 0-1.9l1.2-.4a1 1 0 0 0 .63-.63l.4-1.2zm8.2 4.2a1 1 0 0 1 1.72 0l.55 1.1a1 1 0 0 0 .52.52l1.1.55a1 1 0 0 1 0 1.72l-1.1.55a1 1 0 0 0-.52.52l-.55 1.1a1 1 0 0 1-1.72 0l-.55-1.1a1 1 0 0 0-.52-.52l-1.1-.55a1 1 0 0 1 0-1.72l1.1-.55a1 1 0 0 0 .52-.52l.55-1.1zM5.8 12.2a1.1 1.1 0 0 1 2.05 0l.7 1.75c.1.26.3.46.56.56L11 15.2a1.1 1.1 0 0 1 0 2.05l-1.89.7a.9.9 0 0 0-.56.56L7.85 20.4a1.1 1.1 0 0 1-2.05 0l-.7-1.89a.9.9 0 0 0-.56-.56L2.65 17.25a1.1 1.1 0 0 1 0-2.05l1.89-.7c.26-.1.46-.3.56-.56l.7-1.74z"/></svg>
-                <span class="rw-search-submit-label">Промпт</span>
+              <label class="sr-only" for="literature-cli-agent">Агент для обзора литературы</label>
+              <select class="agent-cli-select" id="literature-cli-agent" title="Выбрать агента"><option value="">Автоматически</option></select>
+              <button type="submit" id="literature-search-button" class="rw-search-submit btn btn-primary" aria-label="Начать исследование" title="Отправить запрос">
+                <svg class="rw-search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
             </div>
           </form>
           <section class="rw-history-inline" aria-label="Прошлые вопросы">
-            <h2 class="rw-history-inline-title">Прошлые вопросы</h2>
             <div id="rw-history-list" class="rw-history-list" aria-live="polite">
-              <p class="literature-empty">Пока нет сохранённых вопросов.</p>
+
             </div>
           </section>
           <div id="rw-search-loader" class="koi-loader rw-loader rw-loader--compact hidden" aria-live="polite" aria-busy="false">
@@ -142,12 +142,7 @@
         </div>
       </section>
 
-      <aside class="rw-project-column" id="rw-project-column" aria-label="Проекты">
-        <header class="rw-project-column-header">
-          <h2>Проекты <span id="rw-project-count" class="rw-project-count"></span></h2>
-        </header>
-        <nav id="rw-project-rail" class="rw-project-rail" aria-label="Проекты"></nav>
-      </aside>
+
 
       <aside class="rw-insights-column hidden" id="rw-insights-column" aria-label="Отчёт">
         <div class="rw-clusters-block hidden" id="rw-clusters-block">
@@ -168,18 +163,13 @@
             <p id="rw-loader-step" class="koi-loader__step">Исследуем литературу…</p>
             <p class="koi-loader__hint" aria-hidden="true"></p>
           </div>
-          <div id="rw-prompt-dock" class="rw-prompt-dock hidden">
-            <div class="rw-prompt-dock-head">
-              <p class="rw-prompt-dock-label">Промпт для агента</p>
-              <div class="rw-prompt-dock-actions">
-                <button type="button" id="rw-prompt-dock-cancel" class="btn btn-small btn-danger">Отменить</button>
-                <button type="button" id="rw-prompt-dock-copy" class="btn btn-small btn-primary">Скопировать</button>
-              </div>
-            </div>
-            <pre id="rw-prompt-dock-text" class="rw-prompt-dock-text" tabindex="0"></pre>
-            <p id="rw-prompt-dock-status" class="agent-chat-inbox-copy-status"></p>
-          </div>
         </div>
+
+        <section id="literature-agent-status" class="hidden" aria-label="Состояние анализа">
+          <p id="literature-agent-message" role="status"></p>
+          <div id="literature-agent-permission"></div>
+          <button id="literature-agent-stop" type="button" class="btn hidden">Остановить</button>
+        </section>
 
         <div class="rw-reading-page" id="rw-reading-page">
           <header class="rw-clusters-top" id="rw-clusters-top">
@@ -200,6 +190,7 @@
 
           <div class="rw-resume-cards" id="rw-resume-cards">
             <div id="rw-cluster-venn-slot" class="rw-cluster-venn-slot hidden" aria-live="polite"></div>
+
 
             <section class="rw-related-pane rw-resume-card hidden is-collapsed" id="rw-related-pane" aria-labelledby="rw-related-toggle-label">
               <button type="button" class="rw-related-toggle" id="rw-related-toggle" aria-expanded="false" aria-controls="rw-related-body">
@@ -290,11 +281,17 @@
             </section>
           </div>
 
+
+
+          <h2 class="rw-report-scope-title">Related Work</h2>
+        <nav class="rw-cluster-nav hidden" id="rw-cluster-nav" aria-label="Список кластеров"></nav>
+
           <div id="rw-report-markdown" class="rw-report-markdown hidden" aria-live="polite"></div>
 
           <article class="rw-cluster-detail" id="rw-cluster-detail" aria-live="polite">
-            <p class="literature-empty">Выберите кластер слева.</p>
+            <p class="literature-empty">Выберите тег кластера.</p>
           </article>
+
         </div>
         <div id="literature-agent-results" class="sr-only" aria-hidden="true"></div>
         </div>
@@ -381,31 +378,9 @@
     </section>
   </div>
 
-  <div id="literature-cluster-prompt-modal" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close="literature-cluster-prompt-modal"></div>
-    <section class="modal-panel modal-panel--settings" role="dialog" aria-modal="true" aria-labelledby="literature-cluster-prompt-title">
-      <button type="button" class="modal-close" data-close="literature-cluster-prompt-modal" aria-label="Закрыть">✕</button>
-      <p class="modal-type">Literature cluster → Cursor</p>
-      <h2 id="literature-cluster-prompt-title">Промпт для агента</h2>
-      <p class="rw-settings-hint">Без API-ключей: вставьте промпт в чат Cursor. Агент вызовет скилл <code>literature-cluster-orchestrator</code> и возьмёт уже выбранные статьи из <code>input.json</code>.</p>
-      <ol class="agent-chat-inbox-steps">
-        <li>Скопируйте промпт кнопкой ниже.</li>
-        <li>Вставьте в любой агент-чат Cursor (в этом репозитории).</li>
-        <li>Агент пишет <code>report.md</code> — страница подхватит результат автоматически.</li>
-      </ol>
-      <pre id="literature-cluster-prompt-text" class="agent-chat-inbox-prompt" tabindex="0"></pre>
-      <div class="agent-chat-inbox-actions">
-        <button type="button" id="literature-cluster-prompt-copy" class="btn btn-primary">Скопировать промпт</button>
-        <button type="button" id="literature-cluster-prompt-cancel" class="btn btn-danger">Отменить</button>
-        <button type="button" class="btn" data-close="literature-cluster-prompt-modal">Закрыть</button>
-      </div>
-      <p id="literature-cluster-prompt-copy-status" class="agent-chat-inbox-copy-status"></p>
-    </section>
-  </div>
-
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@upsetjs/venn.js@2.0.0/build/venn.min.js"></script>
-  <script type="module" src="literature.js?v=20261008f"></script>
+  <script type="module" src="literature.js?v=20261101-report-answer1"></script>
   <script type="module" src="tooltips.js"></script>
 </body>
 </html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Agent Orchestrator"
+  short_description: "Controls Arbor multi-skill research runs"
+  default_prompt: "Use $arbor-agent-orchestrator to run an Arbor-style research cycle with phase skills."

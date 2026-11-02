@@ -136,6 +136,7 @@ def test_create_project_resolves_program_title_and_delegates_to_repository(
                 "project_id": "demo",
                 "description": "  Description  ",
                 "programs": ["embodied-ai"],
+                "root_type": NodeType.PROBLEM,
             },
         )
     ]

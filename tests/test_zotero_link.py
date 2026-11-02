@@ -71,6 +71,23 @@ class ZoteroLinkTests(unittest.TestCase):
                 self.assertFalse(account.exists())
                 self.assertFalse((koi / "zotero.local.json").exists())
 
+    def test_folder_is_restored_per_tree_with_a_shared_account(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with (
+                patch("koi.literature.zotero_link.koi_root", return_value=root),
+                patch("koi.literature.zotero_link.account_path", return_value=root / "account.json"),
+            ):
+                write_zotero_link("first", api_key="test", collection_key="A", collection_name="Agents")
+                write_zotero_link("second", api_key="test", collection_key="B", collection_name="Models")
+                self.assertEqual(read_zotero_link("first")["collection_key"], "A")
+                self.assertEqual(read_zotero_link("second")["collection_key"], "B")
+                self.assertEqual(read_zotero_link("new")["collection_key"], "")
+                self.assertEqual(read_zotero_link("new")["api_key"], "test")
+                write_zotero_link("first", api_key="test", collection_key="")
+                self.assertEqual(read_zotero_link("first")["collection_key"], "")
+                self.assertEqual(read_zotero_link("second")["collection_key"], "B")
+
     def test_blank_key_is_not_a_link(self) -> None:
         with TemporaryDirectory() as tmp:
             koi = Path(tmp)

@@ -1,4 +1,5 @@
-import { KoiApi } from "./api.js?v=20260811a";
+import { activitySvg } from "./onboarding-interview.js";
+import { KoiApi } from "./api.js?v=20261101-background4";
 import {
   showKoiLoader,
   hideKoiLoader,
@@ -26,6 +27,9 @@ const MORPH_ICON_SVG =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a2.5 2.5 0 0 1 1 4.79V9h4a3 3 0 0 1 3 3v1.21a2.5 2.5 0 1 1-2 0V12a1 1 0 0 0-1-1h-4v2.21a2.5 2.5 0 1 1-2 0V11H7a1 1 0 0 0-1 1v1.21a2.5 2.5 0 1 1-2 0V12a3 3 0 0 1 3-3h4V6.79A2.5 2.5 0 0 1 12 2z"/></svg>';
 
 let literatureResults = [];
+let paperMorphologyRuns = [];
+let morphologyStatusProject = "";
+let morphologyStatusRequest = 0;
 let selectedPaperUrls = new Set();
 let latestPaperAnswerRun = null;
 let selectedClusterKeys = new Set();
@@ -49,16 +53,89 @@ let appSettings = {
 };
 let literatureInboxStatusPollTimer = null;
 let literatureInboxBootstrapCopied = false;
-let literatureClusterPrompt = "";
 let literatureClusterPendingHash = "";
 let literatureClusterPollTimer = null;
-let activeClusterPromptModal = null;
 let collectionPapersCache = null;
 let collectionSelectionCache = null;
 let workspaceGenerating = false;
 
 const LITERATURE_INBOX_CONFIGURED_KEY = "koi_literature_inbox_configured";
 const LITERATURE_CLUSTER_POLL_MS = 4000;
+let literatureConversationId = null;
+let literatureAgentTimer = null;
+let literatureAgentBusy = false;
+
+async function loadLiteratureAgents() {
+  const select = document.getElementById("literature-cli-agent");
+  if (!select) return;
+  try {
+    const data = await KoiApi.getAgentBackends();
+    const available = (data.cli || []).filter(a => a.available);
+    select.innerHTML = available.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.label)}</option>`).join("");
+    let saved = "";
+    try { saved = localStorage.getItem("koi-chat-cli-agent") || ""; } catch { /* private mode */ }
+    if (available.some(a => a.id === saved)) select.value = saved;
+    select.disabled = !available.length;
+  } catch { select.disabled = true; }
+}
+
+async function refreshLiteratureAgent() {
+  const cid = literatureConversationId;
+  if (!cid) return;
+  const data = await KoiApi.getConversation(cid);
+  if (cid !== literatureConversationId) return;
+  const items = data.items || [];
+  const active = items.find(i => i.status !== "answered");
+  literatureAgentBusy = Boolean(active);
+  document.getElementById("literature-agent-status")?.classList.remove("hidden");
+  document.getElementById("literature-agent-stop")?.classList.toggle("hidden", !active);
+  const message = document.getElementById("literature-agent-message");
+  const permissionRoot = document.getElementById("literature-agent-permission");
+  if (permissionRoot) permissionRoot.replaceChildren();
+  const permission = data.live?.permission;
+  if (active && message) message.textContent = permission ? permission.title : "Готовим обзор литературы…";
+  if (permission && permissionRoot) {
+    for (const option of permission.options || []) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-small";
+      button.textContent = option.name;
+      button.addEventListener("click", async () => {
+        try {
+          await KoiApi.decideConversationPermission(cid, permission.id, option.optionId);
+          await refreshLiteratureAgent();
+        } catch (err) { setLiteratureStatus(err.message, true); }
+      });
+      permissionRoot.append(button);
+    }
+  }
+  if (!active) {
+    const last = items.at(-1);
+    if (last) {
+      const warning = last.answer_kind === "warning";
+      const text = warning ? last.answer : "Анализ завершён.";
+      if (message) message.textContent = text;
+      if (warning) {
+        stopLiteratureClusterPoll();
+        setGeneratingMode(false);
+        setLiteratureStatus(text, true);
+      }
+      if (literatureAgentTimer) clearInterval(literatureAgentTimer);
+    }
+  }
+}
+
+function watchLiteratureAgent(cid) {
+  if (literatureAgentTimer) clearInterval(literatureAgentTimer);
+  literatureConversationId = cid || null;
+  document.getElementById("literature-agent-status")?.classList.toggle("hidden", !cid);
+  if (!cid) return;
+  void refreshLiteratureAgent().catch(err => setLiteratureStatus(err.message, true));
+  literatureAgentTimer = setInterval(() => {
+    void refreshLiteratureAgent().catch(err => setLiteratureStatus(err.message, true));
+  }, LITERATURE_CLUSTER_POLL_MS);
+}
+
 
 function isLiteratureInboxConfigured() {
   return Boolean(appSettings.literature_inbox_configured);
@@ -490,34 +567,10 @@ function setGeneratingMode(enabled, step = "Исследуем литерату�
   if (workspaceGenerating) {
     stage?.classList.remove("hidden");
     showKoiLoader("rw-loader", { step, pool: "literature" });
-    syncPromptDock();
   } else {
     hideKoiLoader("rw-loader");
     stage?.classList.add("hidden");
-    hidePromptDock();
   }
-}
-
-function syncPromptDock() {
-  const dock = document.getElementById("rw-prompt-dock");
-  const textEl = document.getElementById("rw-prompt-dock-text");
-  const prompt = String(literatureClusterPrompt || "").trim();
-  if (!dock) return;
-  if (!prompt || !workspaceGenerating) {
-    dock.classList.add("hidden");
-    return;
-  }
-  if (textEl) textEl.textContent = prompt;
-  dock.classList.remove("hidden");
-}
-
-function showPromptDock(promptText = literatureClusterPrompt) {
-  literatureClusterPrompt = String(promptText || "").trim();
-  syncPromptDock();
-}
-
-function hidePromptDock() {
-  document.getElementById("rw-prompt-dock")?.classList.add("hidden");
 }
 
 function cacheCollectionSidebar() {
@@ -550,8 +603,16 @@ function updateLibrarySplitChrome(enabled) {
   const results = document.getElementById("literature-results");
   const nav = document.getElementById("rw-cluster-nav");
   const countEl = document.getElementById("rw-library-count");
-  backBtn?.classList.toggle("hidden", !enabled);
-  if (title) title.textContent = enabled ? "Кластеры" : "Коллекция";
+  backBtn?.classList.add("hidden");
+  if (title) title.textContent = enabled ? "Отчёты" : "Коллекция";
+  const history = document.querySelector(".rw-history-inline");
+  const historyHost = enabled ? document.querySelector(".rw-library-papers") : document.getElementById("rw-browser");
+  if (history && historyHost) {
+    if (enabled) historyHost.append(history);
+    else historyHost.insertBefore(history, document.getElementById("rw-search-loader"));
+  }
+  document.getElementById("rw-report-back")?.classList.toggle("hidden", !enabled);
+  document.querySelector(".rw-project-column-header a.rw-home")?.classList.toggle("hidden", enabled);
   if (enabled) {
     empty?.classList.add("hidden");
     toolbar?.classList.add("hidden");
@@ -561,12 +622,7 @@ function updateLibrarySplitChrome(enabled) {
     results?.classList.add("hidden");
     nav?.classList.remove("hidden");
     renderZoteroFolderTree();
-    const n = latestPaperAnswerRun?.clusters?.length || 0;
-    if (countEl) {
-      countEl.hidden = !n;
-      countEl.textContent = n ? String(n) : "";
-      countEl.title = n ? `${n} кластеров` : "";
-    }
+    if (countEl) countEl.hidden = true;
   } else {
     results?.classList.remove("hidden");
     nav?.classList.add("hidden");
@@ -576,7 +632,7 @@ function updateLibrarySplitChrome(enabled) {
 }
 
 function renderRunPapersSidebar(_papers = []) {
-  // Split mode uses the clusters nav in the left column; articles stay in cluster detail.
+  // Report history stays in the sidebar; papers belong to the selected scope.
   updateLibrarySplitChrome(true);
 }
 
@@ -600,9 +656,9 @@ function toggleRelatedPaneCollapsed() {
 
 function scrollReadingToContent() {
   const page = document.getElementById("rw-reading-page");
-  const anchor = document.getElementById("rw-clusters-top") || document.getElementById("rw-reading-content");
+  const anchor = document.getElementById(activeReadingView === READING_VIEW_RESUME ? "rw-clusters-top" : "rw-cluster-nav");
   if (!page || !anchor) return;
-  const top = Math.max(0, anchor.offsetTop - 8);
+  const top = Math.max(0, page.scrollTop + anchor.getBoundingClientRect().top - page.getBoundingClientRect().top - 8);
   page.scrollTo({ top, behavior: "smooth" });
 }
 
@@ -623,7 +679,7 @@ function showReadingView(view, { scrollPage = true, scrollNav = false } = {}) {
   const run = latestPaperAnswerRun;
   const reportEl = document.getElementById("rw-report-markdown");
   const detail = document.getElementById("rw-cluster-detail");
-  const hasReport = Boolean(String(run?.report_markdown || "").trim());
+  const hasReport = Boolean(String(run?.report_markdown || "").trim()) || Boolean(run?.clusters?.length);
   const clusters = run?.clusters || [];
 
   let next = view;
@@ -651,7 +707,7 @@ function showReadingView(view, { scrollPage = true, scrollNav = false } = {}) {
     if (cluster) {
       renderClusterDetail(cluster, papersForCluster(run, cluster), run);
     } else if (detail) {
-      detail.innerHTML = `<p class="literature-empty">Выберите раздел слева.</p>`;
+      detail.innerHTML = `<p class="literature-empty">Выберите тег отчёта.</p>`;
     }
   }
 
@@ -755,7 +811,9 @@ function formatAuthorsLine(authors, max = 72) {
 
 function paperMetaLine(paper) {
   const year = paper.year ? String(paper.year) : "—";
-  return `${year} · ${formatAuthorsLine(paper.authors)}`;
+  const authors = String(paper.authors || "").trim();
+  const firstAuthor = authors.split(/[,;]/)[0].trim();
+  return `${firstAuthor ? firstAuthor + (firstAuthor !== authors ? " и др." : "") : "авторы не указаны"} · ${year}`;
 }
 
 /** Hand the full paper record to the morphology page (URL alone loses the abstract). */
@@ -1013,6 +1071,12 @@ function getSelectedResults() {
 }
 
 function updateSelectionSummary() {
+  const selectedCount = getSelectedResults().length;
+  const total = literatureResults.length;
+  const countEl = document.getElementById("rw-library-count");
+  if (countEl && total) countEl.textContent = `${selectedCount} из ${total} выбрано`;
+  const toggle = document.getElementById("literature-select-all");
+  if (toggle) toggle.textContent = total && selectedCount === total ? "Снять выбор" : "Выбрать все";
   const el = document.getElementById("literature-selection-summary");
   if (!el) return;
   const count = getSelectedResults().length;
@@ -1029,7 +1093,7 @@ function updateActionButtons() {
 
 function selectedClustersFromRun(run = latestPaperAnswerRun) {
   if (!run?.clusters?.length) return [];
-  return run.clusters.filter((cluster) => selectedClusterKeys.has(cluster.key));
+  return run.clusters;
 }
 
 function updateClusterStats(run = latestPaperAnswerRun) {
@@ -1206,6 +1270,7 @@ function updateProjectBanner(title, projectId = selectedProjectId()) {
 }
 
 let literatureProjects = [];
+let literatureProjectGroups = [];
 
 function renderProjectRail() {
   const nav = document.getElementById("rw-project-rail");
@@ -1213,13 +1278,17 @@ function renderProjectRail() {
   const count = document.getElementById("rw-project-count");
   if (count) count.textContent = literatureProjects.length;
   const active = selectedProjectId();
-  nav.innerHTML = literatureProjects
-    .map((project) => {
-      const on = project.id === active;
-      const label = String(project.title || project.id).trim();
-      return `<button type="button" class="rw-project-rail-item${on ? " is-active" : ""}" data-project-id="${escapeHtml(project.id)}" aria-current="${on ? "page" : "false"}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"><span class="rw-project-rail-label">${escapeHtml(label)}</span></button>`;
-    })
-    .join("");
+  const groups = literatureProjectGroups.length ? literatureProjectGroups : [{title: "Без программы", projects: literatureProjects}];
+  nav.innerHTML = groups.map((group) => {
+    const projects = group.projects.filter(project => literatureProjects.some(p => p.id === project.id));
+    if (!projects.length) return "";
+    return `<section class="research-quick-group" aria-label="${escapeHtml(group.title)}">
+      <h3>${escapeHtml(group.title)}</h3><div class="research-quick-tree-list">${projects.map(project => {
+        const on = project.id === active;
+        const label = String(project.title || project.id).trim();
+        return `<button type="button" class="research-quick-tree${on ? " is-active" : ""}" data-project-id="${escapeHtml(project.id)}" aria-pressed="${on}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"><span class="research-quick-dot" aria-hidden="true"></span></button>`;
+      }).join("")}</div></section>`;
+  }).join("");
   nav.querySelectorAll("[data-project-id]").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.getAttribute("data-project-id") || "";
@@ -1229,16 +1298,32 @@ function renderProjectRail() {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
   });
-  nav.querySelector(".rw-project-rail-item.is-active")?.scrollIntoView({ block: "nearest" });
+  nav.querySelector(".research-quick-tree.is-active")?.scrollIntoView({ block: "nearest" });
 }
 
 async function loadProjectOptions() {
   const select = document.getElementById("literature-project-select");
   if (!select) return;
   const requested = new URLSearchParams(window.location.search).get("project");
+  let archivedIds;
+  try {
+    archivedIds = (await KoiApi.getArchivedTrees()).ids;
+  } catch {
+    // Match the main window's fallback when archive settings are unavailable.
+  }
+  if (archivedIds == null) {
+    try {
+      archivedIds = JSON.parse(localStorage.getItem("koi-archived-trees") || "[]");
+    } catch {
+      archivedIds = [];
+    }
+  }
+  const archived = new Set(Array.isArray(archivedIds) ? archivedIds.map(String) : []);
   let list = [];
   try {
     const grouped = await KoiApi.listProjectsGrouped();
+    literatureProjectGroups = (grouped.groups || []).map(g => ({title: g.title || g.name || "Программа", projects: g.projects || []}));
+    if (grouped.ungrouped?.length) literatureProjectGroups.push({title: "Без программы", projects: grouped.ungrouped});
     for (const g of grouped.groups || []) {
       for (const p of g.projects || []) list.push(p);
     }
@@ -1251,7 +1336,7 @@ async function loadProjectOptions() {
   }
   const seen = new Set();
   list = list.filter((p) => {
-    if (!p?.id || seen.has(p.id)) return false;
+    if (!p?.id || seen.has(p.id) || archived.has(String(p.id))) return false;
     seen.add(p.id);
     return true;
   });
@@ -1264,7 +1349,7 @@ async function loadProjectOptions() {
     .join("");
   const preferred =
     (requested && list.find((p) => p.id === requested)?.id) || list[0]?.id || "";
-  if (preferred) select.value = preferred;
+  select.value = preferred;
   const active = list.find((p) => p.id === preferred);
   updateProjectBanner(active?.title, preferred);
 }
@@ -1984,8 +2069,7 @@ function hideRelatedInboxModal() {
   if (
     !activeClusterModal &&
     !activeSettingsModal &&
-    !activeContextModal &&
-    !activeClusterPromptModal
+    !activeContextModal
   ) {
     document.body.classList.remove("modal-open");
   }
@@ -2435,7 +2519,7 @@ function renderClusterDetail(cluster, members, run) {
   const detail = document.getElementById("rw-cluster-detail");
   if (!detail) return;
   if (!cluster) {
-    detail.innerHTML = `<p class="literature-empty">Выберите кластер слева.</p>`;
+    detail.innerHTML = `<p class="literature-empty">Выберите тег кластера.</p>`;
     return;
   }
 
@@ -2450,11 +2534,11 @@ function renderClusterDetail(cluster, members, run) {
       <p class="rw-cluster-detail-kicker">${members.length} ${members.length === 1 ? "статья" : "статей"}</p>
       <h2 class="rw-cluster-detail-title">${escapeHtml(cluster.label || "Кластер")}</h2>
     </header>
-    <section class="rw-cluster-section">
-      <h3>Описание кластера</h3>
+    <section class="rw-cluster-section rw-cluster-answer" aria-label="Ответ на исследовательский вопрос">
+      <h3>Ответ на исследовательский вопрос</h3>
       <p>${escapeHtml(description || "—")}</p>
     </section>
-    ${together ? `<section class="rw-cluster-section"><h3>Почему вместе</h3><p>${escapeHtml(together)}</p></section>` : ""}
+    <section class="rw-cluster-section"><h3>Основание группировки</h3><p>${escapeHtml(together || "Основание группировки не указано в отчёте.")}</p></section>
     <section class="rw-cluster-section">
       <h3>Статьи</h3>
       <div class="rw-cluster-papers">${papersHtml}</div>
@@ -2470,7 +2554,7 @@ function renderClusterResults(run) {
   updateLibrarySplitChrome(isWorkspaceSplit());
 
   const clusters = run?.clusters || [];
-  const hasReport = Boolean(String(run?.report_markdown || "").trim());
+  const hasReport = Boolean(String(run?.report_markdown || "").trim()) || Boolean(run?.clusters?.length);
 
   if (!clusters.length && !hasReport) {
     selectedClusterKeys = new Set();
@@ -2508,38 +2592,12 @@ function renderClusterResults(run) {
   if (nav) {
     nav.classList.remove("hidden");
     const resumeActive = activeReadingView === READING_VIEW_RESUME ? " is-active" : "";
-    const resumeRow = hasReport
-      ? `
-        <div class="rw-cluster-nav-row rw-cluster-nav-row--resume${resumeActive}">
-          <button type="button" class="rw-cluster-nav-item rw-cluster-nav-item--resume${resumeActive}" data-reading-view="${READING_VIEW_RESUME}" aria-current="${activeReadingView === READING_VIEW_RESUME ? "true" : "false"}">
-            <span class="rw-cluster-nav-copy">
-              <span class="rw-cluster-nav-kicker">Общий отчёт</span>
-              <span class="rw-cluster-nav-label">Total Resume</span>
-            </span>
-          </button>
-        </div>`
-      : "";
-
-    const clusterRows = clusters
-      .map((cluster, index) => {
-        const members = papersForCluster(run, cluster);
-        const checked = selectedClusterKeys.has(cluster.key) ? "checked" : "";
-        const active = cluster.key === activeReadingView ? " is-active" : "";
-        return `
-          <div class="rw-cluster-nav-row${active}">
-            <label class="rw-cluster-nav-check" title="Выбрать для Related Work">
-              <input type="checkbox" class="cluster-select-checkbox" data-cluster-key="${escapeHtml(cluster.key)}" ${checked} />
-            </label>
-            <button type="button" class="rw-cluster-nav-item${active}" data-reading-view="${escapeHtml(cluster.key)}" data-cluster-key="${escapeHtml(cluster.key)}" aria-current="${cluster.key === activeReadingView ? "true" : "false"}">
-              <span class="rw-cluster-nav-copy">
-                <span class="rw-cluster-nav-kicker">Cluster ${index + 1}</span>
-                <span class="rw-cluster-nav-label">${escapeHtml(cluster.label || "Кластер")}</span>
-              </span>
-              <span class="rw-cluster-nav-count">${members.length}</span>
-            </button>
-          </div>`;
-      })
-      .join("");
+    const resumeRow = `<div class="rw-cluster-nav-row${resumeActive}">
+      <button type="button" class="btn rw-cluster-nav-item${resumeActive}" data-reading-view="${READING_VIEW_RESUME}" aria-current="${activeReadingView === READING_VIEW_RESUME ? "true" : "false"}">#General</button></div>`;
+    const clusterRows = clusters.map((cluster, index) => {
+      const active = cluster.key === activeReadingView ? " is-active" : "";
+      return `<div class="rw-cluster-nav-row${active}"><button type="button" class="btn rw-cluster-nav-item${active}" data-reading-view="${escapeHtml(cluster.key)}" title="${escapeHtml(cluster.label || `Cluster ${index + 1}`)}" aria-current="${cluster.key === activeReadingView ? "true" : "false"}">#Cluster-${index + 1}</button></div>`;
+    }).join("");
 
     nav.innerHTML = resumeRow + clusterRows;
 
@@ -2548,17 +2606,54 @@ function renderClusterResults(run) {
         showReadingView(button.getAttribute("data-reading-view") || READING_VIEW_RESUME);
       });
     });
-    nav.querySelectorAll(".cluster-select-checkbox").forEach((input) => {
-      input.addEventListener("change", () => {
-        toggleClusterSelection(input.getAttribute("data-cluster-key"));
-      });
-    });
+
   }
 
   showReadingView(activeReadingView, { scrollPage: false });
   // Total Resume mounts the map via renderReportMarkdown; cluster-only views still need the card.
   if (activeReadingView !== READING_VIEW_RESUME) syncResumeClusterVenn(run);
   updateRelatedWorksSummary();
+}
+
+function paperMorphologyStatus(paper) {
+  if (morphologyStatusProject !== selectedProjectId()) return "";
+  const urlKey = value => String(value || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+  const titleKey = value => String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  const url = urlKey(paper.arxiv_url);
+  const title = titleKey(paper.title);
+  const runs = paperMorphologyRuns.filter(run =>
+    (url && url === urlKey(run.paper_url)) || (title && title === titleKey(run.paper_title)));
+  if (runs.some(run => run.status === "ready")) return "ready";
+  return runs.some(run => ["staged", "pending", "processing"].includes(run.status)) ? "pending" : "";
+}
+
+function updatePaperMorphologyBadges() {
+  document.querySelectorAll("#literature-results .rw-library-item-morph").forEach(button => {
+    const paper = literatureResults.find(item => item.arxiv_url === button.dataset.paperUrl);
+    const status = paper ? paperMorphologyStatus(paper) : "";
+    button.classList.toggle("is-ready", status === "ready");
+    button.classList.toggle("is-pending", status === "pending");
+    const label = status === "ready" ? "Открыть готовый разбор статьи" : status === "pending" ? "Разбор запущен, ещё не готов" : "Морфология — разобрать логику статьи";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  });
+}
+
+async function refreshPaperMorphologyStatuses() {
+  const projectId = selectedProjectId();
+  const request = ++morphologyStatusRequest;
+  if (morphologyStatusProject !== projectId) {
+    paperMorphologyRuns = [];
+    morphologyStatusProject = projectId;
+    updatePaperMorphologyBadges();
+  }
+  if (!projectId) return;
+  try {
+    const data = await KoiApi.listMorphologyRuns(projectId);
+    if (request !== morphologyStatusRequest || projectId !== selectedProjectId()) return;
+    paperMorphologyRuns = data.runs || [];
+    updatePaperMorphologyBadges();
+  } catch { /* Keep the last known status until the next refresh. */ }
 }
 
 function renderLiteratureResults(results = [], _query = "") {
@@ -2583,11 +2678,11 @@ function renderLiteratureResults(results = [], _query = "") {
       return `
         <article class="rw-library-item${selectedClass}">
           <label class="rw-library-item-check" title="Выбрать">
-            <input type="checkbox" class="literature-result-checkbox" data-paper-url="${escapeHtml(paper.arxiv_url)}" ${checkedAttr} />
+            <input type="checkbox" class="literature-result-checkbox" aria-label="Выбрать статью: ${escapeHtml(paper.title)}" data-paper-url="${escapeHtml(paper.arxiv_url)}" ${checkedAttr} />
           </label>
           <div class="rw-library-item-body">
-            <p class="rw-library-item-meta">${escapeHtml(paperMetaLine(paper))}</p>
             <a class="rw-library-item-title" href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(paper.title)}</a>
+            <p class="rw-library-item-meta" title="${escapeHtml(paper.authors || "")}">${escapeHtml(paperMetaLine(paper))}</p>
           </div>
           <button type="button" class="rw-library-item-morph" data-paper-url="${escapeHtml(paper.arxiv_url)}" title="Морфология — разобрать логику статьи" aria-label="Морфология статьи">
             ${MORPH_ICON_SVG}
@@ -2595,6 +2690,8 @@ function renderLiteratureResults(results = [], _query = "") {
         </article>`;
     })
     .join("");
+
+  updatePaperMorphologyBadges();
 
   root.querySelectorAll(".rw-library-item-morph").forEach((btn) => {
     btn.addEventListener("click", (event) => {
@@ -2796,7 +2893,7 @@ function persistZoteroCollectionKey() {
 }
 
 let zoteroLoadToken = 0;
-let zoteroAccountLoaded = false;
+let zoteroImportToken = 0;
 let projectPaperRecords = new Map();
 let selectionSaveTimer = 0;
 let pendingSelection = null;
@@ -2930,45 +3027,61 @@ async function saveProjectZoteroLink(projectId = selectedProjectId()) {
   }
 }
 
+let zoteroLoadingCount = 0;
+
+function startZoteroLibraryLoading() {
+  const animation = document.querySelector(".rw-zotero-loading-animation");
+  if (animation && !animation.firstElementChild) animation.innerHTML = activitySvg();
+  zoteroLoadingCount += 1;
+  const column = document.getElementById("rw-library-column");
+  column?.classList.add("is-zotero-loading");
+  document.getElementById("rw-library-body")?.setAttribute("aria-busy", "true");
+  return () => {
+    zoteroLoadingCount -= 1;
+    if (zoteroLoadingCount) return;
+    column?.classList.remove("is-zotero-loading");
+    document.getElementById("rw-library-body")?.setAttribute("aria-busy", "false");
+  };
+}
+
 async function loadProjectZotero(projectId = selectedProjectId()) {
-  await flushSelection();
-  if (selectedProjectId() !== projectId) return;
-  await loadProjectSelection(projectId);
-  if (selectedProjectId() !== projectId) return;
-  if (zoteroAccountLoaded && loadSettings().zoteroApiKey?.trim()) {
-    renderLiteratureResults(literatureResults);
-    renderZoteroFolderTree();
-    return;
-  }
   const token = ++zoteroLoadToken;
-  if (!projectId) return;
-  let link;
+  const stopLoading = startZoteroLibraryLoading();
   try {
-    link = await KoiApi.getProjectZotero(projectId);
-  } catch (err) {
-    if (token === zoteroLoadToken) setLiteratureStatus(err.message, true);
-    return;
+    await flushSelection();
+    if (selectedProjectId() !== projectId) return;
+    await loadProjectSelection(projectId);
+    if (selectedProjectId() !== projectId) return;
+    if (!projectId) return;
+    let link;
+    try {
+      link = await KoiApi.getProjectZotero(projectId);
+    } catch (err) {
+      if (token === zoteroLoadToken) setLiteratureStatus(err.message, true);
+      return;
+    }
+    if (token !== zoteroLoadToken || selectedProjectId() !== projectId) return;
+    if (!link?.linked || !link.api_key) {
+      zoteroFolderItems = [];
+      zoteroOpenFolderKeys = new Set();
+      showSavedProjectPapers();
+      renderZoteroFolderTree();
+      return;
+    }
+    const next = loadSettings();
+    next.zoteroUserId = link.user_id || "";
+    next.zoteroApiKey = link.api_key || "";
+    next.zoteroUsername = link.username || "";
+    next.zoteroCollectionKey = link.collection_key || "";
+    saveSettingsToStorage(next);
+    applySettingsToDom(next);
+    if (token !== zoteroLoadToken) return;
+    const foldersReady = refreshZoteroCollections({ quiet: true });
+    await importZoteroLibrary({ quiet: true, token, projectId });
+    await foldersReady;
+  } finally {
+    stopLoading();
   }
-  if (token !== zoteroLoadToken || selectedProjectId() !== projectId) return;
-  if (!link?.linked || !link.api_key) {
-    zoteroFolderItems = [];
-    zoteroOpenFolderKeys = new Set();
-    showSavedProjectPapers();
-    renderZoteroFolderTree();
-    return;
-  }
-  const next = loadSettings();
-  next.zoteroUserId = link.user_id || "";
-  next.zoteroApiKey = link.api_key || "";
-  next.zoteroUsername = link.username || "";
-  next.zoteroCollectionKey = link.collection_key || "";
-  saveSettingsToStorage(next);
-  applySettingsToDom(next);
-  zoteroAccountLoaded = true;
-  if (token !== zoteroLoadToken) return;
-  const foldersReady = refreshZoteroCollections({ quiet: true });
-  await importZoteroLibrary({ quiet: true, token, projectId });
-  await foldersReady;
 }
 
 function zoteroWhoLabel(settings = loadSettings()) {
@@ -3002,7 +3115,6 @@ function restoreZoteroConnectionUi(settings = loadSettings(), { loadCollections 
 
 function disconnectZoteroAccount() {
   zoteroLoadToken += 1;
-  zoteroAccountLoaded = false;
   const projectId = selectedProjectId();
   const userInput = document.getElementById("rw-zotero-user-id");
   const keyInput = document.getElementById("rw-zotero-api-key");
@@ -3051,74 +3163,34 @@ function revealZoteroFolder(key) {
   }
 }
 
-const ZOTERO_CHEVRON_SVG = `<svg class="rw-zotero-chevron" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.2 3.2 11 8l-4.8 4.8-1.1-1.1L8.8 8 5.1 4.3z"/></svg>`;
-
-function renderZoteroFolderNodes(children, parentKey, active) {
-  const nodes = children.get(parentKey) || [];
-  return nodes
-    .map((node) => {
-      const key = String(node.key || "");
-      const kids = children.get(key) || [];
-      const open = zoteroOpenFolderKeys.has(key);
-      const toggle = kids.length
-        ? `<button type="button" class="rw-zotero-folder-toggle" data-zotero-toggle="${escapeHtml(key)}" aria-label="${open ? "Свернуть" : "Развернуть"}" aria-expanded="${open ? "true" : "false"}">${ZOTERO_CHEVRON_SVG}</button>`
-        : `<span class="rw-zotero-folder-toggle rw-zotero-folder-toggle--empty" aria-hidden="true"></span>`;
-      const nested = open ? renderZoteroFolderNodes(children, key, active) : "";
-      return `
-        <div class="rw-zotero-folder-branch">
-          <div class="rw-zotero-folder-row${key === active ? " is-active" : ""}">
-            ${toggle}
-            <button type="button" class="rw-zotero-folder" data-zotero-folder="${escapeHtml(key)}">${escapeHtml(node.name || key)}</button>
-          </div>
-          ${nested ? `<div class="rw-zotero-folder-children">${nested}</div>` : ""}
-        </div>`;
-    })
-    .join("");
-}
-
 function renderZoteroFolderTree() {
   const nav = document.getElementById("rw-zotero-folders");
-  const column = document.getElementById("rw-library-column");
   if (!nav) return;
-  const connected = Boolean(loadSettings().zoteroApiKey?.trim());
-  const show = connected && zoteroFolderItems.length > 0 && !isWorkspaceSplit();
+  const show = Boolean(loadSettings().zoteroApiKey?.trim()) && zoteroFolderItems.length > 0 && !isWorkspaceSplit();
   nav.classList.toggle("hidden", !show);
-  column?.classList.toggle("has-folders", show);
   if (!show) {
     nav.innerHTML = "";
     return;
   }
   const active = String(loadSettings().zoteroCollectionKey || "");
-  const children = new Map();
-  for (const item of zoteroFolderItems) {
-    const parent = String(item.parent_key || "");
-    if (!children.has(parent)) children.set(parent, []);
-    children.get(parent).push(item);
-  }
-  nav.innerHTML = `
-    <div class="rw-zotero-folder-row${active ? "" : " is-active"}">
-      <span class="rw-zotero-folder-toggle rw-zotero-folder-toggle--empty" aria-hidden="true"></span>
-      <button type="button" class="rw-zotero-folder" data-zotero-folder="">Вся библиотека</button>
-    </div>
-    ${renderZoteroFolderNodes(children, "", active)}`;
-  nav.querySelectorAll("[data-zotero-toggle]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const key = button.getAttribute("data-zotero-toggle") || "";
-      if (!key) return;
-      if (zoteroOpenFolderKeys.has(key)) zoteroOpenFolderKeys.delete(key);
-      else zoteroOpenFolderKeys.add(key);
-      renderZoteroFolderTree();
-    });
+  const byKey = new Map(zoteroFolderItems.map((folder) => [String(folder.key), folder]));
+  const options = zoteroFolderItems.map((folder) => {
+    const names = [folder.name || folder.key];
+    const seen = new Set([String(folder.key)]);
+    let parent = byKey.get(String(folder.parent_key || ""));
+    while (parent && !seen.has(String(parent.key))) {
+      seen.add(String(parent.key));
+      names.unshift(parent.name || parent.key);
+      parent = byKey.get(String(parent.parent_key || ""));
+    }
+    return `<option value="${escapeHtml(folder.key)}"${String(folder.key) === active ? " selected" : ""}>${escapeHtml(names.join(" / "))}</option>`;
   });
-  nav.querySelectorAll("[data-zotero-folder]").forEach((button) => {
-    button.addEventListener("click", () => {
-      void activateZoteroFolder(button.getAttribute("data-zotero-folder") || "");
-    });
+  nav.innerHTML = `<label class="sr-only" for="rw-folder-select">Папка со статьями</label>
+    <svg class="rw-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><select id="rw-folder-select"><option value="">Вся библиотека</option>${options.join("")}</select>`;
+  nav.querySelector("select").addEventListener("change", (event) => {
+    void activateZoteroFolder(event.target.value);
   });
-  nav.querySelector(".rw-zotero-folder-row.is-active")?.scrollIntoView({ block: "nearest" });
-  if (show) document.getElementById("rw-library-switch-source")?.classList.add("hidden");
+  document.getElementById("rw-library-switch-source")?.classList.add("hidden");
 }
 
 async function activateZoteroFolder(key) {
@@ -3139,11 +3211,13 @@ async function refreshZoteroCollections({ quiet = false } = {}) {
     resetZoteroCollectionSelect();
     return;
   }
+  const projectId = selectedProjectId();
   const select = document.getElementById("rw-zotero-collection");
   if (select) select.disabled = true;
   setZoteroCollectionVisible(true);
   try {
     const data = await KoiApi.listZoteroCollections({ api_key, user_id });
+    if (selectedProjectId() !== projectId) return;
     const collections = data.collections || [];
     zoteroFolderItems = collections;
     const activeKey = loadSettings().zoteroCollectionKey || "";
@@ -3172,6 +3246,7 @@ async function connectZoteroAccount() {
   const connectBtn = document.getElementById("rw-zotero-connect");
   const folderField = document.getElementById("rw-zotero-collection-field");
   const folderReady = Boolean(folderField && !folderField.hidden);
+  const stopLoading = startZoteroLibraryLoading();
   connectBtn?.setAttribute("disabled", "disabled");
   setZoteroStatus("");
   setZoteroImportEnabled(false);
@@ -3200,6 +3275,7 @@ async function connectZoteroAccount() {
     setZoteroStatus(err.message, true);
     setLiteratureStatus(err.message, true);
   } finally {
+    stopLoading();
     connectBtn?.removeAttribute("disabled");
   }
 }
@@ -3231,13 +3307,11 @@ async function importZoteroLibrary({
     collectionKey != null
       ? zoteroFolderName(collectionKey)
       : zoteroCollectionLabel() || (collection_key ? collection_key : "вся библиотека");
+  const importToken = ++zoteroImportToken;
+  const stopLoading = startZoteroLibraryLoading();
   const importBtn = document.getElementById("rw-zotero-import");
   importBtn?.setAttribute("disabled", "disabled");
-  if (!quiet) {
-    showLoader(`Zotero: ${folderLabel}`);
-  } else {
-    setLiteratureStatus(`Zotero: ${folderLabel}`);
-  }
+  setLiteratureStatus("");
   try {
     const data = await KoiApi.importZotero({
       api_key,
@@ -3245,7 +3319,7 @@ async function importZoteroLibrary({
       limit: Math.max(selectedLiteratureLimit(), 50),
       collection_key,
     });
-    if (token != null && token !== zoteroLoadToken) {
+    if (importToken !== zoteroImportToken || selectedProjectId() !== projectId || (token != null && token !== zoteroLoadToken)) {
       return;
     }
     const papers = data.papers || [];
@@ -3270,7 +3344,7 @@ async function importZoteroLibrary({
     setZoteroStatus(err.message, true);
     setLiteratureStatus(err.message, true);
   } finally {
-    if (!quiet) hideLoader();
+    stopLoading();
     setZoteroImportEnabled(Boolean(api_key));
     importBtn?.removeAttribute("disabled");
   }
@@ -3770,7 +3844,7 @@ function renderReportMarkdown(run = latestPaperAnswerRun) {
   if (!el) return;
   const md = String(run?.report_markdown || "").trim();
   if (!md) {
-    el.innerHTML = "";
+    el.innerHTML = (run?.clusters || []).map(cluster => `<section class="rw-cluster-section"><h2>${escapeHtml(cluster.label || "Кластер")}</h2><h3>Ответ на исследовательский вопрос</h3><p>${escapeHtml(cluster.answer || cluster.description || "Ответ пока не указан.")}</p><h3>Основание группировки</h3><p>${escapeHtml(cluster.rationale || cluster.distinguishing_features || "Основание группировки не указано в отчёте.")}</p></section>`).join("");
     el.classList.remove("markdown-preview");
     el.classList.add("hidden");
     syncResumeClusterVenn(run);
@@ -3781,7 +3855,7 @@ function renderReportMarkdown(run = latestPaperAnswerRun) {
   el.innerHTML = `
     <header class="rw-cluster-detail-header">
       <p class="rw-cluster-detail-kicker">Общий отчёт</p>
-      <h2 class="rw-cluster-detail-title">Total Resume</h2>
+      <h2 class="rw-cluster-detail-title">General</h2>
     </header>
     ${renderMarkdown(md, { collapsibleSections: false })}`;
   // Visibility is owned by showReadingView — only reveal when that view is active.
@@ -3808,9 +3882,7 @@ function isLiteratureRunStaged(run) {
 
 function resetCancelledLiteratureRunUi() {
   stopLiteratureClusterPoll();
-  hideClusterPromptModal();
   literatureClusterPendingHash = "";
-  literatureClusterPrompt = "";
   latestPaperAnswerRun = null;
   selectedClusterKeys = new Set();
   activeClusterKey = null;
@@ -3848,9 +3920,11 @@ async function cancelLiteratureClusterRun(runId = "") {
     setLiteratureStatus("Нет обзора для отмены.", true);
     return;
   }
-  if (!confirm("Отменить обзор и удалить подготовленный промпт?")) return;
+  if (!confirm("Отменить обзор?")) return;
   try {
-    await KoiApi.deleteLiteratureRun(projectId, targetId);
+    const run = await KoiApi.getLiteratureRun(projectId, targetId);
+    if (run.conversation_id) await KoiApi.cancelConversation(run.conversation_id);
+    else await KoiApi.deleteLiteratureRun(projectId, targetId);
     const wasActive =
       literatureRunId(latestPaperAnswerRun) === targetId ||
       String(literatureClusterPendingHash || "").trim() === targetId;
@@ -3862,42 +3936,79 @@ async function cancelLiteratureClusterRun(runId = "") {
   }
 }
 
+async function deleteLiteratureHistoryRun(runId) {
+  const projectId = selectedProjectId();
+  if (!projectId || !runId) return;
+  try {
+    const run = await KoiApi.getLiteratureRun(projectId, runId);
+    if (["pending", "processing"].includes(run.status)) {
+      setLiteratureStatus("Обзор ещё выполняется. Сначала остановите исследование.", true);
+      return;
+    }
+    if (!confirm(`Удалить обзор «${run.question || "Без вопроса"}»? Запись и отчёт будут удалены. Это действие нельзя отменить.`)) return;
+    await KoiApi.deleteLiteratureRun(projectId, runId, true);
+    if (literatureRunId(latestPaperAnswerRun) === runId) resetCancelledLiteratureRunUi();
+    await refreshLiteratureHistory();
+    setLiteratureStatus("Обзор удалён.");
+  } catch (err) {
+    setLiteratureStatus(err.message || "Не удалось удалить обзор.", true);
+  }
+}
+
 function renderLiteratureHistory(runs = []) {
   const root = document.getElementById("rw-history-list");
   if (!root) return;
+  const renderKey = JSON.stringify(runs);
+  if (root._literatureRunsKey === renderKey) return;
+  root._literatureRunsKey = renderKey;
   if (!runs.length) {
-    root.innerHTML = `<p class="literature-empty">Пока нет сохранённых вопросов.</p>`;
+    root.innerHTML = "";
     return;
   }
-  const activeId = literatureRunId(latestPaperAnswerRun);
-  root.innerHTML = runs
-    .map((run) => {
-      const runId = escapeHtml(literatureRunId(run));
-      const question = escapeHtml(shortText(run.question || "Без вопроса", 90));
-      const staged = isLiteratureRunStaged(run);
-      const metaParts = [
-        `${run.count || 0} статей`,
-        String(run.created_at || "").replace("T", " ").replace("Z", ""),
-      ];
-      if (staged) metaParts.unshift("ожидает агента");
-      const meta = escapeHtml(metaParts.filter(Boolean).join(" · "));
-      const active = literatureRunId(run) === activeId ? " is-active" : "";
-      const cancelBtn = staged
-        ? `<button type="button" class="btn btn-small btn-danger rw-history-cancel" data-cancel-run-id="${runId}" title="Отменить обзор">✕</button>`
-        : "";
-      return `
-        <div class="rw-history-row">
-          <button type="button" class="rw-history-item${active}" data-run-id="${runId}">
-            <span class="rw-history-item-title">${question}</span>
-            <span class="rw-history-item-meta">${meta}</span>
-          </button>
-          ${cancelBtn}
-        </div>`;
-    })
-    .join("");
+  root.innerHTML = runs.map((run) => {
+    const runId = escapeHtml(literatureRunId(run));
+    const question = escapeHtml(run.question || "Без вопроса");
+    const ready = !isLiteratureRunStaged(run) && !["failed", "cancelled", "pending", "processing"].includes(run.status);
+    const failed = run.status === "failed" || run.status === "cancelled";
+    const state = ready ? "ready" : failed ? "failed" : "running";
+    const label = ready ? "Обзор готов" : failed ? (run.status === "cancelled" ? "Остановлено" : "Не удалось завершить") : (run.status === "pending" ? "В очереди" : "Исследование идёт");
+    const meta = escapeHtml([`${run.count || 0} статей`, (run.created_at && !Number.isNaN(Date.parse(run.created_at)) ? new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(run.created_at)) : "")].filter(Boolean).join(" · "));
+    const icon = ready ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>' : '';
+    const action = !ready && !failed
+      ? `<button type="button" class="rw-history-cancel" data-cancel-run-id="${runId}" aria-label="Остановить исследование: ${question}">Остановить</button>`
+      : failed ? `<button type="button" class="rw-history-edit" data-edit-run-id="${runId}">Редактировать вопрос</button>` : "";
+    const content = `<span class="rw-history-item-title">${question}</span>
+      <span class="rw-history-details">
+        <span class="rw-history-state"><span class="rw-history-indicator" aria-hidden="true">${ready ? "✓" : failed ? "!" : ""}</span>${label}</span>
+        <span class="rw-history-item-meta">${meta}</span>
+      </span>
+      ${ready ? `<span class="rw-history-open">${icon}</span>` : ""}`;
+    return `<div class="rw-history-row${ready || failed ? " can-delete" : ""}">
+      ${ready ? `<button type="button" class="rw-history-item is-ready" data-run-id="${runId}" aria-label="Открыть обзор: ${question}">${content}</button>` : `<div class="rw-history-item is-${state}">${content}
+        <div class="rw-history-recovery">${run.error ? `<p class="rw-history-error">${escapeHtml(run.error)}</p>` : ""}${action}</div>
+      </div>`}
+      ${ready || failed ? `<button type="button" class="rw-history-delete" data-delete-run-id="${runId}" aria-label="Удалить обзор: ${question}" title="Удалить обзор"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg></button>` : ""}
+    </div>`;
+  }).join("");
   root.querySelectorAll("[data-run-id]").forEach((button) => {
     button.addEventListener("click", () => {
       void openLiteratureHistoryRun(button.getAttribute("data-run-id"));
+    });
+  });
+  root.querySelectorAll("[data-delete-run-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void deleteLiteratureHistoryRun(button.getAttribute("data-delete-run-id"));
+    });
+  });
+  root.querySelectorAll("[data-edit-run-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const run = runs.find((item) => literatureRunId(item) === button.getAttribute("data-edit-run-id"));
+      const input = document.getElementById("literature-query");
+      if (!run || !input) return;
+      input.value = run.question || "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus();
+      setLiteratureStatus("Вопрос перенесён в поле ввода. Отправьте его повторно.");
     });
   });
   root.querySelectorAll("[data-cancel-run-id]").forEach((button) => {
@@ -3910,6 +4021,7 @@ function renderLiteratureHistory(runs = []) {
 }
 
 async function refreshLiteratureHistory() {
+  void refreshPaperMorphologyStatuses();
   const projectId = selectedProjectId();
   if (!projectId) {
     renderLiteratureHistory([]);
@@ -3931,6 +4043,7 @@ async function openLiteratureHistoryRun(runId) {
   try {
     const run = normalizeLiteratureRun(await KoiApi.getLiteratureRun(projectId, runId));
     latestPaperAnswerRun = run;
+    watchLiteratureAgent(run.conversation_id);
     selectedClusterKeys = new Set((run.clusters || []).map((c) => c.key));
     activeReadingView = String(run.report_markdown || "").trim() ? READING_VIEW_RESUME : (run.clusters?.[0]?.key || READING_VIEW_RESUME);
     activeClusterKey = run.clusters?.[0]?.key || null;
@@ -3952,9 +4065,8 @@ async function openLiteratureHistoryRun(runId) {
       );
     } else {
       literatureClusterPendingHash = literatureRunId(run) || runId;
-      literatureClusterPrompt = String(run.prompt || run.cursor_message || literatureClusterPrompt || "").trim();
       updateClustersQuestion(run);
-      setGeneratingMode(true, "Агент работает — ждём report.md…");
+      setGeneratingMode(true, "Готовим обзор литературы…");
       startLiteratureClusterPoll(projectId, literatureClusterPendingHash);
       setLiteratureStatus("Ожидаем отчёт агента…");
     }
@@ -4049,11 +4161,12 @@ async function onLiteratureSearchSubmit(e) {
       }
     }
 
-    setLiteratureStatus(`Готовим промпт для ${papersForAgent.length} статей…`);
-    showLoader("Ставим выбранные статьи и собираем промпт…");
-    const staged = await KoiApi.stageLiteratureCluster(projectId, {
+    setLiteratureStatus(`Запускаем анализ ${papersForAgent.length} статей…`);
+    showLoader("Отправляем вопрос агенту…");
+    const staged = await KoiApi.launchLiteratureCluster(projectId, {
       question: clusterQuestion,
       papers: papersForAgent,
+      cli_agent: document.getElementById("literature-cli-agent")?.value || null,
     });
     latestPaperAnswerRun = {
       run_id: staged.run_id || staged.query_hash,
@@ -4063,34 +4176,15 @@ async function onLiteratureSearchSubmit(e) {
       clusters: [],
       count: staged.count || papersForAgent.length,
       status: "staged",
+      conversation_id: staged.conversation_id,
     };
+    setWorkspaceSplit(false);
     hideKoiLoader("rw-search-loader");
-    setWorkspaceSplit(true);
-    renderRunPapersSidebar(papersForAgent);
-    updateClustersQuestion(latestPaperAnswerRun);
-    showClusterPromptModal(staged.prompt || staged.cursor_message || "");
-    setGeneratingMode(true, "Ждём агента в Cursor…");
-    setLiteratureStatus(
-      `Промпт готов (${staged.count || papersForAgent.length} статей). Вставьте в чат Cursor — страница дождётся report.md.`
-    );
+    setLiteratureStatus("Исследование запущено. Готовый обзор можно будет открыть по стрелке.");
     await refreshLiteratureHistory();
-    startLiteratureClusterPoll(projectId, staged.run_id || staged.query_hash);
   } catch (err) {
-    if (searchCompleted && literatureResults.length) {
-      setWorkspaceSplit(true);
-      renderLiteratureResults(literatureResults);
-      const clusterRoot = document.getElementById("literature-agent-results");
-      if (clusterRoot) {
-        clusterRoot.innerHTML = `<p class="literature-empty">Промпт не собран: ${escapeHtml(err.message)}</p>`;
-      }
-      setLiteratureStatus(
-        `Найдено ${literatureResults.length} статей. Не удалось собрать промпт: ${err.message}`,
-        true
-      );
-    } else {
-      setWorkspaceSplit(false);
-      setLiteratureStatus(err.message, true);
-    }
+    setWorkspaceSplit(false);
+    setLiteratureStatus(`Не удалось запустить исследование: ${err.message}. Повторите отправку вопроса.`, true);
   } finally {
     if (!workspaceGenerating) hideLoader();
     button?.removeAttribute("disabled");
@@ -4132,12 +4226,27 @@ async function pollLiteratureClusterOnce(projectId, runId) {
   if (!projectId || !runId) return;
   try {
     const run = await KoiApi.getLiteratureRun(projectId, runId);
+    if (run.conversation_id) {
+      if (literatureConversationId !== run.conversation_id) watchLiteratureAgent(run.conversation_id);
+      await refreshLiteratureAgent();
+      if (literatureAgentBusy) return;
+      if (!run.report_markdown) {
+        stopLiteratureClusterPoll();
+        setGeneratingMode(false);
+        const message = document.getElementById("literature-agent-message");
+        if (message?.textContent === "Анализ завершён.") {
+          message.textContent = "Агент завершил работу, но не сохранил обзор. Повторите запуск.";
+          setLiteratureStatus(message.textContent, true);
+        }
+        return;
+      }
+    }
     if (!run?.report_markdown) {
-      setGeneratingMode(true, "Агент работает — ждём report.md…");
+      setGeneratingMode(true, "Готовим обзор литературы…");
       return;
     }
     stopLiteratureClusterPoll();
-    applyLiteratureClusterRun(run);
+    if (isWorkspaceSplit()) applyLiteratureClusterRun(run);
     await refreshLiteratureHistory();
     const clusterCount = run.clusters?.length || 0;
     setLiteratureStatus(clusterCount ? `Готово (${clusterCount} кластеров).` : "Готово.");
@@ -4150,45 +4259,10 @@ function startLiteratureClusterPoll(projectId, runId) {
   stopLiteratureClusterPoll();
   literatureClusterPendingHash = String(runId || "");
   if (!projectId || !literatureClusterPendingHash) return;
-  setWorkspaceSplit(true);
-  setGeneratingMode(true, "Ждём агента в Cursor…");
   void pollLiteratureClusterOnce(projectId, literatureClusterPendingHash);
   literatureClusterPollTimer = setInterval(() => {
     void pollLiteratureClusterOnce(projectId, literatureClusterPendingHash);
   }, LITERATURE_CLUSTER_POLL_MS);
-}
-
-function showClusterPromptModal(promptText) {
-  const message = String(promptText || "").trim();
-  literatureClusterPrompt = message;
-  showPromptDock(message);
-  const modal = document.getElementById("literature-cluster-prompt-modal");
-  const pre = document.getElementById("literature-cluster-prompt-text");
-  if (pre) pre.textContent = message;
-  if (!modal) {
-    void copyRelatedWorkCursorMessage(message, null);
-    return;
-  }
-  activeClusterPromptModal = modal;
-  modal.classList.remove("hidden");
-  modal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-  void copyRelatedWorkCursorMessage(
-    message,
-    document.getElementById("literature-cluster-prompt-copy-status")
-  );
-}
-
-function hideClusterPromptModal() {
-  const modal = activeClusterPromptModal || document.getElementById("literature-cluster-prompt-modal");
-  if (!modal) return;
-  modal.classList.add("hidden");
-  modal.setAttribute("aria-hidden", "true");
-  if (activeClusterPromptModal === modal) activeClusterPromptModal = null;
-  if (!activeClusterModal && !activeSettingsModal && !activeContextModal && !activeRelatedInboxModal) {
-    document.body.classList.remove("modal-open");
-  }
-  if (workspaceGenerating) syncPromptDock();
 }
 
 function saveSettingsFromModal() {
@@ -4205,21 +4279,15 @@ function bindLiteratureUiEvents() {
     input.addEventListener("change", () => updateSettingsSourceUi());
   });
   document.getElementById("literature-search-form")?.addEventListener("submit", onLiteratureSearchSubmit);
-  document.getElementById("rw-back-to-collection")?.addEventListener("click", () => {
+  document.getElementById("rw-report-back")?.addEventListener("click", () => {
     stopLiteratureClusterPoll();
+    watchLiteratureAgent(null);
     setWorkspaceSplit(false);
   });
-  document.getElementById("rw-prompt-dock-copy")?.addEventListener("click", () => {
-    void copyRelatedWorkCursorMessage(
-      literatureClusterPrompt || document.getElementById("rw-prompt-dock-text")?.textContent || "",
-      document.getElementById("rw-prompt-dock-status")
-    );
-  });
-  document.getElementById("rw-prompt-dock-cancel")?.addEventListener("click", () => {
-    void cancelLiteratureClusterRun();
-  });
-  document.getElementById("literature-cluster-prompt-cancel")?.addEventListener("click", () => {
-    void cancelLiteratureClusterRun();
+  document.getElementById("rw-back-to-collection")?.addEventListener("click", () => {
+    stopLiteratureClusterPoll();
+    watchLiteratureAgent(null);
+    setWorkspaceSplit(false);
   });
   document.getElementById("rw-library-find")?.addEventListener("click", () => void findLiteraturePapers());
   document.getElementById("rw-library-zotero")?.addEventListener("click", openZoteroImport);
@@ -4261,7 +4329,10 @@ function bindLiteratureUiEvents() {
   document.getElementById("literature-open-context-modal")?.addEventListener("click", showContextModal);
   document.getElementById("literature-clear-context")?.addEventListener("click", clearProjectContextSelection);
   document.getElementById("literature-context-modal-clear")?.addEventListener("click", clearProjectContextSelection);
-  document.getElementById("literature-select-all")?.addEventListener("click", selectAllResults);
+  document.getElementById("literature-select-all")?.addEventListener("click", () => {
+    if (literatureResults.length && getSelectedResults().length === literatureResults.length) clearSelectedResults();
+    else selectAllResults();
+  });
   document.getElementById("literature-clear-selection")?.addEventListener("click", clearSelectedResults);
   document.getElementById("library-upload-input")?.addEventListener("change", () => {
     updateLibraryUploadFilename();
@@ -4336,16 +4407,6 @@ function bindLiteratureUiEvents() {
   document.querySelectorAll("[data-close='rw-related-inbox-modal']").forEach((el) => {
     el.addEventListener("click", hideRelatedInboxModal);
   });
-  document.getElementById("literature-cluster-prompt-copy")?.addEventListener("click", () => {
-    void copyRelatedWorkCursorMessage(
-      literatureClusterPrompt,
-      document.getElementById("literature-cluster-prompt-copy-status")
-    );
-  });
-  document.querySelectorAll("[data-close='literature-cluster-prompt-modal']").forEach((el) => {
-    el.addEventListener("click", hideClusterPromptModal);
-  });
-
   document.querySelectorAll("[data-close='cluster-modal']").forEach((el) => {
     el.addEventListener("click", hideClusterModal);
   });
@@ -4362,7 +4423,6 @@ function bindLiteratureUiEvents() {
     hideSettingsModal();
     hideContextModal();
     hideRelatedInboxModal();
-    hideClusterPromptModal();
   });
 }
 
@@ -4372,6 +4432,14 @@ async function init() {
   applySettingsToDom();
   setWorkspaceSplit(false);
   bindLiteratureUiEvents();
+  void loadLiteratureAgents();
+  document.getElementById("literature-agent-stop")?.addEventListener("click", async () => {
+    if (!literatureConversationId) return;
+    try {
+      await KoiApi.cancelConversation(literatureConversationId);
+      await refreshLiteratureAgent();
+    } catch (err) { setLiteratureStatus(err.message, true); }
+  });
   updateLibraryUploadFilename();
   renderProjectContextSummary();
   updateRelatedWorksSummary();
@@ -4382,6 +4450,9 @@ async function init() {
     await loadProjectContext(selectedProjectId());
     await loadProjectZotero(selectedProjectId());
     await refreshLiteratureHistory();
+    setInterval(() => {
+      if (!document.hidden) void refreshLiteratureHistory();
+    }, LITERATURE_CLUSTER_POLL_MS);
     await restoreRelatedWorkOnLoad();
   } catch (err) {
     setLiteratureStatus(`Ошибка загрузки: ${err.message}`, true);

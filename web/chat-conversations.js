@@ -9,6 +9,7 @@ export function conversationDisplayTitle(title) {
 const ICONS = {
   compose: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/>',
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 10h18"/>',
+  agent: '<path d="M8 5 7 2l4 2h2l4-2-1 4a6 6 0 1 1-8-1Z"/><path d="M4 22v-2a8 8 0 0 1 16 0v2Z"/>',
   chat: '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8Z"/>',
   card: '<rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h6M8 16h4"/>',
   trash: '<path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/>',
@@ -309,11 +310,117 @@ export class ChatConversations {
       this.row = this.rows.find(r => r.id === this.row.id) || this.row;
       const detail = await this.api.getConversation(this.row.id);
       if (epoch !== this.epoch || scopeKey !== JSON.stringify(this.scope()) || detail.conversation.id !== this.row?.id || !this.acceptsScope(detail.conversation)) return null;
+      this.renderParticipants(detail.participants || []);
       this.render(detail.live);
       return detail;
     }
+    this.renderParticipants([]);
     this.render(null);
     return { items: [] };
+  }
+
+  renderParticipants(rows) {
+    if (!this.log) return;
+    const priority = {running: 0, waiting: 1, pending: 2};
+    rows = [...rows].sort((a, b) => (priority[a.status] ?? 3) - (priority[b.status] ?? 3));
+    if (!this.participantHost) {
+      this.participantHost = document.createElement('section');
+      this.participantHost.className = 'research-participants';
+      this.participantHost.setAttribute('aria-label', 'Агенты исследования');
+      this.log.before(this.participantHost);
+    }
+    this.participantRows = rows;
+    const signature = JSON.stringify([this.row?.id, rows.map(({updated_at, ...row}) => row)]);
+    if (this.participantSignature === signature) {
+      for (const opened of this.participantHost.querySelectorAll('details[open]')) opened.dispatchEvent(new Event('toggle'));
+      return;
+    }
+    const focusedAgent = this.participantHost.contains(document.activeElement)
+      ? document.activeElement.closest('details')?.dataset.agentId : null;
+    this.participantSignature = signature;
+    this.participantHost.hidden = !rows.length;
+    const scrollLeft = this.participantHost.querySelector('.research-agent-strip')?.scrollLeft || 0;
+    this.participantHost.replaceChildren();
+    const toolbar = document.createElement('div'); toolbar.className = 'research-agent-toolbar';
+    const strip = document.createElement('div'); strip.className = 'research-agent-strip';
+    strip.setAttribute('aria-label', 'Список агентов');
+    const panel = document.createElement('div'); panel.className = 'research-agent-panel';
+    panel.hidden = true;
+    for (const direction of [-1, 1]) {
+      const arrow = document.createElement('button'); arrow.type = 'button';
+      arrow.className = 'research-agent-arrow'; arrow.textContent = direction < 0 ? '‹' : '›';
+      arrow.setAttribute('aria-label', direction < 0 ? 'Предыдущие агенты' : 'Следующие агенты');
+      arrow.addEventListener('click', () => strip.scrollBy({left: direction * strip.clientWidth * .75,
+        behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'}));
+      toolbar.append(arrow);
+      if (direction < 0) toolbar.append(strip);
+    }
+    strip.addEventListener('wheel', event => {
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && strip.scrollWidth > strip.clientWidth) {
+        event.preventDefault(); strip.scrollLeft += event.deltaY;
+      }
+    }, {passive: false});
+    this.participantHost.append(toolbar, panel);
+    const labels = {pending: 'Ожидает запуска', running: 'Работает', waiting: 'Ожидает',
+      completed: 'Завершён', failed: 'Ошибка', cancelled: 'Остановлен', unknown: 'Состояние неизвестно'};
+    for (const row of rows) {
+      const detail = document.createElement('details');
+      detail.dataset.agentId = row.id;
+      const summary = document.createElement('summary');
+      summary.setAttribute('aria-label', `${row.role}: ${labels[row.status] || row.status}`);
+      const avatar = icon('agent');
+      const label = document.createElement('span');
+      label.className = 'research-agent-name'; label.textContent = row.role;
+      const portrait = document.createElement('span'); portrait.className = 'research-agent-avatar';
+      const badge = document.createElement('span'); badge.className = 'research-agent-badge';
+      badge.dataset.status = row.status; badge.setAttribute('aria-hidden', 'true');
+      badge.textContent = row.status === 'completed' ? '✓' : row.status === 'failed' ? '!' :
+        row.status === 'cancelled' ? '−' : row.status === 'running' ? '' : '·';
+      portrait.append(avatar, badge);
+      summary.append(portrait, label);
+      summary.title = `${row.role}: ${labels[row.status] || row.status}`;
+      const body = document.createElement('div');
+      const task = document.createElement('p'); task.textContent = row.task;
+      const status = document.createElement('p'); status.setAttribute('role', 'status');
+      const output = document.createElement('pre');
+      body.append(task, status, output);
+      if (row.project_id && row.board_id && row.card_id) {
+        const params = new URLSearchParams({project: row.project_id, board: row.board_id, card: row.card_id});
+        if (new URLSearchParams(location.search).has('desktop')) params.set('desktop', '1');
+        const link = document.createElement('a');
+        link.className = 'agent-chat-card-link'; link.dataset.chatCardLink = '';
+        link.href = `?${params}`; link.textContent = 'Открыть карточку и монитор';
+        body.append(link);
+      }
+      detail.append(summary);
+      detail.open = this.selectedParticipant === row.id;
+      detail.addEventListener('toggle', async () => {
+        if (!detail.open) {
+          if (this.selectedParticipant === row.id) {
+            this.selectedParticipant = null; panel.hidden = true; panel.replaceChildren();
+          }
+          return;
+        }
+        this.selectedParticipant = row.id;
+        panel.replaceChildren(body); panel.hidden = false;
+        for (const other of this.participantHost.querySelectorAll('details')) {
+          if (other !== detail) other.open = false;
+        }
+        const cid = this.row?.id;
+        status.textContent = 'Загружаем активность…';
+        try {
+          const result = await this.api.participantActivity(cid, row.id);
+          if (cid !== this.row?.id || !detail.isConnected) return;
+          output.textContent = result.events.map(e => `${e.at} · ${e.message}`).join('\n');
+          status.textContent = row.result || (result.events.length ? '' : 'Событий пока нет.');
+        } catch (error) {
+          status.textContent = `Не удалось загрузить активность: ${error.message}`;
+        }
+      });
+      strip.append(detail);
+    }
+    strip.scrollLeft = scrollLeft;
+    if (focusedAgent) this.participantHost.querySelector(`details[data-agent-id="${CSS.escape(focusedAgent)}"] summary`)?.focus({preventScroll:true});
   }
 
   syncSendButton() {

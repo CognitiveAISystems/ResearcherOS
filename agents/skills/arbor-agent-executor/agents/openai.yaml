@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Executor Dispatch"
+  short_description: "Runs isolated Arbor executor workflows"
+  default_prompt: "Use $arbor-agent-executor to dispatch and record isolated Arbor executor work."

@@ -12,6 +12,8 @@ from koi.core import project_ops
 from koi.core.md_io import card_now_iso, normalize_card_tags, register_project_card_tags
 from koi.core.models import (
     DEFAULT_KANBAN_COLUMNS,
+    ALLOWED_CHILDREN,
+    EdgeType,
     ExperimentCard,
     KanbanBoard,
     KanbanColumn,
@@ -40,6 +42,7 @@ class CreateProjectCommand:
     description: str = ""
     program_id: Optional[str] = None
     program_title: Optional[str] = None
+    root_type: NodeType = NodeType.PROBLEM
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,8 @@ class CreateNodeCommand:
     node_type: NodeType
     title: str
     description: str = ""
+    edge_type: EdgeType = EdgeType.DIRECTION
+    edge_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -66,6 +71,9 @@ class UpdateNodeCommand:
     title: Optional[str] = None
     description: Optional[str] = None
     research_questions: Optional[list[ResearchQuestionInput]] = None
+    root_type: Optional[NodeType] = None
+    edge_type: Optional[EdgeType] = None
+    edge_label: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +128,8 @@ def _enqueue_sync(project_id: str, reason: str, detail: str) -> None:
 
 
 def create_project(command: CreateProjectCommand) -> Project:
+    if command.root_type not in ALLOWED_CHILDREN[None]:
+        raise ValueError("Unsupported root type")
     if command.program_id and command.program_title:
         raise ValueError("Specify either program_id or program_title, not both")
 
@@ -134,6 +144,7 @@ def create_project(command: CreateProjectCommand) -> Project:
         project_id=command.project_id,
         description=command.description,
         programs=programs,
+        root_type=command.root_type,
     )
 
 
@@ -158,6 +169,8 @@ def replace_project(project_id: str, snapshot: dict) -> Project:
             title=raw["title"],
             description=raw.get("description", ""),
             verdict=Verdict(raw.get("verdict", "open")),
+            edge_type=EdgeType(raw.get("edge_type", "direction")),
+            edge_label=raw.get("edge_label", ""),
             research_questions=[
                 MethodResearchQuestion(
                     id=item.get("id") or f"rq-{uuid4().hex[:8]}",
@@ -208,6 +221,8 @@ def create_node(project_id: str, command: CreateNodeCommand) -> Project:
         command.node_type,
         command.title,
         command.description,
+        edge_type=command.edge_type,
+        edge_label=command.edge_label,
     )
     repository.save_project(project)
     _enqueue_sync(project_id, "tree_updated", f"новый узел: {command.title}")
@@ -237,6 +252,9 @@ def update_node(project_id: str, node_id: str, command: UpdateNodeCommand) -> Pr
             title=command.title,
             description=command.description,
             research_questions=questions,
+            edge_type=command.edge_type,
+            edge_label=command.edge_label,
+            root_type=command.root_type,
         )
     except StopIteration as exc:
         raise EntityNotFoundError("Node not found") from exc
@@ -244,7 +262,7 @@ def update_node(project_id: str, node_id: str, command: UpdateNodeCommand) -> Pr
     repository.save_project(project)
     if command.research_questions is not None:
         _enqueue_sync(project_id, "research_updated", f"research_questions узла {node_id}")
-    elif command.title is not None or command.description is not None:
+    elif any(value is not None for value in (command.title, command.description, command.edge_type, command.edge_label, command.root_type)):
         _enqueue_sync(project_id, "tree_updated", f"обновлён узел {node_id}")
     return project
 

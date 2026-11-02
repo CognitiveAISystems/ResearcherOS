@@ -1,4 +1,5 @@
 export const CARD_SKILLS = [
+  {command: 'koi-arbor-autoresearch', name: 'Arbor: автоисследование', description: 'Разработать метод с координатором и параллельными исполнителями.'},
   {command: 'grill-me', name: 'grill-me', description: 'Уточнить цель, метрики и план эксперимента.'},
   {command: 'prose', name: 'prose', description: 'Проверить и улучшить текст карточки и отчёта.'},
   {command: 'question', name: 'question', description: 'Ответить по материалам карточки без изменений.'},

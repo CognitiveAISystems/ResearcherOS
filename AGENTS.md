@@ -55,7 +55,8 @@ python -m koi.projects.install_cli install <name> --create # пустой про
 | Задача | Как |
 |--------|-----|
 | Любая операция с Cryri Jobs | Обязательный скилл **koi-cryri-jobs**: общий реестр в `tree/cryri-jobs.md`, проверка принадлежности, мониторинг GPU, подтверждение перед остановкой |
-| Подключить существующий code-репо к ResearchOS | скилл **koi-project-onboard** — диалог → brief → clarity → prose → писать в `tree/<repo>/koi-structure/`; затем **`install_cli install <repo>`** (orphan `koi/research` + tree worktree) |
+| Подключить существующий code-репо к ResearchOS | скилл **koi-project-onboard** — описание и репозиторий → дерево и полный бриф → до 4 вопросов о структуре и 2 подтверждений → сохранение дерева с методом и канбаном в `tree/<repo>/koi-structure/` после согласия; затем **`install_cli install <repo>`** |
+| Создать новое дерево (первый запуск, Quick Navigation, браузер или IDE) | **koi-project-onboard** — тот же сценарий; не требовать вручную заполнять проблему, причину и гипотезу |
 | Только layout / ветка koi/research без онбординга | `python -m koi.projects.install_cli install <repo>` |
 | Синхронизация research-данных | скилл **koi-project-sync** / `sync_cli push|pull` (working copy = `tree/<repo>/koi-structure`) |
 | Спроектировать новый эксперимент (до прогона) | скилл **koi-grill-experiment** — интервью по одному вопросу с рекомендацией: постановка, реализация, таблицы/графики, критерии done; затем черновик §1–§3 и **koi-report-review** |

@@ -60,11 +60,29 @@ def _legacy_links():
             yield path, link
 
 
+def _collection_preferences() -> tuple[Path, dict]:
+    path = account_path().with_name("zotero-collections.local.json")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    return path, data if isinstance(data, dict) else {}
+
+
+def _project_collection(project_id: str, account: dict[str, str]) -> dict[str, str]:
+    _path, preferences = _collection_preferences()
+    folder = preferences.get(project_id, {})
+    if not isinstance(folder, dict):
+        folder = {}
+    return {**account, "collection_key": _clean(folder.get("collection_key"), 64),
+            "collection_name": _clean(folder.get("collection_name"))}
+
+
 def read_zotero_link(project_id: str) -> dict[str, str] | None:
     koi_root(project_id)
     account = _read_link_file(account_path())
     if account:
-        return account
+        return _project_collection(project_id, account)
     legacy = _read_link_file(link_path(project_id))
     if legacy:
         _write_link_file(account_path(), legacy)
@@ -96,12 +114,18 @@ def write_zotero_link(
         "collection_name": _clean(collection_name),
     }
     _write_link_file(account_path(), link)
+    path, preferences = _collection_preferences()
+    preferences[project_id] = {"collection_key": link["collection_key"],
+                               "collection_name": link["collection_name"]}
+    path.write_text(json.dumps(preferences, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return link
 
 
 def clear_zotero_link(project_id: str) -> None:
     koi_root(project_id)
     account = account_path()
+    preferences_path, _preferences = _collection_preferences()
+    preferences_path.unlink(missing_ok=True)
     if account.is_file():
         account.unlink()
     legacy = link_path(project_id)

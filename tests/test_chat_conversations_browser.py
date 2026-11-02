@@ -238,6 +238,63 @@ async def check():
                 assert ratio>=minimum,(theme,fg,bg,ratio)
                 results[theme][fg+' / '+bg]=round(ratio,2)
         (OUT/'contrast.json').write_text(json.dumps(results,indent=2))
+        await page.evaluate("""() => {
+          main.api.participantActivity = async () => ({events:[{at:'2026-11-01T12:00:00Z',message:'Проверяем гипотезу <script>не HTML</script>'}]});
+          main.renderParticipants([
+            {id:'agent-1',role:'Координатор',status:'running',task:'Разработать метод'},
+            {id:'agent-2',role:'Исследователь',status:'completed',task:'Сравнить варианты',result:'Сравнение завершено'}
+          ]);
+        }""")
+        participants = page.locator('#agent-chat-panel .research-participants')
+        assert await participants.locator('summary svg').count() == 2
+        await participants.locator('summary').first.evaluate('(el)=>el.click()')
+        await page.wait_for_function("document.querySelector('.research-participants pre')?.textContent.includes('Проверяем гипотезу')")
+        assert await participants.locator('script').count() == 0
+        await participants.locator('summary').nth(1).evaluate('(el)=>el.click()')
+        await page.wait_for_function("document.querySelectorAll('.research-participants details[open]').length===1")
+        assert await participants.locator('details[open] summary').get_attribute('aria-label') == 'Исследователь: Завершён'
+        await page.evaluate("main.showNavigation(false); document.getElementById('card-report-modal').classList.add('hidden'); document.getElementById('agent-chat-panel').classList.remove('hidden')")
+        for theme in ('dark', 'light'):
+            await page.evaluate('theme=>document.documentElement.dataset.theme=theme', theme)
+            await participants.screenshot(path=str(OUT / f'research-participants-{theme}.png'))
+        await page.evaluate("""() => {
+          main.api.participantActivity = async () => ({events:[{at:'now',message:'Длинный отчёт '.repeat(2000)}]});
+          main.renderParticipants([{id:'long',role:'Рецензент',status:'completed',
+            task:'Длинная постановка '.repeat(1500),result:'Развёрнутый вывод '.repeat(1500)}]);
+        }""")
+        await participants.locator('summary').click()
+        await page.wait_for_function("document.querySelector('.research-agent-panel pre')?.textContent.includes('Длинный отчёт')")
+        assert await participants.locator('.research-agent-panel').evaluate('(el)=>el.scrollHeight>el.clientHeight')
+        composer = page.locator('#agent-chat-form')
+        assert await composer.evaluate('(el)=>el.getBoundingClientRect().bottom<=innerHeight+1')
+        await participants.locator('.research-agent-panel').evaluate('(el)=>el.scrollTop=el.scrollHeight')
+        assert await participants.locator('.research-agent-panel').evaluate('(el)=>el.scrollTop>0')
+        await page.evaluate("""() => main.renderParticipants([
+          {id:'done',role:'Готовый',status:'completed'},
+          ...Array.from({length:8},(_,i)=>({id:'worker-'+i,role:'Исследователь '+i,status:i===7?'running':'completed'}))
+        ])""")
+        assert await participants.locator('details').first.get_attribute('data-agent-id') == 'worker-7'
+        strip = participants.locator('.research-agent-strip')
+        assert await strip.evaluate('(el)=>el.scrollWidth>el.clientWidth')
+        await participants.get_by_role('button', name='Следующие агенты').click()
+        await page.wait_for_function("document.querySelector('.research-agent-strip').scrollLeft>0")
+        assert await participants.locator('[data-status="running"]').count() == 1
+        await page.set_viewport_size({'width':1000,'height':700})
+        await page.evaluate("""() => {
+          const text=document.createElement('div'); text.textContent='Длинная переписка '.repeat(3000);
+          main.log.append(text);
+        }""")
+        geometry = await participants.evaluate("""host => {
+          const bounds=host.getBoundingClientRect();
+          const toolbar=host.querySelector('.research-agent-toolbar').getBoundingClientRect();
+          const avatar=host.querySelector('.research-agent-avatar').getBoundingClientRect();
+          const log=document.querySelector('#agent-chat-log').getBoundingClientRect();
+          return {full:toolbar.bottom<=bounds.bottom+1, avatarHeight:avatar.height,
+                  separate:log.top>=toolbar.bottom-1};
+        }""")
+        assert geometry['full'] and geometry['separate'] and geometry['avatarHeight']>=60, geometry
+        await page.evaluate('main.renderParticipants([])')
+        assert await participants.get_attribute('hidden') is not None
         assert not errors, errors
         await browser.close()
         print('Conversation UI: scope, drafts, selection, permissions, cancellation and themes passed')

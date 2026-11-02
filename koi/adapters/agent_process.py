@@ -13,7 +13,7 @@ class AgentCancelled(Exception):
     pass
 
 
-def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None):
+def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None, on_started=None):
     if is_cancelled and is_cancelled():
         raise AgentCancelled
     process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.PIPE,
@@ -46,6 +46,8 @@ def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None):
     watcher = threading.Thread(target=watch, daemon=True)
     watcher.start()
     try:
+        if on_started is not None:
+            on_started(process.pid)
         try:
             process.stdin.write(prompt)
             process.stdin.close()

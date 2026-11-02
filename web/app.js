@@ -1,3 +1,5 @@
+import { projectTreeNodes } from "./tree-projection.js";
+import { EDGE_LABELS, edgeCaption, edgeLabelHeight, treeEdgeDefs, appendTreeEdge } from "./tree-edges.js";
 import { ChatConversations } from "./chat-conversations.js";
 import { ResearchChatNavigation } from "./research-chat-navigation.js";
 import { initAppVariant, usesChatNavigation, preserveVariantDrafts, restoreVariantDrafts } from "./app-variant.js";
@@ -19,7 +21,7 @@ import {
   mergeComputeCost,
 } from "./compute-cost.js";
 import { KoiApi } from "./api.js?v=20261021paper-edits";
-import { openNewProjectWizard } from "./desktop-onboarding.js";
+import { openNewProjectWizard, openLocalTreeInterview } from "./desktop-onboarding.js";
 import { createPaperCollabClient, localUserName } from "./paper-collab.js?v=20260829d";
 import {
   refreshInlineLoaderHints,
@@ -48,7 +50,6 @@ import {
   formatAddChildContextHint,
   formatAddChildFormatHint,
   formatAddParentIntro,
-  mountAddNodeButton,
   mountNodeTypeHelp,
 } from "./node-tree-help.js";
 
@@ -207,6 +208,9 @@ const VERDICT_BADGES = {
 };
 
 const TYPE_LABELS = {
+  topic: "Тема",
+  direction: "Направление",
+  program: "Инженерное решение",
   problem: "Проблема",
   cause: "Причина",
   cause_evidence: "Доказательство",
@@ -229,6 +233,9 @@ const KANBAN_BELOW_H = 34;
 const KANBAN_BELOW_W = 88;
 
 const TYPE_ORDER = {
+  topic: -1,
+  direction: 0,
+  program: 1,
   problem: 0,
   cause: 1,
   cause_evidence: 2,
@@ -242,12 +249,7 @@ const PROBLEM_MAX_W = 300;
 const PROBLEM_MIN_H = 72;
 const EXP_SIZE = 48;
 function canShowAddButton(node) {
-  return (
-    node.node_type === "problem" ||
-    node.node_type === "cause" ||
-    node.node_type === "cause_evidence" ||
-    node.node_type === "remediation"
-  );
+  return allowedChildTypes(node.node_type).length > 0;
 }
 
 function shouldShowAddSlot(node) {
@@ -278,8 +280,6 @@ const HYPOTHESIS_METRICS = {
   round: "4px",
 };
 
-const RQ_BADGE_HOLD_MS = 2500;
-const RQ_BADGE_FADE_MS = 5_000;
 const RQ_IMPORTANCE_FILTER_KEY = "koi-rq-importance-min";
 const RQ_IMPORTANCE_FILTER_OPTIONS = [
   { min: 1, label: "Все", title: "Показать все выводы" },
@@ -373,7 +373,7 @@ function computeNodeSize(node) {
   let h = m.padY * 2 + m.labelH + lines.length * m.lineH;
   h = Math.ceil(Math.min(m.maxH, Math.max(isHypothesis ? 44 : 50, h)));
 
-  if (node.node_type === "problem") {
+  if (["topic", "problem", "direction"].includes(node.node_type)) {
     const pw = Math.ceil(
       Math.min(PROBLEM_MAX_W, Math.max(PROBLEM_MIN_W, textW + m.padX * 2 + 8))
     );
@@ -386,14 +386,14 @@ function computeNodeSize(node) {
   return {
     w,
     h,
-    round: isHypothesis ? HYPOTHESIS_METRICS.round : "12px",
+    round: node.node_type === "program" ? "24px" : isHypothesis ? HYPOTHESIS_METRICS.round : "12px",
     lines,
   };
 }
 
 function buildSizeCache() {
   const sizes = {};
-  for (const n of state.project.nodes) {
+  for (const n of projectTreeNodes(state.project.nodes)) {
     sizes[n.id] = computeNodeSize(n);
   }
   state.nodeSizes = sizes;
@@ -506,49 +506,6 @@ function researchQuestionNarrative(q) {
   return (q.answer || "").trim();
 }
 
-const rqBadgeTimers = new WeakMap();
-
-function clearRqBadgeTimers(wrap) {
-  const t = rqBadgeTimers.get(wrap);
-  if (!t) return;
-  if (t.hold) clearTimeout(t.hold);
-  if (t.fadeEnd) clearTimeout(t.fadeEnd);
-  rqBadgeTimers.delete(wrap);
-}
-
-function showResearchQuestionBadge(wrap, qBtn) {
-  clearRqBadgeTimers(wrap);
-  qBtn.classList.remove("is-fading", "is-hidden");
-  void qBtn.offsetWidth;
-  qBtn.classList.add("is-visible");
-}
-
-function scheduleResearchQuestionBadgeFade(wrap, qBtn) {
-  clearRqBadgeTimers(wrap);
-  const hold = setTimeout(() => {
-    qBtn.classList.remove("is-visible");
-    void qBtn.offsetWidth;
-    qBtn.classList.add("is-fading");
-    const fadeEnd = setTimeout(() => {
-      qBtn.classList.remove("is-fading");
-      qBtn.classList.add("is-hidden");
-      rqBadgeTimers.delete(wrap);
-    }, RQ_BADGE_FADE_MS);
-    rqBadgeTimers.set(wrap, { fadeEnd });
-  }, RQ_BADGE_HOLD_MS);
-  rqBadgeTimers.set(wrap, { hold });
-}
-
-function wireResearchQuestionBadge(wrap, qBtn) {
-  qBtn.classList.add("is-hidden");
-  wrap.addEventListener("mouseenter", () => showResearchQuestionBadge(wrap, qBtn));
-  wrap.addEventListener("mouseleave", () =>
-    scheduleResearchQuestionBadgeFade(wrap, qBtn)
-  );
-  qBtn.addEventListener("focus", () => showResearchQuestionBadge(wrap, qBtn));
-  qBtn.addEventListener("blur", () => scheduleResearchQuestionBadgeFade(wrap, qBtn));
-}
-
 function methodRegionKey(projectId, nodeId) {
   return `${projectId}:${nodeId}`;
 }
@@ -653,7 +610,8 @@ function syncKanbanProgressBar(el, s) {
 
 function activityContextForProject(project) {
   const pid = project?.id;
-  const authors = pid ? runningAuthorsByProject.get(pid) || {} : {};
+  const people = pid ? runningAuthorsByProject.get(pid) || {} : {};
+  const authors = Object.fromEntries(Object.entries(people).map(([id, names]) => [id, names.join(", ")]));
   const hubOwner = window.__HUB__?.meta?.owner_login || "";
   return {
     projectTitle: project?.title || pid || "",
@@ -733,7 +691,10 @@ async function ensureRunningAuthors(projectId, { force = false } = {}) {
     } else {
       const data = await KoiApi.getKanbanRunningActivity(projectId);
       authors = Object.fromEntries(
-        (data.items || []).map((item) => [item.card_id, item.author || "коллега"])
+        (data.items || []).map((item) => [
+          item.card_id,
+          Array.isArray(item.authors) ? item.authors : (item.author ? [item.author] : []),
+        ])
       );
     }
     runningAuthorsByProject.set(projectId, authors);
@@ -758,7 +719,6 @@ function applyRunningCardAuthorTitles(root, projectId) {
     state.lab?.projectsById?.[projectId] ||
     (state.project?.id === projectId ? state.project : null);
   if (!project) return;
-  const fallbackAuthor = window.__HUB__?.meta?.owner_login || "";
 
   const cardsById = new Map();
   for (const board of Object.values(project.boards || {})) {
@@ -770,7 +730,7 @@ function applyRunningCardAuthorTitles(root, projectId) {
     const cardId = el.dataset.cardId;
     const card = cardsById.get(cardId);
     if (!card || card.column_id !== "running") return;
-    const author = authors[cardId] || fallbackAuthor;
+    const author = (authors[cardId] || []).join(", ");
     if (!author) return;
     let task = card.title;
     const body = String(card.description || "").replace(/\\n/g, "\n");
@@ -826,12 +786,9 @@ function authorMapsForProject(project) {
   return maps;
 }
 
-function resolveRunningAuthor(project, cardId) {
-  for (const map of authorMapsForProject(project)) {
-    const who = String(map[cardId] || "").trim();
-    if (who) return who;
-  }
-  return String(window.__HUB__?.meta?.owner_login || "").trim();
+function resolveRunningAuthors(project, cardId) {
+  const authors = authorMapsForProject(project).flatMap((map) => map[cardId] || []);
+  return [...new Map(authors.filter(Boolean).map((name) => [name.toLowerCase(), name])).values()];
 }
 
 /**
@@ -849,10 +806,12 @@ function runningWorkersUnderNode(project, nodeId) {
     const board = getBoardForNode(project, node);
     for (const card of board?.cards || []) {
       if (card.column_id !== "running") continue;
-      const login = resolveRunningAuthor(project, card.id) || "коллега";
+      const authors = resolveRunningAuthors(project, card.id);
       const task = String(card.title || card.id).trim();
-      if (!byAuthor.has(login)) byAuthor.set(login, []);
-      if (task) byAuthor.get(login).push(task);
+      for (const login of authors.length ? authors : [""]) {
+        if (!byAuthor.has(login)) byAuthor.set(login, []);
+        if (task && !byAuthor.get(login).includes(task)) byAuthor.get(login).push(task);
+      }
     }
   }
 
@@ -867,8 +826,10 @@ function runningWorkersForCard(project, cardId) {
     if (card) break;
   }
   if (!card || card.column_id !== "running") return [];
-  const login = resolveRunningAuthor(project, cardId) || "коллега";
-  return [{ login, tasks: [String(card.title || cardId).trim()].filter(Boolean) }];
+  const authors = resolveRunningAuthors(project, cardId);
+  return (authors.length ? authors : [""]).map((login) => ({
+    login, tasks: [String(card.title || cardId).trim()].filter(Boolean),
+  }));
 }
 
 function ensureNodeWorkersPanel() {
@@ -891,21 +852,35 @@ function ensureNodeWorkersPanel() {
 function positionNodeWorkersPanel(anchor) {
   const panel = ensureNodeWorkersPanel();
   if (!anchor) return;
-  const rect = anchor.getBoundingClientRect();
-  const margin = 12;
-  const panelRect = panel.getBoundingClientRect();
-  let left = rect.right + margin;
-  let top = rect.top;
-  if (left + panelRect.width > window.innerWidth - margin) {
-    left = rect.left - panelRect.width - margin;
-  }
-  if (left < margin) left = margin;
-  if (top + panelRect.height > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - panelRect.height - margin);
-  }
-  if (top < margin) top = margin;
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
+  const node = anchor.querySelector(".map-node") || anchor;
+  const rect = node.getBoundingClientRect();
+  const viewport = anchor.closest(".mindmap-viewport")?.getBoundingClientRect();
+  const bounds = {
+    left: Math.max(8, (viewport?.left || 0) + 8),
+    top: Math.max(8, (viewport?.top || 0) + 8),
+    right: Math.min(innerWidth, viewport?.right ?? innerWidth) - 8,
+    bottom: Math.min(innerHeight, viewport?.bottom ?? innerHeight) - 8,
+  };
+  panel.style.width = `${Math.min(240, bounds.right - bounds.left)}px`;
+  panel.style.maxHeight = `${Math.min(240, Math.max(80, (bounds.bottom - bounds.top) / 3))}px`;
+  const { width, height } = panel.getBoundingClientRect();
+  const obstacles = [...document.querySelectorAll(".map-node, .mindmap-view-chrome")]
+    .map(el => ({ rect: el.getBoundingClientRect(), weight: el === node ? 20 : 1 }))
+    .filter(({rect: r}) => r.right > bounds.left && r.left < bounds.right && r.bottom > bounds.top && r.top < bounds.bottom);
+  const candidates = [
+    [rect.right + 10, rect.top], [rect.left - width - 10, rect.top],
+    [rect.left, rect.bottom + 10], [rect.left, rect.top - height - 10],
+  ].map(([x, y]) => {
+    const left = Math.max(bounds.left, Math.min(x, bounds.right - width));
+    const top = Math.max(bounds.top, Math.min(y, bounds.bottom - height));
+    const score = obstacles.reduce((sum, {rect: r, weight}) => sum + weight *
+      Math.max(0, Math.min(left + width, r.right) - Math.max(left, r.left)) *
+      Math.max(0, Math.min(top + height, r.bottom) - Math.max(top, r.top)), 0);
+    return { left, top, score };
+  });
+  const best = candidates.reduce((a, b) => a.score <= b.score ? a : b);
+  panel.style.left = `${best.left}px`;
+  panel.style.top = `${best.top}px`;
 }
 
 function githubAvatarUrl(login) {
@@ -937,7 +912,7 @@ function renderNodeWorkersPanel(workers, _scopeLabel) {
     `<ul class="node-workers-panel__list" role="list">` +
     workers
       .map((w) => {
-        const login = String(w.login || "коллега").trim() || "коллега";
+        const login = String(w.login || "").trim().replace(/^@/, "");
         const avatar = resolveWorkerAvatar(login);
         const initials = escapeHtml(workerInitials(login));
         const avatarHtml = avatar
@@ -946,7 +921,7 @@ function renderNodeWorkersPanel(workers, _scopeLabel) {
         return (
           `<li class="node-workers-panel__item">` +
           avatarHtml +
-          `<span class="node-workers-panel__nick">@${escapeHtml(login)}</span>` +
+          `<span class="node-workers-panel__nick">${login ? `@${escapeHtml(login)}` : "Автор не указан"}</span>` +
           `</li>`
         );
       })
@@ -1016,6 +991,10 @@ function wireNodeWorkersHover(wrap, project, node) {
 
   const show = () => {
     const reveal = () => {
+      if (document.querySelector(".node-action-menu:popover-open") || wrap.querySelector(".node-actions:hover")) {
+        hideNodeWorkersPanel(true);
+        return;
+      }
       const workers = runningWorkersUnderNode(project, node.id);
       if (!workers.length) {
         hideNodeWorkersPanel(true);
@@ -1187,11 +1166,12 @@ function syncLabActivityOverlay() {
   syncMethodActivityZoomMode(viewport, labCamera, showOverlay);
   if (showOverlay && overlayRebuilt && !isHubMode()) {
     const layer = document.getElementById("method-activity-overlay");
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const project = state.lab.projectsById[item.projectId];
-      if (!project || !layer) continue;
+      const pin = layer?.children[index];
+      if (!project || !pin) continue;
       const board = getBoardForNode(project, item.node);
-      bindMethodLiveInspect(layer, item.node, board, project);
+      bindMethodLiveInspect(pin, item.node, board, project);
     }
   }
 }
@@ -1691,8 +1671,10 @@ function halfH(node) {
 /** Y center for each tree level (top → bottom). */
 function buildDepthY(root) {
   const maxH = {};
+  const edgeGaps = {};
   function walk(n, d) {
     maxH[d] = Math.max(maxH[d] || 0, halfH(n));
+    edgeGaps[d] = Math.max(edgeGaps[d] || 0, edgeLabelHeight(n));
     (n.children || []).forEach((c) => walk(c, d + 1));
   }
   walk(root, 0);
@@ -1701,7 +1683,7 @@ function buildDepthY(root) {
   let cur = LAYOUT.topPad + (maxH[0] || 0);
   y[0] = cur;
   for (let d = 1; d <= maxDepth; d++) {
-    cur += maxH[d - 1] + LAYOUT.vGap + maxH[d];
+    cur += maxH[d - 1] + LAYOUT.vGap + (edgeGaps[d] || 0) + maxH[d];
     y[d] = cur;
   }
   return y;
@@ -1711,7 +1693,7 @@ function subtreeWidth(node) {
   const kids = node.children || [];
   const childrenWidth = kids.reduce((width, child) => width + subtreeWidth(child), 0)
     + Math.max(0, kids.length - 1) * LAYOUT.hGap;
-  return Math.max(nodeSize(node).w, childrenWidth);
+  return Math.max(nodeSize(node).w, edgeCaption(node) ? 200 : 0, childrenWidth);
 }
 
 /** Only research nodes participate in layout; editing controls stay attached. */
@@ -1743,7 +1725,7 @@ function collectDescendants(nodeId, nodes) {
 }
 
 function shiftSubtree(nodeId, dx, dy, positions) {
-  for (const id of collectDescendants(nodeId, state.project.nodes)) {
+  for (const id of collectDescendants(nodeId, projectTreeNodes(state.project.nodes))) {
     if (positions[id]) {
       positions[id].x += dx;
       positions[id].y += dy;
@@ -1753,9 +1735,9 @@ function shiftSubtree(nodeId, dx, dy, positions) {
 
 /** Children always below parent with a vertical gap. */
 function enforceVerticalOrder(positions) {
-  for (const n of state.project.nodes) {
+  for (const { node: n } of Object.values(positions)) {
     if (!n.parent_id || !isVisualNode(n)) continue;
-    const parent = state.project.nodes.find((p) => p.id === n.parent_id);
+    const parent = positions[n.parent_id]?.node;
     const pPos = positions[n.parent_id];
     const cPos = positions[n.id];
     if (!parent || !pPos || !cPos) continue;
@@ -1795,8 +1777,9 @@ function bboxesOverlap(a, b, margin = 14) {
 }
 
 function isParentChild(idA, idB) {
-  const a = state.project.nodes.find((n) => n.id === idA);
-  const b = state.project.nodes.find((n) => n.id === idB);
+  const nodes = projectTreeNodes(state.project.nodes);
+  const a = nodes.find((n) => n.id === idA);
+  const b = nodes.find((n) => n.id === idB);
   if (!a || !b) return false;
   return a.parent_id === idB || b.parent_id === idA;
 }
@@ -1837,8 +1820,9 @@ function scaleTreeToFit(positions, width, height) {
     maxY = -Infinity;
   for (const p of Object.values(positions)) {
     const b = bboxFromPos(p, p.node);
-    minX = Math.min(minX, b.left);
-    maxX = Math.max(maxX, b.right);
+    const labelHalfWidth = edgeCaption(p.node) ? 100 : 0;
+    minX = Math.min(minX, b.left, p.x - labelHalfWidth);
+    maxX = Math.max(maxX, b.right, p.x + labelHalfWidth);
     minY = Math.min(minY, b.top);
     maxY = Math.max(maxY, b.bottom);
   }
@@ -1885,59 +1869,29 @@ function boundaryPoint(fromX, fromY, toX, toY, size) {
 }
 
 function renderEdges(svg, positions, width, height) {
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("aria-label", "Связи дерева");
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-  svg.innerHTML = `
-    <defs>
-      <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#ff6bcb"/>
-        <stop offset="50%" stop-color="#7b5cff"/>
-        <stop offset="100%" stop-color="#3de8ff"/>
-      </linearGradient>
-      <filter id="edge-glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="2" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3de8ff"/>
-      </marker>
-    </defs>`;
-
-  const drawEdge = (from, to, fs, ts) => {
+  svg.innerHTML = treeEdgeDefs("focus-edge");
+  const drawEdge = (from, to, fs, ts, node) => {
     if (!from || !to) return;
-    const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
-    const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
-    const x1 = start.x;
-    const y1 = start.y;
-    const x2 = end.x;
-    const y2 = end.y;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist;
-    const curve = Math.min(LAYOUT.edgeCurve, dist * 0.08);
-    const mx = (x1 + x2) / 2 + (Math.abs(ux) > 0.5 ? curve * Math.sign(dx || 1) : 0);
-    const my = (y1 + y2) / 2;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-    path.setAttribute("class", "edge");
-    path.setAttribute("stroke", "url(#edge-grad)");
-    path.setAttribute("filter", "url(#edge-glow)");
-    path.setAttribute("marker-end", "url(#arrow)");
-    svg.appendChild(path);
+    appendTreeEdge(svg, {x: from.x, y: from.y + fs.h / 2 + kanbanBelowExtra(from.node)},
+      {x: to.x, y: to.y - ts.h / 2}, node, "focus-edge", openEdgeEditor);
   };
 
-  state.project.nodes.forEach((n) => {
+  Object.values(positions).forEach(({ node: n }) => {
     if (!n.parent_id || !isVisualNode(n)) return;
-    const parent = state.project.nodes.find((x) => x.id === n.parent_id);
+    const parent = positions[n.parent_id]?.node;
     if (!parent || !isVisualNode(parent)) return;
     drawEdge(
       positions[n.parent_id],
       positions[n.id],
       nodeSize(parent),
-      nodeSize(n)
+      nodeSize(n),
+      n
     );
   });
 
@@ -1977,8 +1931,9 @@ function positionsBBox(positions) {
   let maxY = -Infinity;
   for (const p of Object.values(positions)) {
     const b = bboxFromPos(p, p.node);
-    minX = Math.min(minX, b.left);
-    maxX = Math.max(maxX, b.right);
+    const labelHalfWidth = edgeCaption(p.node) ? 100 : 0;
+    minX = Math.min(minX, b.left, p.x - labelHalfWidth);
+    maxX = Math.max(maxX, b.right, p.x + labelHalfWidth);
     minY = Math.min(minY, b.top);
     maxY = Math.max(maxY, b.bottom);
   }
@@ -1991,7 +1946,7 @@ function positionsBBox(positions) {
 function computeProjectLayout(project) {
   return withProject(project, () => {
     buildSizeCache();
-    const trees = buildTree(project.nodes);
+    const trees = buildTree(projectTreeNodes(project.nodes));
     const root = trees[0];
     if (!root) return null;
     const yByDepth = buildDepthY(root);
@@ -2265,6 +2220,8 @@ function ensureLabCamera() {
 
   labCamera = new MindmapCamera(viewport, canvas, {
     onChange: () => {
+      if (nodeWorkersAnchor) positionNodeWorkersPanel(nodeWorkersAnchor);
+      document.querySelectorAll(".node-action-menu:popover-open").forEach(menu => menu.hidePopover());
       if (!attentionUpdateFrame) {
         attentionUpdateFrame = requestAnimationFrame(() => {
           attentionUpdateFrame = 0;
@@ -2330,6 +2287,57 @@ async function loadLab() {
   void preloadAllRunningAuthors();
 }
 
+function wireMapNodeTitle(el, node, open, activate = () => {}) {
+  const title = el.querySelector(".node-title");
+  let clickTimer;
+  let editing = false;
+  const finish = async (cancel = false, restoreFocus = false) => {
+    if (!editing) return;
+    editing = false;
+    const next = title.textContent.trim();
+    title.removeAttribute("contenteditable");
+    title.removeAttribute("role");
+    title.removeAttribute("aria-label");
+    title.textContent = displayTitle(node);
+    if (!cancel && next && next !== node.title) {
+      activate();
+      await patchNodeFields(node.id, { title: next });
+    }
+    if (restoreFocus && el.isConnected) el.focus();
+  };
+  el.addEventListener("click", event => {
+    event.stopPropagation();
+    clearTimeout(clickTimer);
+    if (!editing && event.detail < 2) {
+      if (event.detail === 0) open();
+      else clickTimer = setTimeout(open, 350);
+    }
+  });
+  el.addEventListener("dblclick", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    clearTimeout(clickTimer);
+    if (editing) return;
+    editing = true;
+    title.textContent = node.title;
+    title.contentEditable = "plaintext-only";
+    title.setAttribute("role", "textbox");
+    title.setAttribute("aria-label", "Имя узла");
+    title.focus();
+    const selection = window.getSelection();
+    selection.selectAllChildren(title);
+  });
+  title.addEventListener("keydown", event => {
+    if (!editing) return;
+    event.stopPropagation();
+    if (event.key === "Enter" || event.key === "Escape") {
+      event.preventDefault();
+      void finish(event.key === "Escape", true);
+    }
+  });
+  title.addEventListener("blur", () => void finish());
+}
+
 function mountMapNode(pos, layer, project, node, nodeSizes) {
   const savedSizes = state.nodeSizes;
   state.nodeSizes = nodeSizes;
@@ -2337,7 +2345,7 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
   const hasKanban = node.node_type === "method" && !!getBoardForNode(project, node);
   const el = document.createElement("button");
   el.type = "button";
-  const verdictBadge = node.node_type === "cause" ? VERDICT_BADGES[node.verdict] : null;
+  const verdictBadge = (node.source_node?.node_type || node.node_type) === "cause" ? VERDICT_BADGES[node.verdict] : null;
   el.className = `map-node ${node.node_type}${hasKanban ? " has-kanban clickable" : ""}${verdictBadge ? ` verdict-${node.verdict}` : ""}`;
   el.innerHTML = `
     <span class="node-label">${TYPE_LABELS[node.node_type]}</span>
@@ -2351,23 +2359,14 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
     }
   };
 
-  el.addEventListener("click", (e) => {
-    e.stopPropagation();
+  wireMapNodeTitle(el, node, () => {
     activateProject();
     if (hasKanban) openKanbanModal(node);
-    else openNodeModal(node);
-  });
-  el.addEventListener("dblclick", (e) => {
-    e.stopPropagation();
-    activateProject();
-    if (hasKanban) flyToMethodNode(project, node);
-    else openNodeModal(node);
-  });
+  }, activateProject);
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     activateProject();
     if (hasKanban) openKanbanModal(node);
-    else openNodeModal(node);
   });
 
   const wrap = document.createElement("div");
@@ -2388,34 +2387,6 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
   wrap.appendChild(el);
   layer.appendChild(wrap);
 
-  if (node.node_type === "method" && (node.research_questions?.length ?? 0) > 0) {
-    const counts = researchQuestionCounts(node);
-    const mapEl = wrap.firstElementChild;
-    const core = document.createElement("div");
-    core.className = "node-core has-method-questions";
-    wrap.classList.add("has-research-questions");
-    wrap.insertBefore(core, mapEl);
-    core.appendChild(mapEl);
-    const qBtn = document.createElement("button");
-    qBtn.type = "button";
-    qBtn.className = "method-questions-trigger";
-    qBtn.setAttribute(
-      "aria-label",
-      `Выводы: ${counts.definite} с чётким ответом, ${counts.tentative} предварительных`
-    );
-    qBtn.title = "Выводы по экспериментам";
-    qBtn.innerHTML = `<span class="rq-badge-q">?</span><span class="rq-badge-def">${counts.definite}</span><span class="rq-badge-sep">|</span><span class="rq-badge-tent">${counts.tentative}</span>`;
-    qBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      activateProject();
-      openMethodQuestionsModal(node);
-    });
-    qBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-    core.appendChild(qBtn);
-    wireResearchQuestionBadge(wrap, qBtn);
-  }
-
   mountNodeActions(wrap, project, node, activateProject, size.w);
   if (hasKanban) {
     appendKanbanBelow(wrap, node, project);
@@ -2427,39 +2398,23 @@ function mountMapNode(pos, layer, project, node, nodeSizes) {
 }
 
 function renderLabEdges(svg, placements, worldW, worldH) {
+  svg.removeAttribute("aria-hidden");
+  svg.setAttribute("aria-label", "Связи дерева");
   svg.setAttribute("width", String(worldW));
   svg.setAttribute("height", String(worldH));
   svg.setAttribute("viewBox", `0 0 ${worldW} ${worldH}`);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   svg.style.width = `${worldW}px`;
   svg.style.height = `${worldH}px`;
-  svg.innerHTML = `
-    <defs>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
-      </marker>
-    </defs>`;
-
-  const drawEdge = (group, from, to, fs, ts) => {
+  svg.innerHTML = treeEdgeDefs("lab-edge");
+  const drawEdge = (group, from, to, fs, ts, node, project) => {
     if (!from || !to) return;
-    const start = boundaryPoint(from.x, from.y, to.x, to.y, fs);
-    const end = boundaryPoint(to.x, to.y, from.x, from.y, ts);
-    const x1 = start.x;
-    const y1 = start.y;
-    const x2 = end.x;
-    const y2 = end.y;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist;
-    const curve = Math.min(LAYOUT.edgeCurve, dist * 0.08);
-    const mx = (x1 + x2) / 2 + (Math.abs(ux) > 0.5 ? curve * Math.sign(dx || 1) : 0);
-    const my = (y1 + y2) / 2;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-    path.setAttribute("class", "edge");
-    path.setAttribute("marker-end", "url(#arrow)");
-    group.appendChild(path);
+    appendTreeEdge(group, {x: from.x, y: from.y + fs.h / 2 + kanbanBelowExtra(from.node)},
+      {x: to.x, y: to.y - ts.h / 2}, node, "lab-edge", (n, label) => {
+        state.project = project;
+        setActiveProjectInList(project.id);
+        openEdgeEditor(n, label);
+      });
   };
 
   for (const placement of placements) {
@@ -2474,16 +2429,18 @@ function renderLabEdges(svg, placements, worldW, worldH) {
     state.nodeSizes = placement.nodeSizes || {};
     try {
       const { positions } = placement;
-      placement.project.nodes.forEach((n) => {
+      Object.values(positions).forEach(({ node: n }) => {
         if (!n.parent_id || !isVisualNode(n)) return;
-        const parent = placement.project.nodes.find((x) => x.id === n.parent_id);
+        const parent = positions[n.parent_id]?.node;
         if (!parent || !isVisualNode(parent)) return;
         drawEdge(
           group,
           positions[n.parent_id],
           positions[n.id],
           nodeSize(parent),
-          nodeSize(n)
+          nodeSize(n),
+          n,
+          placement.project
         );
       });
     } finally {
@@ -2563,7 +2520,7 @@ function renderLabMindmap(options = {}) {
     nodeGroup.style.height = `${worldH}px`;
     nodeGroup.style.transformOrigin = `${region.x + region.width / 2}px ${region.y + region.height / 2}px`;
     layer.appendChild(nodeGroup);
-    project.nodes.forEach((n) => {
+    Object.values(positions).forEach(({ node: n }) => {
       if (!isVisualNode(n)) return;
       const pos = positions[n.id];
       if (!pos) return;
@@ -2806,7 +2763,7 @@ function renderMindmap(options = {}) {
     return;
   }
 
-  const trees = buildTree(state.project.nodes);
+  const trees = buildTree(projectTreeNodes(state.project.nodes));
   const root = trees[0];
   if (!root) {
     setStatus("В проекте нет корневого узла (problem)", true);
@@ -2861,7 +2818,7 @@ function renderMindmap(options = {}) {
     svg.setAttribute("height", String(h));
   }
 
-  state.project.nodes.forEach((n) => {
+  Object.values(positions).forEach(({ node: n }) => {
     if (!isVisualNode(n)) return;
     const pos = positions[n.id];
     if (!pos) return;
@@ -2870,54 +2827,20 @@ function renderMindmap(options = {}) {
     const el = document.createElement("button");
     el.type = "button";
     const verdictBadge =
-      n.node_type === "cause" ? VERDICT_BADGES[n.verdict] : null;
+      (n.source_node?.node_type || n.node_type) === "cause" ? VERDICT_BADGES[n.verdict] : null;
     el.className = `map-node ${n.node_type}${hasKanban ? " has-kanban clickable" : ""}${verdictBadge ? ` verdict-${n.verdict}` : ""}`;
     el.innerHTML = `
       <span class="node-label">${TYPE_LABELS[n.node_type]}</span>
       <span class="node-title">${escapeHtml(displayTitle(n))}</span>
       ${verdictBadge ? `<span class="node-verdict node-verdict--${n.verdict}" title="${verdictBadge.label}">${verdictBadge.mark}</span>` : ""}`;
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
+    wireMapNodeTitle(el, n, () => {
       if (hasKanban) openKanbanModal(n);
-      else openNodeModal(n);
-    });
-    el.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      if (!hasKanban) openNodeModal(n);
     });
     el.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       if (hasKanban) openKanbanModal(n);
-      else openNodeModal(n);
     });
     const wrap = mountNode(pos, el, size, hasKanban, n.id);
-    if (n.node_type === "method" && hasResearchQuestions(n)) {
-      const counts = researchQuestionCounts(n);
-      const mapEl = wrap.firstElementChild;
-      const core = document.createElement("div");
-      core.className = "node-core has-method-questions";
-      wrap.classList.add("has-research-questions");
-      wrap.insertBefore(core, mapEl);
-      core.appendChild(mapEl);
-
-      const qBtn = document.createElement("button");
-      qBtn.type = "button";
-      qBtn.className = "method-questions-trigger";
-      qBtn.setAttribute(
-        "aria-label",
-        `Выводы: ${counts.definite} с чётким ответом, ${counts.tentative} предварительных`
-      );
-      qBtn.title = "Выводы по экспериментам";
-      qBtn.innerHTML = `<span class="rq-badge-q">?</span><span class="rq-badge-def">${counts.definite}</span><span class="rq-badge-sep">|</span><span class="rq-badge-tent">${counts.tentative}</span>`;
-      qBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        openMethodQuestionsModal(n);
-      });
-      qBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-      core.appendChild(qBtn);
-      wireResearchQuestionBadge(wrap, qBtn);
-    }
     mountNodeActions(wrap, state.project, n, () => {}, size.w);
     if (hasKanban) appendKanbanBelow(wrap, n);
     mountNodePageIcons(wrap, state.project, n);
@@ -3569,16 +3492,79 @@ async function refreshReportFilenameIfOpen(cardId) {
 }
 
 const FALLBACK_ALLOWED_CHILDREN = {
-  problem: ["cause"],
+  topic: ["problem", "direction", "program"],
+  direction: ["method", "program"],
+  program: ["program", "method"],
+  problem: ["method", "program", "cause"],
   cause: ["cause_evidence", "remediation"],
   cause_evidence: ["method"],
   remediation: ["method"],
   method: [],
 };
 
+function configureEdgeFields(form, parent, childType, node = null) {
+  const select = form.elements.edge_type;
+  const label = form.elements.edge_label;
+  const isProblem = parent?.node_type === "problem" && ["method", "program"].includes(childType);
+  const types = isProblem ? ["hypothesis", "evidence"] : ["direction"];
+  select.replaceChildren(...types.map(type => new Option(EDGE_LABELS[type], type)));
+  if (node && types.includes(node.edge_type)) select.value = node.edge_type;
+  if (node) label.value = node.edge_label || "";
+  const update = () => {
+    label.required = select.value === "hypothesis";
+    label.placeholder = label.required ? "Какое предположение проверяем?" : "Необязательно";
+  };
+  select.onchange = update;
+  update();
+}
+
+function openEdgeEditor(node, anchor) {
+  if (isHubMode() || !anchor) return;
+  const comment = anchor.querySelector(".tree-edge-comment");
+  if (!comment || comment.isContentEditable) return;
+  const target = node.edge_source || node;
+  const projectId = nodeWriteProjectId(target);
+  const previous = node.edge_source ? target.title : (node.edge_label || "");
+  const caption = comment.textContent;
+  comment.textContent = previous;
+  comment.contentEditable = "plaintext-only";
+  comment.setAttribute("role", "textbox");
+  comment.setAttribute("aria-label", "Комментарий связи");
+  let editing = true;
+  const finish = async (cancel = false) => {
+    if (!editing) return;
+    editing = false;
+    const next = comment.textContent.trim();
+    comment.removeAttribute("contenteditable");
+    comment.removeAttribute("role");
+    comment.removeAttribute("aria-label");
+    comment.onblur = null;
+    comment.onkeydown = null;
+    comment.textContent = caption;
+    if (cancel || next === previous) return;
+    try {
+      await KoiApi.patchNode(projectId, target.id, node.edge_source ? { title: next } : { edge_label: next });
+      state.project = await reloadProjectView();
+      syncLabProject(state.project);
+      renderMindmap({ preserveCamera: true });
+    } catch (error) { setStatus(error.message, true); }
+  };
+  comment.onblur = () => void finish();
+  comment.onkeydown = event => {
+    event.stopPropagation();
+    if (event.key === "Enter" || event.key === "Escape") {
+      event.preventDefault();
+      void finish(event.key === "Escape");
+      anchor.querySelector("button").focus({ preventScroll: true });
+    }
+  };
+  comment.focus({ preventScroll: true });
+  window.getSelection().selectAllChildren(comment);
+}
+
 function allowedChildTypes(parentType) {
   const fromMeta = state.meta?.allowed_children?.[parentType];
-  const list = (fromMeta?.length ? fromMeta : FALLBACK_ALLOWED_CHILDREN[parentType]) || [];
+  const list = (Array.isArray(fromMeta) ? fromMeta : FALLBACK_ALLOWED_CHILDREN[parentType]) || [];
   return list.filter((t) => t !== "experiment");
 }
 
@@ -3592,6 +3578,9 @@ function fillAddChildTypeSelect(parent) {
   const formatHint = document.getElementById("add-child-format-hint");
   const titleInput = document.querySelector("#add-child-form input[name=title]");
   const defaults = {
+    problem: "Название проблемы",
+    direction: "Название направления",
+    program: "Название инженерного решения",
     cause: "Причина: …",
     cause_evidence: "Доказательство: …",
     remediation: "Устранение: …",
@@ -3614,6 +3603,7 @@ function fillAddChildTypeSelect(parent) {
 
   const updateHints = () => {
     const nodeType = typeSelect.value || allowed[0];
+    configureEdgeFields(document.getElementById("add-child-form"), parent, nodeType);
     if (parentIntro) {
       parentIntro.textContent = formatAddParentIntro(parent.node_type, allowed, labels);
     }
@@ -3897,6 +3887,20 @@ function initKanbanModalChrome() {
 }
 
 function fillNodeEdit(node) {
+  const rootLabel = document.getElementById("node-root-type-label");
+  const rootSelect = document.getElementById("node-root-type");
+  rootLabel.classList.toggle("hidden", !!node.parent_id || isHubMode());
+  rootSelect.value = node.node_type;
+  rootSelect.onchange = async () => {
+    rootSelect.disabled = true;
+    try {
+      const updated = await patchNodeFields(node.id, { root_type: rootSelect.value });
+      if (updated) {
+        document.getElementById("node-modal-type").textContent = TYPE_LABELS[updated.node_type];
+        fillNodeEdit(updated);
+      } else rootSelect.value = node.node_type;
+    } finally { rootSelect.disabled = false; }
+  };
   renderInlineDisplay(
     document.getElementById("node-title-display"),
     node.title,
@@ -4274,13 +4278,7 @@ function openAddChildModal(parent) {
   document.getElementById("add-child-block").classList.remove("hidden");
   document.getElementById("node-modal-type").textContent =
     TYPE_LABELS[parent.node_type];
-  const pt = parent.node_type;
-  document.getElementById("node-modal-title").textContent =
-    pt === "problem"
-      ? "Добавить причину"
-      : pt === "cause"
-        ? "Добавить доказательство или гипотезу"
-        : "Добавить метод";
+  document.getElementById("node-modal-title").textContent = "Добавить узел";
   fillAddChildTypeSelect(parent);
   document.querySelector("#add-child-form").reset();
   fillAddChildTypeSelect(parent);
@@ -4288,6 +4286,19 @@ function openAddChildModal(parent) {
 }
 
 function openNodeModal(node) {
+  node = node.source_node || node;
+  const context = document.getElementById("node-source-context");
+  context.replaceChildren();
+  const related = state.project.nodes.filter(item => item.node_type === "cause"
+    && (item.id === node.parent_id || item.parent_id === node.id));
+  for (const source of related) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn";
+    button.textContent = `Исходная причина: ${source.title}`;
+    button.addEventListener("click", () => openNodeModal(source));
+    context.append(button);
+  }
   hideModal("kanban-modal");
   state.activeNodeId = node.id;
   document.getElementById("node-edit-block").classList.remove("hidden");
@@ -4297,11 +4308,11 @@ function openNodeModal(node) {
   fillNodeEdit(node);
 
   const delBtn = document.getElementById("btn-delete-node");
-  delBtn.classList.toggle("hidden", node.node_type === "problem");
+  delBtn.classList.toggle("hidden", !node.parent_id);
 
   const addMethodBtn = document.getElementById("btn-add-method");
-  const canAddMethod =
-    node.node_type === "cause_evidence" || node.node_type === "remediation";
+  const canAddMethod = canShowAddButton(node);
+  addMethodBtn.textContent = "+ Добавить узел";
   addMethodBtn.classList.toggle("hidden", !canAddMethod);
   addMethodBtn.onclick = () => openAddChildModal(node);
 
@@ -4338,6 +4349,8 @@ async function onAddChildSubmit(e) {
     await KoiApi.addNode(nodeWriteProjectId(parent), {
       parent_id: parentId,
       node_type: nodeType,
+      edge_type: fd.get("edge_type") || "direction",
+      edge_label: fd.get("edge_label")?.toString().trim() || "",
       title,
       description: "",
     });
@@ -4355,7 +4368,7 @@ async function onAddChildSubmit(e) {
 
 async function onDeleteNode() {
   const node = state.project.nodes.find((n) => n.id === state.activeNodeId);
-  if (!node || node.node_type === "problem") return;
+  if (!node || !node.parent_id) return;
   await requestDeleteNode(node);
 }
 
@@ -4438,7 +4451,7 @@ function syncDeleteNodeConfirmInput() {
 }
 
 async function requestDeleteNode(node) {
-  if (!node || node.node_type === "problem" || isHubMode()) return;
+  if (!node || !node.parent_id || isHubMode()) return;
   const ok = await askDeleteNodeConfirm(node);
   if (!ok) return;
   setStatus("Удаление…");
@@ -4458,7 +4471,7 @@ async function requestDeleteNode(node) {
 }
 
 function appendNodeDeleteButton(wrap, project, node, mount = (button) => wrap.appendChild(button)) {
-  if (!wrap || !node || node.node_type === "problem" || isHubMode()) return;
+  if (!wrap || !node || !node.parent_id || isHubMode()) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "node-delete";
@@ -4483,23 +4496,99 @@ function appendNodeDeleteButton(wrap, project, node, mount = (button) => wrap.ap
 }
 
 function mountNodeActions(wrap, project, node, activateProject, width) {
+  const visualType = node.node_type;
+  node = node.source_node || node;
+  const allowed = isHubMode() ? [] : allowedChildTypes(node.node_type);
   const actions = document.createElement("div");
   actions.className = "node-actions";
-  actions.style.setProperty("--node-action-parent-width", `${width}px`);
-  const mount = (button) => actions.appendChild(button);
-  if (shouldShowAddSlot(node)) {
-    mountAddNodeButton({
-      parent: node,
-      labels: state.meta?.labels || TYPE_LABELS,
-      allowedTypes: allowedChildTypes(node.node_type),
-      readOnly: isHubMode(),
-      onOpen: (parent) => { activateProject(); openAddChildModal(parent); },
-      mount,
+  actions.dataset.nodeType = visualType;
+  actions.style.top = wrap.querySelector(".map-node").style.height;
+  actions.style.left = `calc(50% - ${width / 2}px)`;
+  actions.addEventListener("mouseenter", () => hideNodeWorkersPanel(true));
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "node-actions-trigger";
+  trigger.innerHTML = allowed.length
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>';
+  trigger.title = "Действия с узлом";
+  trigger.setAttribute("aria-label", `Действия с узлом «${displayTitle(node)}»`);
+  trigger.setAttribute("aria-expanded", "false");
+  const menu = document.createElement("div");
+  menu.className = "node-action-menu";
+  menu.popover = "auto";
+  menu.id = `node-actions-${project.id}-${node.id}`;
+  menu.setAttribute("role", "group");
+  trigger.setAttribute("aria-controls", menu.id);
+  menu.setAttribute("aria-label", "Действия с узлом");
+  const mount = button => {
+    button.addEventListener("click", () => {
+      menu.hidePopover();
+      trigger.focus({ preventScroll: true });
+    }, { capture: true });
+    menu.appendChild(button);
+  };
+  for (const type of allowed) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `Добавить: ${TYPE_LABELS[type] || type}`;
+    button.dataset.nodeType = type;
+    button.addEventListener("click", () => {
+      activateProject();
+      openAddChildModal(node);
+      const select = document.querySelector("#add-child-form select");
+      select.value = type;
+      select.dispatchEvent(new Event("change"));
+      document.querySelector('#add-child-form input[name="title"]').focus();
     });
+    mount(button);
   }
-  mountNodeTypeHelp(wrap, node.node_type, mount);
-  appendNodeDeleteButton(wrap, project, node, mount);
-  if (!actions.children.length) return;
+  if (allowed.length) {
+    const divider = document.createElement("div");
+    divider.className = "node-action-menu-divider";
+    divider.setAttribute("role", "separator");
+    menu.appendChild(divider);
+  }
+  mountNodeTypeHelp(wrap, node.node_type, button => {
+    button.textContent = "О типе узла";
+    mount(button);
+  });
+  appendNodeDeleteButton(wrap, project, node, button => {
+    button.textContent = "Удалить узел";
+    mount(button);
+  });
+  trigger.addEventListener("click", event => {
+    event.stopPropagation();
+    if (menu.matches(":popover-open")) { menu.hidePopover(); return; }
+    hideNodeWorkersPanel(true);
+    menu.showPopover();
+    const anchor = trigger.getBoundingClientRect();
+    const rect = menu.getBoundingClientRect();
+    const canvasLeft = document.getElementById("mindmap-viewport").getBoundingClientRect().left;
+    const left = anchor.left - rect.width - 6 >= canvasLeft ? anchor.left - rect.width - 6 : anchor.right + 6;
+    menu.style.left = `${Math.max(8, Math.min(left, innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(anchor.top, innerHeight - rect.height - 8))}px`;
+    menu.querySelector("button")?.focus({ preventScroll: true });
+  });
+  menu.addEventListener("toggle", event => trigger.setAttribute("aria-expanded", String(event.newState === "open")));
+  menu.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      menu.hidePopover();
+      trigger.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = [...menu.querySelectorAll("button")];
+    const index = buttons.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus({ preventScroll: true });
+  });
+  actions.addEventListener("pointerdown", event => event.stopPropagation());
+  actions.addEventListener("mousedown", event => event.stopPropagation());
+  actions.append(trigger, menu);
   wrap.appendChild(actions);
 }
 
@@ -5063,6 +5152,17 @@ function openKanbanModal(node) {
     if (popup.matches(":popover-open")) popup.hidePopover();
   }
   state.kanbanNodeId = node.id;
+  let questions = document.getElementById("kanban-questions");
+  if (!questions) {
+    questions = document.createElement("button");
+    questions.id = "kanban-questions";
+    questions.type = "button";
+    questions.className = "btn btn-small";
+    questions.textContent = "Выводы по экспериментам";
+    document.querySelector(".kanban-modal-actions").prepend(questions);
+  }
+  questions.hidden = !hasResearchQuestions(node);
+  questions.onclick = () => openMethodQuestionsModal(node);
   const board = getBoardForNode(state.project, node);
   if (!board) return;
 
@@ -6608,6 +6708,7 @@ const LAB_HIDDEN_TREES_KEY = "koi-lab-hidden-trees";
 const ARCHIVED_TREES_KEY = "koi-archived-trees";
 const VIEW_MODE_KEY = "koi-view-mode";
 let projectsArchiveOpen = false;
+let settingsGrouped = null;
 let archivedTreeIds = null;
 let archivedTreesReady = null;
 let archiveSavePending = false;
@@ -7501,25 +7602,14 @@ async function submitCreateProjectForm(event) {
 
   const submitBtn = document.getElementById("create-project-submit");
   if (submitBtn) submitBtn.disabled = true;
-  setStatus("Создание проекта…");
+  setStatus("Открываем интервью…");
   try {
-    const p = await KoiApi.createProject({
-      title,
-      description,
-      tag,
-      programId,
-      programTitle,
-    });
     hideModal("create-project-modal");
-    projectsArchiveOpen = false;
-    if (state.lab) {
-      state.lab.projectsById[p.id] = p;
-      state.lab.grouped = await KoiApi.listProjectsGrouped();
-    }
-    await loadProjectList(p.id);
-    await switchProject(p.id);
-    setProjectsSidebarOpen(true);
-    setStatus("Проект создан");
+    await openLocalTreeInterview({
+      title, description, tag, programId, programTitle,
+      onBack: () => showModal("create-project-modal"),
+    });
+    setStatus("Настройка дерева исследования");
   } catch (err) {
     if (errorEl) {
       errorEl.textContent = err.message || "Не удалось создать проект";
@@ -9033,12 +9123,14 @@ async function refreshProjectDiscovery() {
   try {
     const data = await KoiApi.getProjectDiscovery(projectDiscoveryRevision);
     if (!data?.ok) return;
-    projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
     const changes = data.changes || {};
     const added = changes.added || [];
     const removed = changes.removed || [];
     const changed = changes.changed || [];
-    if (!added.length && !removed.length && !changed.length) return;
+    if (!added.length && !removed.length && !changed.length) {
+      projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
+      return;
+    }
 
     const currentId = state.project?.id;
     await loadLab();
@@ -9052,13 +9144,10 @@ async function refreshProjectDiscovery() {
       await loadProjectList();
     }
 
-    if (added.length || removed.length) {
-      renderLabMindmap({ fitLab: getViewMode() === "chief" });
-    } else {
-      for (const item of changed) {
-        refreshKanbanActivityForProject(item.id);
-      }
-    }
+    renderLabMindmap({
+      fitLab: (added.length > 0 || removed.length > 0) && getViewMode() === "chief",
+    });
+    projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
 
     for (const item of added) {
       const title = (item.title || item.id || "проект").trim();
@@ -9217,11 +9306,7 @@ function initUnifiedNavigation() {
   manage.className = "conversation-icon-button research-manage";
   manage.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>'; manage.title = "Управление деревьями"; manage.setAttribute("aria-label", "Управление деревьями");
   manage.setAttribute("aria-pressed", "false");
-  manage.onclick = () => {
-    const show = !workspace.classList.contains("is-managing-trees"); openList();
-    workspace.classList.toggle("is-managing-trees", show); manage.setAttribute("aria-pressed", String(show));
-    renderUnifiedNavigation();
-  };
+  manage.onclick = () => document.getElementById("btn-app-variant").click();
   layout.querySelector(".conversation-rail").insertBefore(manage, themeToggle);
   if (researchChatNavigation.quick) document.getElementById('btn-app-variant').replaceChildren(manage.firstElementChild.cloneNode(true));
   const chatHeader = panel.querySelector(".agent-chat-header");
@@ -12698,6 +12783,18 @@ async function init() {
     if (paperState.texDirty && !(await savePaperTex())) throw new Error("Сохраните статью и повторите попытку.");
     if (document.querySelector('.modal:not(.hidden)')) throw new Error("Закройте открытое окно и повторите попытку.");
     preserveVariantDrafts({ main: mainConversations, card: cardConversations });
+  }, {
+    refresh: async () => {
+      await restoreArchivedTrees();
+      settingsGrouped = await KoiApi.listProjectsGrouped();
+    },
+    groups: () => sidebarGroups(settingsGrouped).map(group => ({
+      title: group.title || "Без программы",
+      trees: programLayoutItems(group, hiddenCompositeMemberIds({groups: [group]})).map(tree => ({
+        ...tree, archived: isTreeArchived(tree.id),
+      })),
+    })),
+    archive: setTreeArchived,
   });
   initImageLightbox();
   if (!hubMode) void initWidgets({ api: KoiApi, skip: false });

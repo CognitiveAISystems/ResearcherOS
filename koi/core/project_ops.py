@@ -8,6 +8,7 @@ from uuid import uuid4
 from koi.core.models import (
     ALLOWED_CHILDREN,
     DEFAULT_KANBAN_COLUMNS,
+    EdgeType,
     KANBAN_OWNER_TYPES,
     KanbanBoard,
     MethodResearchQuestion,
@@ -40,6 +41,8 @@ def add_node(
     node_type: NodeType,
     title: str,
     description: str = "",
+    edge_type: EdgeType = EdgeType.DIRECTION,
+    edge_label: str = "",
 ) -> Node:
     parent = next((node for node in project.nodes if node.id == parent_id), None)
     if parent is None:
@@ -47,6 +50,7 @@ def add_node(
     allowed = ALLOWED_CHILDREN.get(parent.node_type, [])
     if node_type not in allowed:
         raise ValueError(f"Cannot add {node_type} under {parent.node_type}")
+    validate_edge(parent, node_type, edge_type, edge_label)
 
     node = Node(
         id=f"n-{uuid4().hex[:8]}",
@@ -55,11 +59,23 @@ def add_node(
         node_type=node_type,
         title=title,
         description=description,
+        edge_type=edge_type,
+        edge_label=edge_label.strip(),
     )
     project.nodes.append(node)
     if node_type in KANBAN_OWNER_TYPES:
         _ensure_board(project, node.id)
     return node
+
+
+def validate_edge(parent: Node, node_type: NodeType, edge_type: EdgeType, label: str) -> None:
+    if parent.node_type == NodeType.PROBLEM and node_type in (NodeType.METHOD, NodeType.PROGRAM):
+        if edge_type not in (EdgeType.HYPOTHESIS, EdgeType.EVIDENCE):
+            raise ValueError("Cannot add an implementation under a problem without a hypothesis or evidence edge")
+    elif edge_type != EdgeType.DIRECTION:
+        raise ValueError("Hypothesis and evidence edges must start at a problem")
+    if edge_type == EdgeType.HYPOTHESIS and not label.strip():
+        raise ValueError("Write the hypothesis on the edge")
 
 
 def _validate_research_questions(
@@ -104,11 +120,34 @@ def update_node(
     title: Optional[str] = None,
     description: Optional[str] = None,
     research_questions: Optional[list[MethodResearchQuestion]] = None,
+    root_type: Optional[NodeType] = None,
+    edge_type: Optional[EdgeType] = None,
+    edge_label: Optional[str] = None,
 ) -> Node:
     node = next(node for node in project.nodes if node.id == node_id)
+    if root_type is not None:
+        if node.parent_id is not None or root_type not in ALLOWED_CHILDREN[None]:
+            raise ValueError("Only a root can change its starting type")
+        candidate = node.model_copy(update={"node_type": root_type})
+        for child in project.nodes:
+            if child.parent_id != node.id:
+                continue
+            if child.node_type not in ALLOWED_CHILDREN[root_type]:
+                raise ValueError("Existing children are incompatible with this root type")
+            validate_edge(candidate, child.node_type, child.edge_type, child.edge_label)
+    if edge_type is not None or edge_label is not None:
+        parent = next((item for item in project.nodes if item.id == node.parent_id), None)
+        if parent is None:
+            raise ValueError("Root nodes do not have an incoming edge")
+        kind = edge_type if edge_type is not None else node.edge_type
+        label = edge_label if edge_label is not None else node.edge_label
+        validate_edge(parent, node.node_type, kind, label)
+        node.edge_type, node.edge_label = kind, label.strip()
+    if root_type is not None:
+        node.node_type = root_type
     if title is not None:
         node.title = title
-        if node.node_type == NodeType.PROBLEM:
+        if node.parent_id is None:
             project.title = title
     if description is not None:
         node.description = description
@@ -123,8 +162,8 @@ def update_node(
 
 def delete_node(project: Project, node_id: str) -> None:
     node = next(item for item in project.nodes if item.id == node_id)
-    if node.node_type == NodeType.PROBLEM:
-        raise ValueError("Cannot delete problem node")
+    if node.parent_id is None:
+        raise ValueError("Cannot delete root node")
 
     to_remove = {node_id}
 

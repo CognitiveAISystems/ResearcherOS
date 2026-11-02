@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Plugins HITL Budget"
+  short_description: "Applies Arbor plugins, HITL, and budgets"
+  default_prompt: "Use $arbor-agent-plugins-hitl-budget to apply Arbor plugins, HITL gates, and budgets."

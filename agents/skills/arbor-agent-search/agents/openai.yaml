@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arbor Search Context"
+  short_description: "Adds related-work context to Arbor nodes"
+  default_prompt: "Use $arbor-agent-search to attach related-work context to validated Arbor nodes."

@@ -5,7 +5,7 @@ const HINT_ROTATE_MS = 2400;
 
 export const KOI_LOADER_POOLS = {
   literature: [
-    "Подключаюсь к Literature Inbox…",
+    "Подготавливаем материалы…",
     "Ищу статьи по ключевым словам проекта…",
     "Листаю arXiv…",
     "Скачиваю PDF…",
@@ -17,7 +17,7 @@ export const KOI_LOADER_POOLS = {
     "Сверяю с контекстом проекта…",
   ],
   related: [
-    "Подключаюсь к Literature Inbox…",
+    "Подготавливаем материалы…",
     "Читаю выбранные кластеры…",
     "Сопоставляю с гипотезами проекта…",
     "Ищу пробелы в related work…",

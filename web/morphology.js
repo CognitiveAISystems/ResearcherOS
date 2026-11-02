@@ -1,9 +1,9 @@
-import { KoiApi } from "./api.js?v=20260928b";
+import { KoiApi } from "./api.js?v=20261102-explanation-card";
 import { renderMarkdown } from "./markdown.js";
 import { initPresentation } from "./morphology-presentation.js?v=20260821h";
 import { initFormulaLessons } from "./morphology-formula.js?v=20260821h";
 
-const THEME_STORAGE_KEY = "koi-theme";
+const THEME_STORAGE_KEY = "koi-literature-theme";
 const MORPH_HANDOFF_KEY = "koi-morph-paper";
 const POLL_MS = 4000;
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -276,7 +276,10 @@ function renderRuns() {
       const ready = row.status === "ready";
       const when = String(row.created_at || "").replace("T", " ").replace("Z", "");
       const title = showAll ? shortText(row.paper_title, 60) : when;
-      const sub = showAll ? when : ready ? "готово" : "ждёт агента";
+      const sub = showAll ? when : ready ? "готово"
+        : currentRun?.run_id === row.run_id && currentRun?.agent_finished ? "разбор не завершён"
+        : currentRun?.run_id === row.run_id && currentRun?.conversation_id ? "в работе"
+        : "ждёт агента";
       return `
         <div class="morph-run-item${active}">
           <button type="button" class="morph-run-row" data-run-id="${escapeHtml(row.run_id)}">
@@ -344,6 +347,11 @@ async function openRun(runId) {
     renderPaperCard();
   }
   renderRun();
+  renderProcessArtifacts(currentRun);
+  switchTab(currentRun?.status === "ready" ? "report" : "process");
+  if (currentRun?.conversation_id) {
+    void refreshProcess(currentRun).catch(err => setStatus(`Не удалось обновить процесс: ${err.message}`, "warn"));
+  }
   void loadArticle(runId);
   if (currentRun?.status !== "ready") startPolling(runId);
 }
@@ -507,16 +515,25 @@ async function stageRun() {
     setStatus("Нет данных статьи — вернитесь в RelatedWork и нажмите морф ещё раз.", "error");
     return;
   }
-  setStatus("Готовлю промпт…");
+  const button = document.getElementById("morph-run");
+  if (button.disabled) return;
+  button.disabled = true;
+  setStatus("Запускаем разбор статьи…");
   let staged;
   try {
-    staged = await KoiApi.stagePaperMorphology(projectId, paper);
+    staged = await KoiApi.launchPaperMorphology(projectId, paper, document.getElementById("morph-cli-agent").value || null);
   } catch (err) {
-    setStatus(err.message, "error");
+    button.disabled = false;
+    setStatus(`Не удалось запустить разбор: ${err.message}. Попробуйте ещё раз.`, "error");
     return;
   }
   currentRun = { ...staged, status: "staged" };
-  await copyPrompt(staged.cursor_message || staged.prompt || "");
+  document.getElementById("morph-process-events").replaceChildren();
+  document.getElementById("morph-process-message").replaceChildren();
+  delete document.getElementById("morph-process-message").dataset.text;
+  renderProcessArtifacts(currentRun);
+  switchTab("process");
+  setStatus("Агент разбирает статью. Результат появится здесь автоматически.");
   renderRun();
   await loadRuns();
   startPolling(staged.run_id);
@@ -615,16 +632,21 @@ ${edgeLines || "(нет рёбер внутри подграфа)"}
 }
 
 let explainNoteTimer = null;
+let explainNoteDismissed = false;
+const explainJobs = new Map();
 
 function showExplainNote(text) {
+  if (explainNoteDismissed) return;
   const note = document.getElementById("morph-explain-note");
   const body = document.getElementById("morph-explain-note-text");
   if (!note || !body) return;
   body.textContent = text;
+  document.getElementById("morph-explain-permission")?.replaceChildren();
   note.classList.remove("hidden");
 }
 
 function hideExplainNote() {
+  explainNoteDismissed = true;
   document.getElementById("morph-explain-note")?.classList.add("hidden");
 }
 
@@ -645,8 +667,15 @@ async function fetchExplainNote(nodeId) {
 }
 
 async function syncExplainNote(nodeId) {
+  const runId = currentRun?.run_id;
+  const job = explainJobs.get(currentRun?.run_id + ":" + nodeId);
+  if (job) {
+    showExplainNote("Агент готовит пояснение связки…");
+    watchExplainNote(nodeId, job);
+    return;
+  }
   const note = await fetchExplainNote(nodeId);
-  if (selectedNodeId !== nodeId) return;
+  if (selectedNodeId !== nodeId || currentRun?.run_id !== runId) return;
   if (note?.text) {
     showExplainNote(note.text);
     return;
@@ -654,53 +683,163 @@ async function syncExplainNote(nodeId) {
   if (!explainNoteTimer) hideExplainNote();
 }
 
-function watchExplainNote(nodeId) {
+function watchExplainNote(nodeId, cid) {
   stopExplainNotePolling();
-  let left = 90;
-  explainNoteTimer = window.setInterval(async () => {
-    left -= 1;
-    if (selectedNodeId !== nodeId) {
-      stopExplainNotePolling();
-      return;
+  const runId = currentRun?.run_id;
+  const key = runId + ":" + nodeId;
+  const refresh = async () => {
+    try {
+      const data = await KoiApi.getConversation(cid);
+      if (selectedNodeId !== nodeId || currentRun?.run_id !== runId) return;
+      const active = (data.items || []).some(item => item.status !== "answered");
+      const last = data.items?.at(-1);
+      if (!active) {
+        stopExplainNotePolling();
+        explainJobs.delete(key);
+        const note = last?.answer_kind !== "warning" ? await fetchExplainNote(nodeId) : null;
+        if (selectedNodeId !== nodeId || currentRun?.run_id !== runId) return;
+        showExplainNote(note?.text || last?.answer || "Пояснение не получено. Нажмите i, чтобы повторить.");
+        updateNodeInfo();
+        return;
+      }
+      showExplainNote(data.live?.permission?.title || "Агент готовит пояснение связки…");
+      const root = document.getElementById("morph-explain-permission");
+      const permission = data.live?.permission;
+      for (const option of permission?.options || []) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn btn-small";
+        button.textContent = option.name;
+        button.onclick = async () => {
+          try { await KoiApi.decideConversationPermission(cid, permission.id, option.optionId); await refresh(); }
+          catch (err) { showExplainNote(err.message); }
+        };
+        root.append(button);
+      }
+    } catch (err) {
+      if (selectedNodeId === nodeId && currentRun?.run_id === runId)
+        showExplainNote("Не удалось обновить пояснение: " + err.message + ". Повторяем подключение…");
     }
-    const note = await fetchExplainNote(nodeId);
-    if (note?.text) {
-      showExplainNote(note.text);
-      stopExplainNotePolling();
-      setStatus("Заметка на графе.", "ok");
-    } else if (left <= 0) {
-      stopExplainNotePolling();
-    }
-  }, 2000);
+  };
+  void refresh();
+  explainNoteTimer = window.setInterval(refresh, 2000);
 }
 
-async function explainSubgraphInTerminal() {
+async function explainSubgraph() {
   const subgraph = currentSubgraph();
-  if (!subgraph) {
-    setStatus("Сначала выберите узел — подсветится подграф.", "warn");
-    return;
-  }
-  if (!projectId) {
-    setStatus("Не выбран проект.", "error");
-    return;
-  }
-  if (!currentRun?.run_id) {
-    setStatus("Нет сохранённой морфологии.", "error");
-    return;
-  }
-  setStatus("Открываю терминал с агентом…");
+  if (!subgraph || !projectId || !currentRun?.run_id) return;
+  const runId = currentRun.run_id;
+  const nodeId = subgraph.focusId;
+  const key = runId + ":" + nodeId;
+  if (explainJobs.has(key)) return;
+  explainNoteDismissed = false;
+  explainJobs.set(key, null);
+  updateNodeInfo();
+  showExplainNote("Агент готовит пояснение связки…");
   try {
-    await KoiApi.explainMorphologyInTerminal(
-      projectId,
-      composeSubgraphExplainPrompt(subgraph),
-      { runId: currentRun.run_id, nodeId: subgraph.focusId }
+    const job = await KoiApi.explainMorphology(
+      projectId, composeSubgraphExplainPrompt(subgraph), { runId, nodeId }
     );
-    showExplainNote("Агент пишет пояснение…");
-    watchExplainNote(subgraph.focusId);
-    setStatus(`Агент открыт в терминале (${subgraph.nodes.length} узлов).`, "ok");
+    explainJobs.set(key, job.conversation_id);
+    if (selectedNodeId === nodeId && currentRun?.run_id === runId)
+      watchExplainNote(nodeId, job.conversation_id);
   } catch (err) {
-    setStatus(err.message || "Не удалось открыть терминал.", "error");
+    explainJobs.delete(key);
+    if (selectedNodeId === nodeId && currentRun?.run_id === runId)
+      showExplainNote("Не удалось запустить пояснение: " + err.message + ". Нажмите i, чтобы повторить.");
   }
+  updateNodeInfo();
+}
+
+function updateNodeInfo() {
+  const overlay = document.getElementById("morph-node-info");
+  const card = nodeEls.get(selectedNodeId)?.div;
+  const pane = document.querySelector(".morph-graph-pane");
+  if (!overlay || !pane) return;
+  overlay.classList.toggle("hidden", !card || activeTab !== "graph");
+  if (!card) return;
+  const bounds = pane.getBoundingClientRect();
+  const rect = card.getBoundingClientRect();
+  overlay.style.left = Math.max(0, Math.min(bounds.width - 44, rect.right - bounds.left - 36)) + "px";
+  overlay.style.top = Math.max(0, rect.top - bounds.top - 44) + "px";
+  const busy = explainJobs.has(currentRun?.run_id + ":" + selectedNodeId);
+  document.getElementById("morph-explain-node").disabled = busy;
+  document.getElementById("morph-explain-node").setAttribute("aria-busy", String(busy));
+}
+
+function renderProcessArtifacts(run) {
+  const artifacts = [
+    ["Текст статьи", run?.has_article],
+    ["Утверждения и цитаты", Boolean(run?.claims)],
+    ["Граф переходов", Boolean(run?.morphology)],
+    ["Разбор формул", Boolean(run?.math_analysis)],
+    ["Проверка цитат", Boolean(run?.critique)],
+    ["Отчёт", Boolean(run?.report_markdown)],
+  ];
+  document.getElementById("morph-process-artifacts").innerHTML = artifacts.map(([label, ready]) =>
+    `<li><span aria-hidden="true">${ready ? "✓" : "·"}</span> ${label}<span class="morph-artifact-state">${ready ? "Готово" : "Ожидается"}</span></li>`
+  ).join("");
+}
+
+async function refreshProcess(run) {
+  const cid = run.conversation_id;
+  const data = await KoiApi.getConversation(cid);
+  if (currentRun?.run_id !== run.run_id) return;
+  const active = (data.items || []).some(item => item.status !== "answered");
+  const last = data.items?.at(-1);
+  const text = data.live?.text || last?.answer || "";
+  const message = document.getElementById("morph-process-message");
+  if (message.dataset.text !== text) {
+    message.innerHTML = renderMarkdown(text);
+    message.dataset.text = text;
+  }
+  const permission = data.live?.permission;
+  const root = document.getElementById("morph-agent-permission");
+  root.replaceChildren();
+  for (const option of permission?.options || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-small";
+    button.textContent = option.name;
+    button.onclick = async () => {
+      try {
+        await KoiApi.decideConversationPermission(cid, permission.id, option.optionId);
+        await refreshProcess(run);
+      } catch (err) { setStatus(err.message, "error"); }
+    };
+    root.append(button);
+  }
+  document.getElementById("morph-agent-stop").classList.toggle("hidden", !active);
+  if (run.status !== "ready") {
+    if (!active) {
+      const finished = await KoiApi.getMorphologyRun(projectId, run.run_id);
+      if (currentRun?.run_id !== run.run_id) return;
+      if (finished.status === "ready") {
+        currentRun = finished;
+        stopPolling();
+        renderRun();
+        renderProcessArtifacts(finished);
+        switchTab("report");
+        void loadArticle(run.run_id);
+        void loadRuns();
+        return;
+      }
+      stopPolling();
+      currentRun = { ...run, agent_finished: true };
+      renderRun();
+      setStatus(last?.answer_kind === "warning"
+        ? "Разбор прерван. Подробности ниже; можно запустить его повторно."
+        : "Агент завершил работу, но результат не готов. Подробности ниже; можно повторить разбор.", "warn");
+    } else {
+      setStatus(permission?.title || "Агент работает. Готовые материалы появляются ниже.");
+    }
+  }
+  const activity = await KoiApi.conversationActivity(cid);
+  if (currentRun?.run_id !== run.run_id) return;
+  const events = (activity.items || []).flatMap(item => item.events || []);
+  document.getElementById("morph-process-events").innerHTML = events.length
+    ? events.map(event => `<li><time>${escapeHtml(event.at ? new Date(event.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "")}</time><span>${escapeHtml(event.message || "")}</span></li>`).join("")
+    : '<li>Агент ещё не добавил записи в журнал.</li>';
 }
 
 function startPolling(runId) {
@@ -709,16 +848,22 @@ function startPolling(runId) {
   pollTimer = window.setInterval(async () => {
     try {
       const run = await KoiApi.getMorphologyRun(projectId, runId);
+      if (currentRun?.run_id !== runId) return;
+      renderProcessArtifacts(run);
+      if (run?.conversation_id && run?.status !== "ready") await refreshProcess(run);
       if (run?.status === "ready") {
+        document.getElementById("morph-agent-stop").classList.add("hidden");
+        document.getElementById("morph-agent-permission").replaceChildren();
         currentRun = run;
         stopPolling();
         setStatus("Морфология готова.", "ok");
         renderRun();
+        switchTab("report");
         void loadArticle(runId);
         void loadRuns();
       }
-    } catch {
-      /* keep polling — the agent may still be writing */
+    } catch (err) {
+      setStatus(`Не удалось обновить процесс: ${err.message}. Повторяем подключение…`, "warn");
     }
   }, POLL_MS);
 }
@@ -743,14 +888,17 @@ function renderRun() {
 
   const staged = Boolean(currentRun) && !graph;
   empty?.classList.toggle("hidden", Boolean(currentRun));
-  promptBlock?.classList.toggle("hidden", !staged);
+  promptBlock?.classList.add("hidden");
   canvasWrap?.classList.toggle("hidden", !graph);
 
   if (staged) {
     const promptEl = document.getElementById("morph-prompt");
     if (promptEl) promptEl.textContent = currentRun.prompt || currentRun.cursor_message || "";
   }
-  if (runBtn) runBtn.textContent = graph ? "Пересобрать" : "Собрать морфологию";
+  if (runBtn) {
+    runBtn.disabled = Boolean(staged && currentRun?.conversation_id && !currentRun?.agent_finished);
+    runBtn.textContent = runBtn.disabled ? "Собираем…" : graph ? "Пересобрать" : "Собрать морфологию";
+  }
 
   renderRuns();
   renderShape();
@@ -1001,12 +1149,14 @@ function renderGraph(graph) {
 }
 
 /** Client coords → canvas coords inside the zoom/pan group. */
-function toCanvasPoint(event) {
-  const root = document.getElementById("morph-viewport");
-  const ctm = root?.getScreenCTM();
+function toSvgPoint(element, event) {
+  const ctm = element?.getScreenCTM();
   if (!ctm) return { x: event.clientX, y: event.clientY };
-  const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
-  return { x: point.x, y: point.y };
+  return new DOMPoint(event.clientX, event.clientY).matrixTransform(ctm.inverse());
+}
+
+function toCanvasPoint(event) {
+  return toSvgPoint(document.getElementById("morph-viewport"), event);
 }
 
 function attachNodeInteractions(nodeId, holder) {
@@ -1040,6 +1190,7 @@ function attachNodeInteractions(nodeId, holder) {
     holder.setAttribute("x", String(next.x));
     holder.setAttribute("y", String(next.y));
     updateEdgeGeometry();
+    updateNodeInfo();
   });
 
   const finish = (event) => {
@@ -1122,6 +1273,7 @@ function updateHighlight() {
   clearBtn?.classList.toggle("hidden", !selectedNodeId && !chapterFilter);
   const explainBtn = document.getElementById("morph-explain-subgraph");
   explainBtn?.classList.toggle("hidden", !selectedNodeId);
+  requestAnimationFrame(updateNodeInfo);
 }
 
 function keepExpandedNodeVisible(holder) {
@@ -1139,8 +1291,10 @@ function keepExpandedNodeVisible(holder) {
   if (card.top < bounds.top + margin) dy = bounds.top + margin - card.top;
   if (card.bottom > bounds.bottom - margin) dy = bounds.bottom - margin - card.bottom;
   if (!dx && !dy) return;
-  viewTransform.x += dx;
-  viewTransform.y += dy;
+  const zero = toSvgPoint(svg, { clientX: 0, clientY: 0 });
+  const delta = toSvgPoint(svg, { clientX: dx, clientY: dy });
+  viewTransform.x += delta.x - zero.x;
+  viewTransform.y += delta.y - zero.y;
   applyTransform();
 }
 
@@ -1151,6 +1305,7 @@ function applyTransform() {
       "transform",
       `translate(${viewTransform.x} ${viewTransform.y}) scale(${viewTransform.k})`
     );
+  updateNodeInfo();
 }
 
 /** Listeners live on the <svg>, which survives re-renders — attach them once. */
@@ -1162,41 +1317,48 @@ function attachCanvasInteractions(svg) {
   let panned = false;
   let originX = 0;
   let originY = 0;
+  let startClientX = 0;
+  let startClientY = 0;
 
   svg.addEventListener("wheel", (event) => {
     event.preventDefault();
     const factor = event.deltaY < 0 ? 1.1 : 0.9;
-    viewTransform.k = Math.min(2.2, Math.max(0.3, viewTransform.k * factor));
+    viewTransform.k = Math.max(0.3, viewTransform.k * factor);
     applyTransform();
   });
 
   svg.addEventListener("pointerdown", (event) => {
-    if (event.target.closest?.(".morph-node")) return;
+    if (event.button !== 0 || event.target.closest?.(".morph-node")) return;
     dragging = true;
     panned = false;
-    originX = event.clientX - viewTransform.x;
-    originY = event.clientY - viewTransform.y;
+    const point = toSvgPoint(svg, event);
+    originX = point.x - viewTransform.x;
+    originY = point.y - viewTransform.y;
+    startClientX = event.clientX;
+    startClientY = event.clientY;
     svg.classList.add("is-panning");
     svg.setPointerCapture(event.pointerId);
   });
 
   svg.addEventListener("pointermove", (event) => {
     if (!dragging) return;
-    const x = event.clientX - originX;
-    const y = event.clientY - originY;
-    if (Math.hypot(x - viewTransform.x, y - viewTransform.y) > 2) panned = true;
+    const point = toSvgPoint(svg, event);
+    const x = point.x - originX;
+    const y = point.y - originY;
+    if (Math.hypot(event.clientX - startClientX, event.clientY - startClientY) > 2) panned = true;
     viewTransform.x = x;
     viewTransform.y = y;
     applyTransform();
   });
 
-  const endDrag = () => {
-    if (dragging && !panned && selectedNodeId) clearInspector();
+  const endDrag = (event) => {
+    if (dragging && !panned && selectedNodeId && event.type === "pointerup") clearInspector();
     dragging = false;
     svg.classList.remove("is-panning");
   };
   svg.addEventListener("pointerup", endDrag);
-  svg.addEventListener("pointerleave", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+  svg.addEventListener("lostpointercapture", endDrag);
 }
 
 function renderLegend(nodes) {
@@ -1245,7 +1407,6 @@ function renderLegend(nodes) {
     </div>
     <div class="morph-legend-row">
       ${groundingChips}
-      <button type="button" class="morph-legend-btn morph-legend-btn-accent hidden" id="morph-explain-subgraph" title="Открыть терминал и пояснить выделенную связку">пояснить связку</button>
       <button type="button" class="morph-legend-btn hidden" id="morph-clear-focus">сбросить фокус</button>
       <button type="button" class="morph-legend-btn" id="morph-reset-layout">раскладка ↺</button>
     </div>`;
@@ -1270,7 +1431,7 @@ function renderLegend(nodes) {
   });
   document
     .getElementById("morph-explain-subgraph")
-    ?.addEventListener("click", () => void explainSubgraphInTerminal());
+    ?.addEventListener("click", () => void explainSubgraph());
   updateHighlight();
 }
 
@@ -1296,6 +1457,9 @@ function selectNode(nodeId, { scrollArticle = true } = {}) {
   const node = nodeIndex.get(nodeId);
   if (!graph || !node) return;
   formulaLessons?.showNode();
+  stopExplainNotePolling();
+  hideExplainNote();
+  explainNoteDismissed = false;
   selectedNodeId = nodeId;
   updateHighlight();
   void syncExplainNote(nodeId);
@@ -1373,13 +1537,13 @@ function selectNode(nodeId, { scrollArticle = true } = {}) {
         : ""
     }
     <button type="button" class="btn btn-small morph-explain-btn" id="morph-explain-inspector">
-      Пояснить связку в терминале
+      Пояснить связку
     </button>`;
   body.classList.remove("hidden");
   document.getElementById("morph-inspector-empty")?.classList.add("hidden");
   document
     .getElementById("morph-explain-inspector")
-    ?.addEventListener("click", () => void explainSubgraphInTerminal());
+    ?.addEventListener("click", () => void explainSubgraph());
 }
 
 /* ------------------------------------------------------------------- shape */
@@ -1477,16 +1641,61 @@ function renderReport() {
 
 /* --------------------------------------------------------------------- tabs */
 
+let sidebarHidden = false;
+let inspectorHidden = false;
+
+function syncPanelVisibility() {
+  const page = document.querySelector(".morph-page");
+  page.classList.toggle("is-side-hidden", sidebarHidden);
+  page.classList.toggle("is-inspector-hidden", inspectorHidden);
+  document.querySelector(".morph-side").classList.toggle("hidden", sidebarHidden);
+  document.querySelector(".morph-inspector").classList.toggle("hidden", inspectorHidden || activeTab !== "graph");
+  for (const [id, hidden, label] of [
+    ["morph-toggle-sidebar", sidebarHidden, "статьи"],
+    ["morph-toggle-inspector", inspectorHidden, "цитат"],
+  ]) {
+    const button = document.getElementById(id);
+    button.setAttribute("aria-expanded", String(!hidden));
+    const title = (hidden ? "Показать" : "Скрыть") + " панель " + label;
+    button.setAttribute("aria-label", title);
+    button.title = title;
+  }
+  document.getElementById("morph-toggle-inspector").classList.toggle("hidden", activeTab !== "graph");
+  requestAnimationFrame(updateNodeInfo);
+}
+
+function initPanelToggles() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("koi-morph-panels") || "{}");
+    sidebarHidden = saved.sidebar === true;
+    inspectorHidden = saved.inspector === true;
+  } catch { /* Default to visible panels. */ }
+  const toggle = (side) => {
+    if (side === "sidebar") sidebarHidden = !sidebarHidden;
+    else inspectorHidden = !inspectorHidden;
+    syncPanelVisibility();
+    try { localStorage.setItem("koi-morph-panels", JSON.stringify({sidebar: sidebarHidden, inspector: inspectorHidden})); }
+    catch { /* Private mode. */ }
+  };
+  document.getElementById("morph-toggle-sidebar").onclick = () => toggle("sidebar");
+  document.getElementById("morph-toggle-inspector").onclick = () => toggle("inspector");
+  syncPanelVisibility();
+}
+
 function switchTab(tab) {
   activeTab = tab;
   document.querySelectorAll(".morph-tab").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.tab === tab);
+    btn.setAttribute("aria-selected", String(btn.dataset.tab === tab));
   });
-  for (const name of ["graph", "article", "shape", "report"]) {
+  document.querySelector(".morph-page")?.classList.toggle("is-reading", tab !== "graph");
+  syncPanelVisibility();
+  for (const name of ["process", "graph", "article", "shape", "report"]) {
     document.getElementById(`morph-panel-${name}`)?.classList.toggle("hidden", name !== tab);
   }
   renderArticle();
   if (tab === "article") syncArticleSelection();
+  requestAnimationFrame(updateNodeInfo);
 }
 
 /* --------------------------------------------------------------------- init */
@@ -1509,19 +1718,12 @@ function initInspectorResize() {
   const page = document.querySelector(".morph-page");
   const inspector = document.querySelector(".morph-inspector");
   const handle = document.getElementById("morph-inspector-resizer");
-  const expand = document.getElementById("morph-inspector-expand");
   if (!page || !inspector || !handle) return;
 
   const limits = () => ({
     min: 260,
     max: Math.max(320, Math.min(960, Math.round(window.innerWidth * 0.55))),
   });
-  const syncExpand = (width) => {
-    if (!expand) return;
-    const wide = width >= 480;
-    expand.setAttribute("aria-pressed", wide ? "true" : "false");
-    expand.textContent = wide ? "Уже" : "Шире";
-  };
   const setWidth = (value, persist = false) => {
     const { min, max } = limits();
     const width = Math.round(Math.min(max, Math.max(min, Number(value) || 320)));
@@ -1529,7 +1731,6 @@ function initInspectorResize() {
     handle.setAttribute("aria-valuemin", String(min));
     handle.setAttribute("aria-valuemax", String(max));
     handle.setAttribute("aria-valuenow", String(width));
-    syncExpand(width);
     if (persist) {
       try {
         localStorage.setItem(INSPECTOR_WIDTH_KEY, String(width));
@@ -1573,10 +1774,6 @@ function initInspectorResize() {
   handle.addEventListener("pointerup", finish);
   handle.addEventListener("pointercancel", finish);
   handle.addEventListener("dblclick", () => setWidth(320, true));
-  expand?.addEventListener("click", () => {
-    const current = inspector.getBoundingClientRect().width;
-    setWidth(current >= 480 ? 320 : Math.min(640, limits().max), true);
-  });
   handle.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
     const current = inspector.getBoundingClientRect().width;
@@ -1596,6 +1793,9 @@ function initInspectorResize() {
 async function init() {
   initTheme();
   initInspectorResize();
+  initPanelToggles();
+  document.getElementById("morph-explain-node").onclick = () => void explainSubgraph();
+  new ResizeObserver(updateNodeInfo).observe(document.querySelector(".morph-graph-pane"));
   presentation = initPresentation({
     getProjectId: () => projectId,
     getMorphologyRunId: () => currentRun?.run_id || "",
@@ -1616,6 +1816,17 @@ async function init() {
   } catch {
     /* private mode */
   }
+  const agentSelect = document.getElementById("morph-cli-agent");
+  try {
+    const agents = (await KoiApi.getAgentBackends()).cli.filter(agent => agent.available);
+    for (const agent of agents) agentSelect.add(new Option(agent.label, agent.id));
+    const saved = localStorage.getItem("koi-chat-cli-agent");
+    if (agents.some(agent => agent.id === saved)) agentSelect.value = saved;
+  } catch { /* Automatic selection remains available. */ }
+  document.getElementById("morph-agent-stop").onclick = async () => {
+    try { await KoiApi.cancelConversation(currentRun.conversation_id); }
+    catch (err) { setStatus(err.message, "error"); }
+  };
   const params = new URLSearchParams(window.location.search);
   projectId = params.get("project") || "";
   paperUrl = params.get("paper") || "";
@@ -1648,6 +1859,12 @@ async function init() {
   document.getElementById("morph-article-close")?.addEventListener("click", () => {
     setArticleSplit(false);
   });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !document.getElementById("morph-explain-note").classList.contains("hidden")) {
+      hideExplainNote();
+      document.getElementById("morph-explain-node").focus();
+    }
+  });
   document.getElementById("morph-explain-note-close")?.addEventListener("click", () => {
     hideExplainNote();
   });
@@ -1655,12 +1872,11 @@ async function init() {
   await loadRuns();
 
   const requestedRun = params.get("run");
-  const latestForPaper = runsForCurrentPaper().find((row) => row.status === "ready")
-    || runsForCurrentPaper()[0];
+  const latestForPaper = runsForCurrentPaper()[0];
   if (requestedRun) await openRun(requestedRun);
   else if (latestForPaper) await openRun(latestForPaper.run_id);
   else switchTab(activeTab);
 }
 
-window.addEventListener("beforeunload", stopPolling);
+window.addEventListener("beforeunload", () => { stopPolling(); stopExplainNotePolling(); });
 void init();

@@ -221,6 +221,7 @@ export class MindmapCamera {
 
   _apply() {
     this.scale = this.clampScale(this.scale);
+    this.canvas.style.setProperty("--mindmap-scale", this.scale);
     this.canvas.style.transform = `translate(${this.x}px, ${this.y}px) scale(${this.scale})`;
     this.onChange();
   }

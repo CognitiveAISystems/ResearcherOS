@@ -125,6 +125,35 @@ def post_project_literature_cluster_stage(
         raise HTTPException(400, str(e)) from e
 
 
+@router.post("/projects/{project_id}/literature/cluster/agent")
+def post_project_literature_cluster_agent(
+    project_id: str, body: LiteratureClusterBody, background_tasks: BackgroundTasks,
+) -> dict[str, object]:
+    """Use the ordinary in-app conversation worker, including agent settings."""
+    from api.routers.agents import create_conversation, post_agent_chat
+    from api.schemas import AgentChatBody, ConversationCreateBody
+    from koi.agent_chat import conversations
+    from koi.literature.cluster_orch import literature_dir, _write_json
+    parse_project(project_id)
+    try:
+        staged = stage_literature_cluster(
+            project_id, question=body.question.strip(), selected_results=body.papers,
+        )
+        conversation = create_conversation(ConversationCreateBody(
+            project_id=project_id, title=body.question[:80], backend=body.cli_agent,
+        ))["item"]
+        conversations.update(conversation["id"], kind="literature", literature_run_id=staged["run_id"])
+        response = post_agent_chat(AgentChatBody(
+            project_id=project_id, question=body.question.strip(),
+            conversation_id=conversation["id"], cli_agent=body.cli_agent,
+        ), background_tasks)
+        _write_json(literature_dir(project_id) / staged["run_id"] / "chat.json",
+                    {"conversation_id": conversation["id"]})
+        return {**staged, "conversation_id": conversation["id"], "item": response["item"]}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @router.get("/projects/{project_id}/literature")
 def get_project_literature_history(project_id: str) -> dict[str, object]:
     parse_project(project_id)
@@ -142,11 +171,11 @@ def get_project_literature_run(project_id: str, run_id: str) -> dict[str, object
 
 
 @router.delete("/projects/{project_id}/literature/{run_id}")
-def delete_project_literature_run(project_id: str, run_id: str) -> dict[str, object]:
-    """Cancel a staged literature cluster run (no report.md yet)."""
+def delete_project_literature_run(project_id: str, run_id: str, delete_report: bool = False) -> dict[str, object]:
+    """Delete a run; deleting its report requires explicit opt-in."""
     parse_project(project_id)
     try:
-        return delete_literature_run(project_id, run_id)
+        return delete_literature_run(project_id, run_id, delete_report=delete_report)
     except LookupError as e:
         raise HTTPException(404, str(e)) from e
     except ValueError as e:
