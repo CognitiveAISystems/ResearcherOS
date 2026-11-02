@@ -112,3 +112,54 @@ jobs:
           (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null)
           node desktop/verify-server.cjs "$RUNNER_TEMP/squashfs-root/resources/server/researchos-server"
           RESEARCHOS_SMOKE_TEST=1 xvfb-run -a timeout 75 "$RUNNER_TEMP/squashfs-root/AppRun" --no-sandbox
+
+  publish-installers:
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'beta')
+    needs: [desktop, linux-compatibility]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ResearcherOS-*
+          merge-multiple: true
+          path: built-installers
+      - name: Publish verified installers to the source branch
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Refuse to publish an older build over newer application sources.
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          cp built-installers/*.exe built-installers/*.AppImage installers/
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          path = Path('installers/README.md')
+          text = path.read_text()
+          source = os.environ['SOURCE_SHA'][:7]
+          branch = os.environ['SOURCE_BRANCH']
+          run = os.environ['BUILD_RUN_ID']
+          text, count = re.subn(
+              r'Установщики Windows и Linux собраны .*?\[GitHub Actions\]\(https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/\d+\)\.',
+              f'Установщики Windows и Linux собраны из коммита `{source}` ветки `{branch}` в '
+              f'[GitHub Actions](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/{run}).',
+              text,
+          )
+          assert count == 1, 'Installer provenance paragraph missing'
+          path.write_text(text)
+          PY
+          git lfs install --local
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add installers/
+          git diff --cached --quiet && exit 0
+          git commit -m "Update verified ${SOURCE_BRANCH} installers from ${SOURCE_SHA:0:7}"
+          git push origin "HEAD:$SOURCE_BRANCH"
