@@ -32,7 +32,11 @@ def test_invalid_variant_cannot_change_existing_settings(monkeypatch, tmp_path):
     assert not destination.exists()
 
 
-def test_unknown_saved_variant_uses_existing_chat_interface(monkeypatch, tmp_path):
+@pytest.mark.parametrize("saved", [None, "", "old-experiment"])
+def test_missing_or_unknown_variant_uses_quick_navigation(monkeypatch, tmp_path, saved):
     monkeypatch.setattr(settings_store, "ENV_PATH", tmp_path / "settings.env")
-    monkeypatch.setenv("KOI_UI_VARIANT", "old-experiment")
-    assert settings_snapshot()["ui_variant"] == "chats"
+    if saved is None:
+        monkeypatch.delenv("KOI_UI_VARIANT", raising=False)
+    else:
+        monkeypatch.setenv("KOI_UI_VARIANT", saved)
+    assert settings_snapshot()["ui_variant"] == "quick"

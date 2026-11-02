@@ -19,6 +19,7 @@ async def smoke(url):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         await page.route("https://**/*", lambda route: route.abort())
+        await page.request.put(url + "api/settings/agent-chat", data={"ui_variant": "chats"})
         await page.goto(url + "?desktop=1&project=demo", wait_until="networkidle")
         await page.locator(".lab-project-frame").first.wait_for()
         assert await page.locator("html").get_attribute("data-app-variant") == "chats"

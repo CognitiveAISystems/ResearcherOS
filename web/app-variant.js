@@ -15,8 +15,8 @@ function mountVariantSettings() {
         <fieldset>
           <legend>Интерфейс</legend>
           <div class="view-control settings-interface-control"><div class="view-control__segmented settings-interface-options">
-          <label class="view-control__seg"><input type="radio" name="ui_variant" value="chats" checked /> <span><strong>Чаты</strong></span></label>
-          <label class="view-control__seg"><input type="radio" name="ui_variant" value="quick" /> <span><strong>Quick navigation</strong></span></label>
+          <label class="view-control__seg"><input type="radio" name="ui_variant" value="chats" /> <span><strong>Чаты</strong></span></label>
+          <label class="view-control__seg"><input type="radio" name="ui_variant" value="quick" checked /> <span><strong>Quick navigation</strong></span></label>
           <label class="view-control__seg"><input type="radio" name="ui_variant" value="light" /> <span><strong>Light</strong></span></label>
           </div></div>
         </fieldset>
@@ -72,7 +72,7 @@ export async function initAppVariant(api, prepareSwitch, trees) {
   stylesheet.rel = "stylesheet";
   stylesheet.href = new URL("./app-variant.css", import.meta.url).href;
   document.head.append(stylesheet);
-  let variant = "chats";
+  let variant = "quick";
   try {
     const saved = (await api.getSettings()).ui_variant;
     if (["chats", "quick", "light"].includes(saved)) variant = saved;
