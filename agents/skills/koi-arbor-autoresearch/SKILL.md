@@ -108,6 +108,10 @@ without restricting the search to local modifications of the current code.
    `koi-report-review/report-skeleton.md`, `koi-grill-experiment` and setup review.
    Fix supported/refuted/open decision rules, baselines/controls, dependencies,
    artifacts and completion criteria before runs. Do not invent results.
+   The coordinator MUST select the plots for each card's monitor before dispatch
+   and record them in report §3: question, metrics/axes, data source, image path
+   under metrics_dir, update trigger and intended inclusion in the final report.
+   Follow koi-card-autoresearch's “Промежуточные графики и картинки” section.
    Record `phase:"backlog"` with `cards:[{"board_id":"...","card_id":"..."}]`.
    Tell the originating chat which hypotheses and cards are now visible.
 4. **Execution.** Record `phase:"execution"`, then execute the prepared wave,
@@ -182,6 +186,10 @@ and return diffs for coordinator review. Never apply competing code edits in
 one checkout. Search/review agents use the same dispatch and explicit roles.
 Include the parent hypothesis, specific scientific question, fixed decision rule,
 report sections/artifacts and progress requirements in every executor task.
+Include the coordinator's mandatory plot plan: publish and refresh actual image
+files in the card monitor as measurements arrive; logs or dashboard links alone
+do not suffice. Before closing the card, preserve and embed the key plots in its
+report, including material negative results, with conclusions below the evidence.
 Idea/review agents may run during planning; experiment executors must wait for
 the execution phase. Executors must not recursively dispatch or edit the shared tree. Use the
 ResearcherOS virtualenv Python and module path for all adapter commands.
