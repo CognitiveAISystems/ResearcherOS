@@ -13,6 +13,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from koi.adapters.agent_backends import editable_backend
 from koi.adapters.workspace import RUN_DIR
 from koi.paper.collaboration.ids import room_id
 from koi.paper.collaboration.materializer import atomic_write_text
@@ -240,7 +241,7 @@ def _work(project_id: str, slug: str, task_id: str, backend: str | None) -> None
 
 def launch(project_id: str, slug: str, slot: Path, prompt: str, *, backend: str | None = None,
            comment_id: str | None = None) -> dict:
-    if backend not in (None, "cursor", "codex", "claude"):
+    if backend is not None and not editable_backend(backend):
         raise ValueError("Неизвестный агент")
     with _lock:
         task = begin(project_id, slug, slot, prompt, comment_id=comment_id)

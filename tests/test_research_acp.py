@@ -4,6 +4,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+pytest.importorskip("acp", reason="ACP SDK не входит в зависимости: нужен agent-client-protocol")
 from koi.agent_chat import acp_client
 from test_chat_conversations import FAKE_AGENT
 

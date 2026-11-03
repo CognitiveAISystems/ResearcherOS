@@ -77,7 +77,9 @@ def execute(run_id, task, *, timeout=1800):
             if message:
                 research.update(agent_id, 'running', message)
         if backend == 'opencode':
-            result = acp_client.run_executor(agent_id, run['item_id'], prompt, cwd, "acp:opencode", receive, timeout,
+            # ACP-клиент импортируется лениво: без SDK остальные транспорты работают.
+            from koi.agent_chat import acp_client  # pragma: no cover — нужен внешний ACP SDK
+            result = acp_client.run_executor(  # pragma: no coveragent_id, run['item_id'], prompt, cwd, "acp:opencode-acp", receive, timeout,
                                                is_cancelled=lambda: research.cancelled(run_id),
                                                on_started=lambda pid: research.attach_handle(agent_id, pid, group_owner=True))
         else:
