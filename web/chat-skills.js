@@ -1,5 +1,9 @@
+export const RESEARCH_SKILLS = [
+  {command: 'koi-arbor-autoresearch', name: 'Автоисследование', description: 'Искать идеи и гипотезы для дерева или улучшать выбранный метод.'},
+];
+
 export const CARD_SKILLS = [
-  {command: 'koi-arbor-autoresearch', name: 'Arbor: автоисследование', description: 'Разработать метод с координатором и параллельными исполнителями.'},
+  ...RESEARCH_SKILLS,
   {command: 'grill-me', name: 'grill-me', description: 'Уточнить цель, метрики и план эксперимента.'},
   {command: 'prose', name: 'prose', description: 'Проверить и улучшить текст карточки и отчёта.'},
   {command: 'question', name: 'question', description: 'Ответить по материалам карточки без изменений.'},
@@ -16,7 +20,7 @@ export function reportChatCommand(text) {
 }
 
 /** Slash menu shared by the project chat and the report chat. */
-export function attachSkillMenu(input, { getProjectId }) {
+export function attachSkillMenu(input, { getProjectId, getCardId = () => true }) {
   const hint = 'Введите /, чтобы посмотреть доступные скиллы для ИИ';
   input.placeholder = hint;
   input.title = hint;
@@ -98,8 +102,8 @@ export function attachSkillMenu(input, { getProjectId }) {
     if (term === undefined || document.activeElement !== input) { close(); return; }
     project = getProjectId();
     active = 0;
-    if (!project) { filtered = []; render('Сначала откройте карточку'); return; }
-    filtered = CARD_SKILLS.filter(row => `${row.name} ${row.description}`.toLocaleLowerCase().includes(term.toLocaleLowerCase()));
+    if (!project) { filtered = []; render('Сначала выберите дерево'); return; }
+    filtered = (getCardId() ? CARD_SKILLS : RESEARCH_SKILLS).filter(row => `${row.command} ${row.name} ${row.description}`.toLocaleLowerCase().includes(term.toLocaleLowerCase()));
     render();
   }
   input.addEventListener('input', refresh);

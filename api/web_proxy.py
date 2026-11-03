@@ -124,7 +124,8 @@ class KoiWebHandler(SimpleHTTPRequestHandler):
                 continue
             headers[key] = value
 
-        conn = http.client.HTTPConnection(self.api_host, self.api_port, timeout=120)
+        timeout = 280 if upstream_path.split("?", 1)[0] == "/desktop/onboarding/interview/reply" else 120
+        conn = http.client.HTTPConnection(self.api_host, self.api_port, timeout=timeout)
         try:
             conn.request(self.command, upstream_path, body=body, headers=headers)
             resp = conn.getresponse()

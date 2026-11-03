@@ -7,6 +7,7 @@ import { initAppVariant, usesChatNavigation, preserveVariantDrafts, restoreVaria
 import { attachReportChatResize, attachMainChatResize } from "./report-chat-resize.js";
 import { createPaperEditPanel } from "./paper-edit-tasks.js";
 import { attachSkillMenu, reportChatCommand } from "./chat-skills.js";
+import { confirmResearchScope, isResearchStart } from "./research-scope.js";
 import { ReportEditor, EMPTY_REPORT, applySetup, setupWouldShrink } from "./report-editor.js";
 import {
   bindCardLiveModal,
@@ -3146,9 +3147,13 @@ async function sendReportInterview(event) {
   reportInterviewSending = true; button.disabled = true; setReportInterviewStatus("Отправляем вопрос…");
   const command = reportChatCommand(question);
   try {
+    const researchScope = isResearchStart(question)
+      ? await confirmChatResearchScope(reportWriteProjectId(), state.reportBoardId) : null;
+    if (identity !== reportIdentity()) return;
+    if (isResearchStart(question) && !researchScope) { setReportInterviewStatus(""); return; }
     const conversation = await cardConversations.ensure();
     if (identity !== reportIdentity()) return;
-    await KoiApi.sendAgentQuestion({ conversation_id: conversation.id, project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent("report-interview") });
+    await KoiApi.sendAgentQuestion({ conversation_id: conversation.id, project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, research_scope: researchScope || undefined, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent("report-interview") });
     if (identity !== reportIdentity()) return;
     input.value = command.purpose === "grill_me" ? "/grill-me " : "";
     input.setSelectionRange(input.value.length, input.value.length);
@@ -8540,6 +8545,14 @@ async function refreshCliAgents() {
   if (cardConversations) syncConversationAgent(cardConversations, "report-interview");
 }
 
+async function confirmChatResearchScope(projectId, boardId) {
+  const project = state.project?.id === projectId ? state.project : await KoiApi.getProject(projectId);
+  const board = boardId ? project.boards?.[boardId] : null;
+  const method = board && project.nodes?.find(n => n.id === board.owner_node_id);
+  if (boardId && !method) throw new Error("Не удалось найти метод. Откройте его канбан заново.");
+  return confirmResearchScope({methodTitle: method?.title, projectTitle: project.title});
+}
+
 async function submitAgentQuestion(e) {
   e.preventDefault();
   if (mainConversations.live) return;
@@ -8561,6 +8574,10 @@ async function submitAgentQuestion(e) {
     setAgentChatFormStatus("Откройте карточку, чтобы выполнить эту команду.", "error");
     return;
   }
+  if (isResearchStart(text) && !projectId) {
+    setAgentChatFormStatus("Сначала выберите дерево для автоисследования.", "error");
+    return;
+  }
   const { method_id, node_id } = agentChatContext();
   const btn = document.getElementById("btn-agent-chat-send");
   if (btn) btn.disabled = true;
@@ -8568,6 +8585,13 @@ async function submitAgentQuestion(e) {
 
   try {
     const command = reportChatCommand(text);
+    const epoch = mainConversations.epoch;
+    const scope = mainConversations.contextScope || mainConversations.row;
+    const boardId = scope?.board_id;
+    const researchScope = isResearchStart(text)
+      ? await confirmChatResearchScope(projectId, boardId) : null;
+    if (epoch !== mainConversations.epoch) return;
+    if (isResearchStart(text) && !researchScope) { setAgentChatFormStatus(""); return; }
     const conversation = await mainConversations.ensure();
     const cid = conversation.id;
     const res = await KoiApi.sendAgentQuestion({
@@ -8577,6 +8601,7 @@ async function submitAgentQuestion(e) {
       card_id: conversation.card_id,
       git_snapshot: conversation.git_snapshot,
       question: command.question,
+      research_scope: researchScope || undefined,
       purpose: conversation.card_id ? command.purpose : command.purpose === "question" ? "question" : "agent",
       report_markdown: conversation.card_id === state.reportCardId ? document.getElementById("card-report-editor").value : undefined,
       method_id: method_id || undefined,
@@ -9525,7 +9550,7 @@ function initAgentChat() {
     });
   }
   document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
-  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: () => mainConversations.contextScope?.card_id ? agentChatProjectId() : null });
+  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: agentChatProjectId, getCardId: () => mainConversations.contextScope?.card_id });
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {

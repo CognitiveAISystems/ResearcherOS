@@ -35,6 +35,7 @@ class AgentChatItem(TypedDict, total=False):
     project_id: Optional[str]
     question: str
     enqueued_at: str
+    research_scope: Optional[str]
     method_id: Optional[str]
     node_id: Optional[str]
     status: AgentChatStatus
@@ -85,6 +86,7 @@ def _normalize(item: dict) -> AgentChatItem:
         "project_id": str(item["project_id"]) if item["project_id"] is not None else None,
         "question": str(item["question"]),
         "enqueued_at": str(item["enqueued_at"]),
+        "research_scope": item.get("research_scope") or None,
         "method_id": item.get("method_id") or None,
         "node_id": item.get("node_id") or None,
         "status": item.get("status") or "pending",
@@ -140,6 +142,7 @@ def enqueue_question(
     project_id: str | None,
     question: str,
     *,
+    research_scope: Optional[str] = None,
     method_id: Optional[str] = None,
     node_id: Optional[str] = None,
     purpose: str = "agent",
@@ -167,6 +170,7 @@ def enqueue_question(
         "card_id": card_id,
         "report_markdown": report_markdown,
         "enqueued_at": datetime.now(timezone.utc).isoformat(),
+        "research_scope": research_scope,
         "method_id": method_id or None,
         "node_id": node_id or None,
         "status": "pending",

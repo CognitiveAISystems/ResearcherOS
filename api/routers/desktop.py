@@ -75,6 +75,7 @@ class TreeInterviewStartBody(BaseModel):
 
 
 class TreeInterviewFinishBody(BaseModel):
+    program_title: str | None = None
     path: str | None = None
     branch: str | None = None
     session_id: str | None = None
@@ -180,7 +181,7 @@ def post_interview_reply(body: DesktopInterviewReplyBody) -> dict:
 @router.post("/desktop/onboarding/interview/finish")
 def post_finish_interview(body: TreeInterviewFinishBody) -> dict:
     try:
-        result = finish_interview(body.path, branch=body.branch, session_id=body.session_id)
+        result = finish_interview(body.path, branch=body.branch, session_id=body.session_id, program_title=body.program_title)
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
     reset_workspace_cache()

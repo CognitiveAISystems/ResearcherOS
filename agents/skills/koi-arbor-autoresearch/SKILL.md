@@ -14,6 +14,43 @@ Infer known facts from files before asking.
 Establish goal, budget, evaluation protocol, protected paths, permitted compute
 and stopping criteria before experiments. Record unresolved assumptions.
 
+## Research scope and confirmation
+
+The launch context determines the initial scope, not the mere presence of a
+selected node. A kanban or card starts at its owning METHOD; the tree starts at
+TREE level even when a method node is selected on the canvas.
+
+Read `checkpoint.run.metadata.research_scope` (JSON) or
+`view.arbor_metadata.research_scope`. Its `level` is `method` or `tree`, and
+`method_id` identifies the selected method. A recorded level means the user has
+already confirmed it in the launch dialog: do not ask again on continuation or
+resume, and never infer a different scope from the current screen.
+
+If `level` is null, no research is authorized yet. Ask the user once before
+mutating the tree, planning experiments or dispatching executors. From a method,
+ask whether to improve this named method or search ideas and hypotheses across
+the tree. From a tree, confirm tree-level research without offering to descend
+into a method. Wait for the reply, then record operation `scope` with
+`{"level":"method"}` or `{"level":"tree"}`. Cancellation starts no research.
+This also covers direct slash invocations outside the UI launch dialog.
+
+- **Method:** investigate mechanisms and improvements of the selected method,
+  informed by its existing results. Publish alternative improvement hypotheses
+  in that method's description and their decisive experiments on its own kanban.
+  Use `phase:"hypotheses"` with `node_ids:[method_id]`; do not create competing
+  methods, edit other branches, or promote the investigation to tree level.
+  The originating card supplies evidence; it does not restrict the work to one
+  card. Preserve the method's existing description and conclusions.
+- **Tree:** investigate higher-level ideas, causes and falsifiable hypotheses;
+  compare alternative methods, then publish them in the appropriate branches
+  and prepare their experiments. Do not silently narrow this to tuning one
+  selected implementation. Keep the root unchanged.
+
+These scope rules override the generic method-generation and ancestor-update
+instructions below. Continue across waves within the agreed scope. If a broader
+question emerges during method research, report it and propose a separate
+TREE-level research request; never expand the current run silently.
+
 ## Coordinator
 
 Load the sibling `arbor-research-agent` and `arbor-agent-orchestrator` skills,
@@ -48,7 +85,7 @@ max_executors=1000 as a technical ceiling, with the agreed time/concurrency
 bounds controlling actual work. Never raise a previously agreed lifetime cap.
 The adapter refuses new launches after the deadline or total launch limit.
 
-Supported operations: `phase`, `contract`, `meta`, `view`, `create_node`, `update_node`, `delete_node`,
+Supported operations: `scope`, `phase`, `contract`, `meta`, `view`, `create_node`, `update_node`, `delete_node`,
 `create_card`, `update_card`, `read_report`, `write_report`, `conclusion`.
 Arguments follow existing ResearcherOS project command fields. Node operations
 use `node_id`; cards/reports use `board_id` and `card_id`. Report writing adds

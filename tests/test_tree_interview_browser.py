@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize('theme', ['dark', 'light'])
 @pytest.mark.parametrize('source', ['repository', 'local'])
 @pytest.mark.parametrize('failure', [False, True])
-def test_description_tree_brief_and_method_question(theme, source, failure):
+def test_description_tree_brief_and_method_question(theme, source, failure, monkeypatch):
     class Handler(SimpleHTTPRequestHandler):
         def log_message(self, *_):
             pass
@@ -25,6 +25,7 @@ def test_description_tree_brief_and_method_question(theme, source, failure):
     brief = {key: dict(answer='Не определено', source='Описание пользователя', needs_clarification=False, clarification='') for key, *_ in interview.BRIEF_FIELDS}
     root = dict(id='root', node_type='direction', parent_id=None, title='Адаптивные рассуждения агента', description='Содержательное описание вне дерева.', edge_type='direction', edge_label='')
     tutorial = theme == 'light' and source == 'repository' and not failure
+    monkeypatch.setattr(interview, '_ask_program_reply', lambda state, answer, repo, **kwargs: dict(intent='select', title='PAR' if answer == 'ОК, дерево согласовано' else 'ML', expansion='projection augmented reality' if answer == 'ОК, дерево согласовано' else 'машинное обучение'))
     requests = []
     waiting = []
     pause_reply = [True]
@@ -48,6 +49,12 @@ def test_description_tree_brief_and_method_question(theme, source, failure):
             if fail_next[0]:
                 fail_next[0] = False
                 route.fulfill(status=400, json={'detail': 'Codex не вернул ответ. Выбери другого агента и повтори отправку.'})
+                return
+            if state.get('tree_approved') or (state.get('complete') and payload['answer'] == 'ОК, дерево согласовано'):
+                initial = not state.get('tree_approved')
+                state['tree_approved'] = True
+                interview._program_dialog(state, payload['answer'], ROOT, initial=initial)
+                route.fulfill(json=interview._public(state))
                 return
             state['messages'].append({'role': 'user', 'text': payload['answer'], 'question_text': 'Описание проекта'})
             has_method = len(state['messages']) > 2
@@ -88,7 +95,15 @@ def test_description_tree_brief_and_method_question(theme, source, failure):
             expect(textarea).to_have_value('')
             expect(textarea).to_be_disabled()
             expect(agent_select).to_be_disabled()
-            expect(page.get_by_text('Codex изучает материалы и обновляет дерево…', exact=True)).to_be_visible()
+            expect(page.get_by_text('Агент погружается в ваше исследование', exact=True)).to_be_visible()
+            if theme == 'light' and source == 'repository' and not failure:
+                shots = ROOT / '.run/ui-screenshots'
+                shots.mkdir(exist_ok=True, parents=True)
+                for index, caption in enumerate(['Агент погружается в ваше исследование', 'Агент выстраивает дерево', 'Агент выбирает программу'], 1):
+                    expect(page.get_by_text(caption, exact=True)).to_be_visible(timeout=7000)
+                    page.screenshot(path=str(shots / f'onboarding-loading-{index}.png'))
+                activity = page.locator('[data-loading] .ma-core')
+                assert activity.evaluate("node => getComputedStyle(node).animationName") != 'none'
             pause_reply[0] = False
             route_api(waiting.pop())
             if failure:
@@ -118,14 +133,14 @@ def test_description_tree_brief_and_method_question(theme, source, failure):
             page.get_by_role('button', name='Чат', exact=True).click()
             expect(brief_panel).to_be_hidden()
             expect(textarea).to_have_value('Сохраняемый черновик')
-            expect(page.get_by_role('button', name='Создать проект с этим деревом')).to_be_hidden()
+            expect(page.get_by_role('button', name='Дерево подходит — продолжить')).to_be_hidden()
             textarea.fill('У меня пока нет идей.')
             textarea.press('Enter')
             expect(tree.locator('.map-node')).to_have_count(2)
             expect(tree.locator('.node-title')).to_have_text(['Адаптивные рассуждения агента', 'Обучение с учётом риска'])
             expect(tree.locator('.node-label')).to_have_text(['[Направление]', '[Метод]'])
             expect(tree.locator('.onboarding-interview__edge')).to_have_count(1)
-            expect(page.get_by_role('button', name='Создать проект с этим деревом')).to_be_visible()
+            expect(page.get_by_role('button', name='Дерево подходит — продолжить')).to_be_hidden()
             expect(page.get_by_role('button', name='Бриф', exact=True)).to_have_count(1)
             expect(page.locator('.onboarding-interview__tabs').get_by_role('button', name='Бриф')).to_be_visible()
             expect(page.locator('.onboarding-interview__messages button')).to_have_count(0)
@@ -143,13 +158,13 @@ def test_description_tree_brief_and_method_question(theme, source, failure):
             output = ROOT / '.run/ui-screenshots'
             output.mkdir(exist_ok=True, parents=True)
             if tutorial:
-                finish = page.get_by_role('button', name='Создать проект с этим деревом')
-                expect(finish).to_be_disabled()
+                finish = page.get_by_role('button', name='Дерево подходит — продолжить')
+                expect(finish).to_be_hidden()
                 root = tree.locator('[data-node-id="root"]')
                 expect(root).to_have_class(__import__('re').compile('is-tutorial'))
                 root.hover()
-                expect(finish).to_be_enabled()
-                expect(page.get_by_text('Ты можешь отредактировать дерево тут или перейти в рабочую область и всегда сделать это там.', exact=True)).to_be_visible()
+                expect(finish).to_be_hidden()
+                expect(page.get_by_text('Можно отредактировать дерево здесь; когда закончишь, напиши «ОК, дерево согласовано».', exact=True)).to_be_visible()
                 root = tree.locator('[data-node-id="root"]')
                 root.dblclick()
                 title_editor = page.get_by_role('textbox', name='Имя узла', exact=True)
@@ -171,7 +186,41 @@ def test_description_tree_brief_and_method_question(theme, source, failure):
                 textarea.press('Enter')
                 expect(textarea).to_have_value('')
                 expect(tree.locator('.map-node.method')).to_have_count(2)
-                expect(finish).to_be_enabled()
+                expect(finish).to_be_hidden()
+            expect(page.get_by_text('Общее направление объединяет несколько тем исследования.', exact=False)).to_be_hidden()
+            if theme == 'light' and source == 'repository' and not failure:
+                page.screenshot(path=str(output / 'onboarding-awaiting-approval.png'))
+            textarea.fill('ОК, дерево согласовано')
+            textarea.press('Enter')
+            expect(page.get_by_text('Общее направление объединяет несколько тем исследования.', exact=False)).to_be_visible()
+            expect(page.locator('.onboarding-interview__messages strong').filter(has_text='Пришли короткое обозначение общего направления')).to_be_visible()
+            expect(textarea).to_have_attribute('placeholder', 'Что думаешь о названии?')
+            expect(agent_select).to_be_hidden()
+            expect(page.get_by_role('button', name='Дерево подходит — продолжить')).to_be_hidden()
+            if theme == 'light' and source == 'repository' and not failure:
+                page.screenshot(path=str(output / 'onboarding-program-required.png'))
+            expect(page.get_by_role('button', name='Перейти к исследованию')).to_be_hidden()
+            before_empty = len(requests)
+            textarea.fill('   ')
+            textarea.press('Enter')
+            assert len(requests) == before_empty
+            textarea.fill('Название хорошее, но лучше ML')
+            textarea.press('Enter')
+            expect(page.get_by_text('Тогда выбираем', exact=False)).to_be_visible()
+            expect(page.get_by_role('button', name='Перейти к исследованию')).to_be_hidden()
+            expect(textarea).to_have_attribute('placeholder', 'Да, нет или правка')
+            if theme == 'light' and source == 'repository' and not failure:
+                page.screenshot(path=str(output / 'onboarding-program-confirmation.png'))
+            textarea.fill('да')
+            textarea.press('Enter')
+            expect(page.get_by_role('button', name='Перейти к исследованию')).to_be_visible()
+            if theme == 'light' and source == 'repository' and not failure:
+                page.screenshot(path=str(output / 'onboarding-program-confirmed.png'))
+            page.route('**/api/desktop/onboarding/interview/finish', lambda route: route.fulfill(status=400, json={'detail': 'Проверка сохранения'}))
+            with page.expect_request('**/api/desktop/onboarding/interview/finish') as saving:
+                page.get_by_role('button', name='Перейти к исследованию').click()
+            assert 'program_title' not in saving.value.post_data_json
+            expect(page.get_by_role('alert')).to_have_text('Проверка сохранения')
             page.screenshot(path=str(output / f'tree-interview-{source}-{theme}.png'))
             browser.close()
     finally:

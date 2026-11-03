@@ -326,6 +326,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
         item = enqueue_question(
             body.project_id,
             body.question,
+            research_scope=getattr(body, "research_scope", None),
             method_id=body.method_id,
             node_id=body.node_id,
             purpose="git_chat" if git_chat else getattr(body, "purpose", "agent"),

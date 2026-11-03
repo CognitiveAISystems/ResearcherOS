@@ -143,7 +143,7 @@ def build_context(item_id: str) -> dict:
     scope_node = None
 
     board = next((b for b in project.boards if b.id == item.get("board_id")), None)
-    method_id = item.get("method_id") or (board.owner_node_id if board else None)
+    method_id = board.owner_node_id if board else item.get("method_id")
     if method_id:
         method = next((n for n in project.nodes if n.id == method_id), None)
         if method:
