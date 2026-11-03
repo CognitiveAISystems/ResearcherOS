@@ -299,7 +299,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
     _check_scope(body.project_id, getattr(body, "board_id", None), getattr(body, "card_id", None))
     if not body.project_id and not getattr(body, "conversation_id", None):
         raise HTTPException(400, "Chat required")
-    if getattr(body, "purpose", "agent") in ("prose", "run") and not (getattr(body, "card_id", None) and getattr(body, "board_id", None)):
+    if getattr(body, "purpose", "agent") in ("prose", "compress", "run") and not (getattr(body, "card_id", None) and getattr(body, "board_id", None)):
         raise HTTPException(400, "Откройте карточку, чтобы выполнить эту команду.")
     cid = getattr(body, "conversation_id", None)
     conversation = _conversation(cid) if cid else None

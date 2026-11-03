@@ -118,7 +118,7 @@ def _base_sdk_prompt(item_id: str) -> str:
         pending_run = continuation_run(item) if item else None
         if pending_run:
             return coordinator_prompt(item, ctx, resume_id=pending_run)
-    if "project_id" in ctx and ctx["project_id"] is None and ctx.get("purpose", "agent") in ("agent", "prose", "run"):
+    if "project_id" in ctx and ctx["project_id"] is None and ctx.get("purpose", "agent") in ("agent", "prose", "compress", "run"):
         from koi.agent_chat.context_routing import INSTRUCTIONS
         return (
             "Ты агент ResearcherOS. Дерево для этого чата ещё не выбрано. "
@@ -143,6 +143,26 @@ def _base_sdk_prompt(item_id: str) -> str:
     if ctx.get("purpose") in ("report_grill", "grill_me"):
         from koi.agent_chat.report_grill import build_prompt
         return build_prompt(ctx)
+    if ctx.get("purpose") == "compress" and ctx.get("skill"):
+        from pathlib import Path
+        task = (
+            "Сожми и перепиши отчёт текущей карточки для исследователя, не знакомого с прогоном, "
+            "по koi-reader-rewrite: отдельные критик и переписыватель, затем проверка сохранности. "
+            "Это поручение отредактировать и сохранить отчёт, а не только предложить текст в чате. "
+            "Убери повторы и ненужную хронологию; изложи вопрос, результат и его смысл простым языком. "
+            "Сохрани числа с условиями, доказательства, ограничения, критерии решения, вердикты, "
+            "обязательные заголовки, чеклисты и их галочки, live-поля, все изображения и ссылки. "
+            "Результаты оставь перед выводами; детали переноси только в существующий раздел "
+            "или реально сохранённое приложение. Не сокращай ради произвольного лимита слов. "
+            "Не запускай эксперимент, не меняй карточку, её статус, дерево или research.json. "
+            "Найди канонический отчёт по card_id в reports/index.json внутри research_root. "
+            "Сохрани исходник для сравнения. current_document учитывай как черновик редактора; "
+            "при расхождении с файлом сохрани обе версии и не затирай параллельные правки. "
+            "После PASS перечитай файл и сохрани результат, если исходник не изменился; "
+            "если изменился — учти изменения и повтори проверку. При отсутствии PASS "
+            "сохрани отдельный черновик, не заменяя исходник. В чате кратко сообщи итог и путь."
+        )
+        return f"{Path(ctx['skill']).read_text(encoding='utf-8')}\n\n{task}\n\nКонтекст:\n{json.dumps(ctx, ensure_ascii=False, indent=2)}"
     if ctx.get("purpose") in ("prose", "run") and ctx.get("skill"):
         from pathlib import Path
         task = (
@@ -414,7 +434,7 @@ def _process_item(item_id: str) -> bool:
     if live.cancelled(item_id):
         raise AgentCancelled
 
-    general_chat = item.get("purpose", "agent") in ("agent", "prose", "run")
+    general_chat = item.get("purpose", "agent") in ("agent", "prose", "compress", "run")
     chosen = (item.get("cli_agent") or "").strip().lower() or None
     catalog = cli_agents() if local_mode and chosen else []
     chosen_row = next((row for row in catalog if row["id"] == chosen), None)

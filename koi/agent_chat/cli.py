@@ -172,6 +172,7 @@ def build_context(item_id: str) -> dict:
         "make_report": "koi-execute-card/SKILL.md",
         "run": "koi-execute-card/SKILL.md",
         "prose": "koi-prose-style/SKILL.md",
+        "compress": "koi-reader-rewrite/SKILL.md",
     }
     if item.get("card_id"):
         history = messages(item_conversation(item))

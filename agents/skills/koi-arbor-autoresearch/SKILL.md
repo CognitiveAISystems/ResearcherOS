@@ -86,11 +86,50 @@ bounds controlling actual work. Never raise a previously agreed lifetime cap.
 The adapter refuses new launches after the deadline or total launch limit.
 
 Supported operations: `scope`, `phase`, `contract`, `meta`, `view`, `create_node`, `update_node`, `delete_node`,
-`create_card`, `update_card`, `read_report`, `write_report`, `conclusion`.
+`create_card`, `update_card`, `read_report`, `write_report`, `complete_subtask`,
+`publish_image`, `conclusion`.
 Arguments follow existing ResearcherOS project command fields. Node operations
 use `node_id`; cards/reports use `board_id` and `card_id`. Report writing adds
 `content`. A new card always starts in backlog. `view` returns nodes and boards
 with their real IDs. Reuse existing entities; never manufacture IDs.
+### Executor progress and image publication
+
+For experiment executors, these operations are mandatory DURING execution,
+not a final batch after the experiment. Use `tool_commands.project` with JSON
+on stdin; invoke from `engine_root` using the supplied command array.
+
+Immediately after EACH subtask meets its criterion, BEFORE starting the next
+subtask or waiting on a long job, call:
+
+```json
+{"run_id":"<run>","operation":"complete_subtask","args":{"board_id":"<board>","card_id":"<card>","task":"<exact checklist text without - [ ]>"}}
+```
+
+This marks and saves that item in §3 of the canonical report, preserving other
+executors' updates. Do not keep progress only in chat, a local report copy or
+memory. Unfinished evaluation does not prevent checking completed preparation.
+Read back the report to verify. Never mark work complete before its criterion.
+
+As soon as actual plot data is available, generate a PNG/JPEG/WebP/GIF in your
+executor directory and publish it (repeat for new measurements):
+
+```json
+{"run_id":"<run>","operation":"publish_image","args":{"board_id":"<board>","card_id":"<card>","source_path":"/absolute/executor/path/plot.png","caption":"Measured metric and data coverage","section":"### 4.1 Results"}}
+```
+
+`section` must exactly match an existing results heading in the canonical
+report; prepare that heading using `write_report` first if needed. The adapter
+copies the image to persistent report assets, embeds it below that heading and
+sets an absolute `metrics_dir` to this card's gallery in the report header.
+The returned `markdown_path` is relative to the report, NOT to the executor cwd
+or code root. Keep the image and its Markdown embed when updating the report.
+These are immutable snapshots: old evidence is preserved when a new plot is
+published. Do not point metrics_dir at a remote host or isolated executor copy;
+do not embed filesystem paths or code-relative image links in the report.
+Check the card live snapshot shows the image and the report asset URL opens.
+If data is not yet available, explain why in live_note; never fabricate a plot.
+Before done, verify the key evidence is embedded and opens in the report.
+
 TreeView maps to `view`; TreeAddNode/TreeUpdateNode map to node/card commands.
 Map strategy levels to existing program/cause branches, preserving each
 falsifiable hypothesis in its description and the hypothesis edge where the

@@ -120,3 +120,66 @@ def test_visible_wave_must_precede_execution_and_single_run_can_finish(context, 
     # A new wave must publish its hypotheses again, without duplicating old cards.
     research_tools.perform(run, 'phase', {'phase': 'hypotheses', 'node_ids': workflow['node_ids']})
     assert 'cards' not in research_tools.perform(run, 'view', {})['arbor_metadata']['research_workflow']
+
+
+@pytest.fixture
+def progress_card(context, tmp_path, monkeypatch):
+    from koi.core.models import KanbanBoard, ExperimentCard
+    from koi.projects import live_artifacts
+    run, project = context
+    project.boards.append(KanbanBoard(id='board', owner_node_id='method', cards=[
+        ExperimentCard(id='card', board_id='board', title='Experiment', column_id='running')]))
+    reports = tmp_path / 'tree' / 'demo' / 'koi-structure' / 'reports'
+    reports.mkdir(parents=True)
+    monkeypatch.setattr(research_tools.card_reports, 'reports_dir', lambda _: reports)
+    repo = tmp_path / 'code'
+    repo.mkdir()
+    monkeypatch.setattr(live_artifacts, 'repo_root', lambda _: repo)
+    research_tools.perform(run, 'write_report', {'board_id': 'board', 'card_id': 'card',
+        'content': '## 1. Goal\nTest.\n## 2. Metric\nScore.\n## 3. Setup\n- [ ] Prepare\n- [ ] Evaluate\n## 4. Experiment\n### 4.1 Results\n\n### 4.2 Conclusions\n'})
+    return run, project, {'board_id': 'board', 'card_id': 'card'}
+
+
+def test_progress_is_saved_before_experiment_finishes(progress_card):
+    run, project, ref = progress_card
+    research_tools.perform(run, 'complete_subtask', {**ref, 'task': 'Prepare'})
+    report = research_tools.perform(run, 'read_report', ref)['content']
+    assert '- [x] Prepare' in report
+    assert '- [ ] Evaluate' in report
+    assert project.boards[0].cards[0].column_id == 'running'
+    research_tools.perform(run, 'complete_subtask', {**ref, 'task': 'Prepare'})  # idempotent
+    with pytest.raises(ValueError, match='exactly one'):
+        research_tools.perform(run, 'complete_subtask', {**ref, 'task': 'Missing'})
+
+
+def test_executor_image_is_visible_in_monitor_and_report(progress_card, tmp_path):
+    from koi.projects import live_artifacts
+    run, project, ref = progress_card
+    source = tmp_path / 'isolated-executor' / 'loss.png'
+    source.parent.mkdir()
+    import base64
+    source.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='))
+    result = research_tools.perform(run, 'publish_image', {**ref, 'source_path': str(source),
+        'caption': 'Observed loss', 'section': '### 4.1 Results'})
+    source.unlink()  # executor workspace can disappear
+    report = research_tools.perform(run, 'read_report', ref)['content']
+    assert f'![Observed loss]({result["markdown_path"]})' in report
+    assert report.index('![Observed loss]') < report.index('### 4.2 Conclusions')
+    image = research_tools.card_reports.resolve_report_asset_path(project, 'board', 'card', 'Experiment',
+        result['markdown_path'].removeprefix('assets/'))
+    assert image.is_file()
+    snapshot = live_artifacts.live_snapshot('demo', hints=live_artifacts.parse_live_hints(report),
+        description=report, column_id='running')
+    assert snapshot['metrics_dir']['images'][0]['name'] == image.name
+    assert snapshot['metrics_dir']['exists']
+    assert '- [ ] Evaluate' in report
+
+
+def test_progress_rejects_wrong_section_and_inactive_card(progress_card, tmp_path):
+    run, project, ref = progress_card
+    with pytest.raises(ValueError, match='existing report heading'):
+        research_tools.perform(run, 'publish_image', {**ref, 'source_path': str(tmp_path / 'absent.png'),
+            'caption': 'Loss', 'section': '### Missing'})
+    project.boards[0].cards[0].column_id = 'done'
+    with pytest.raises(ValueError, match='running'):
+        research_tools.perform(run, 'complete_subtask', {**ref, 'task': 'Prepare'})

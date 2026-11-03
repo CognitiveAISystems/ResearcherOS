@@ -4,10 +4,13 @@ Send one JSON request on stdin. This is also usable from any agent CLI.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import mimetypes
 import re
 import sys
 from dataclasses import fields
+from pathlib import Path
 
 from koi.adapters import repository, card_reports
 from koi.core.models import NodeType, EdgeType
@@ -151,7 +154,7 @@ def perform(run_id, operation, args):
                 raise ValueError("New experiments must start in backlog")
             payload["column_id"] = "backlog"
             result = commands.create_card(project_id, args["board_id"], commands.CreateCardCommand(**payload))
-        elif operation in ("read_report", "write_report", "update_card", "conclusion"):
+        elif operation in ("read_report", "write_report", "complete_subtask", "publish_image", "update_card", "conclusion"):
             board = next((b for b in project.boards if b.id == args["board_id"]), None)
             card = next((c for c in board.cards if c.id == args["card_id"]), None) if board else None
             if card is None:
@@ -160,6 +163,53 @@ def perform(run_id, operation, args):
                 return card_reports.read_report(project, board.id, card.id, card.title)
             if operation == "write_report":
                 return card_reports.write_report(project, board.id, card.id, card.title, args["content"])
+            if operation in ("complete_subtask", "publish_image"):
+                if card.column_id != "running":
+                    raise ValueError("Publish experiment progress while the card is running")
+                content = card_reports.read_report(project, board.id, card.id, card.title)["content"]
+                if operation == "complete_subtask":
+                    # Match the task text, never a shifting numeric index or the whole report.
+                    task = str(args["task"]).strip()
+                    section = re.search(r"^##\s+3[.)]\s+.*?(?=^##\s|\Z)", content, re.M | re.S)
+                    if not section or not task:
+                        raise ValueError("Subtask must exist in report section 3")
+                    pattern = re.compile(r"^(\s*-\s+)\[([ xX])\](\s+" + re.escape(task) + r"\s*)$", re.M)
+                    if len(list(pattern.finditer(section.group()))) != 1:
+                        raise ValueError("Subtask text must match exactly one checklist item in section 3")
+                    updated = pattern.sub(lambda m: m[1] + "[x]" + m[3], section.group())
+                    content = content[:section.start()] + updated + content[section.end():]
+                else:
+                    heading = str(args["section"]).strip()
+                    if not re.fullmatch(r"#{2,6}\s+\S[^\n]*", heading) or content.splitlines().count(heading) != 1:
+                        raise ValueError("Image section must match exactly one existing report heading")
+                    caption = str(args["caption"]).strip()
+                    if not caption or any(c in caption for c in "\r\n[]"):
+                        raise ValueError("Provide a one-line image caption without brackets")
+                    source = Path(args["source_path"])
+                    if not source.is_absolute():
+                        raise ValueError("Image source_path must be absolute in the executor workspace")
+                    mime = mimetypes.guess_type(source.name)[0] or ""
+                    if mime not in card_reports.MIME_TO_EXT:
+                        raise ValueError("Unsupported image type")
+                    with source.open("rb") as stream:
+                        data = stream.read(card_reports.MAX_ASSET_BYTES + 1)
+                    asset = card_reports.save_report_asset(project, board.id, card.id, card.title, data, mime)
+                    report_dir = card_reports._report_dir_for_card(project, board.id, card.id, card.title)
+                    # Each card has its own gallery even when reports share a method directory.
+                    gallery = "card-" + hashlib.sha256(card.id.encode()).hexdigest()[:16]
+                    target = report_dir / "assets" / gallery / asset["filename"]
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    (report_dir / asset["markdown_path"]).replace(target)
+                    markdown_path = f"assets/{gallery}/{asset['filename']}"
+                    content = re.sub(r"^" + re.escape(heading) + r"$",
+                                     lambda _: heading + f"\n\n![{caption}]({markdown_path})",
+                                     content, count=1, flags=re.M)
+                    hint = "metrics_dir: " + str(target.parent.resolve())
+                    content = re.sub(r"^metrics_dir:[^\n]*\n?", "", content, flags=re.M | re.I)
+                    content = hint + "\n" + content
+                result = card_reports.write_report(project, board.id, card.id, card.title, content)
+                return {**result, **({"markdown_path": markdown_path, "metrics_dir": str(target.parent)}
+                                      if operation == "publish_image" else {})}
             if operation == "conclusion":
                 if card.column_id != "done":
                     raise ValueError("Only a completed card can produce a final conclusion")
