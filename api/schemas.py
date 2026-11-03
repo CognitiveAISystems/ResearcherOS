@@ -200,6 +200,7 @@ class ConversationReadBody(BaseModel):
 
 
 class AgentChatBody(BaseModel):
+    research_scope: Optional[Literal["tree", "method"]] = None
     project_id: Optional[str] = Field(default=None, min_length=1)
     question: str = Field(min_length=1)
     method_id: Optional[str] = None

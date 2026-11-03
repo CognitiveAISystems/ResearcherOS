@@ -25,7 +25,7 @@ async function post(url, payload) {
   try {
     response = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), signal: AbortSignal.timeout(140000),
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(280000),
     });
   } catch (problem) {
     if (problem.name === 'TimeoutError' || problem.name === 'AbortError') throw new Error('Не удалось дождаться ответа агента. Повтори отправку или выбери другого агента.');
@@ -294,6 +294,8 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
   const progress = shell.querySelector('.onboarding-interview__step-hint');
   let state = null;
   let busy = false;
+  let programStep = false;
+  let activityTimer = null;
   const localSessionKey = localProject ? `researchos-tree-interview:${localProject.tag}` : null;
   const address = () => ({ repo_path: repoPath, branch, session_id: state?.session_id });
 
@@ -394,7 +396,17 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
   function messageRow(entry) {
     const row = el('div', `onboarding-interview__row ${entry.role === 'user' ? 'is-user' : 'is-agent'}`);
     const bubble = el('div', 'onboarding-interview__bubble');
-    bubble.append(el('p', 'onboarding-interview__question', entry.text));
+    for (const block of entry.text.split('\n\n')) {
+      const lines = block.split('\n');
+      const list = entry.role !== 'user' && lines.every(line => line.startsWith('- '));
+      const content = el(list ? 'ul' : 'p', 'onboarding-interview__question');
+      if (list) for (const line of lines) content.append(el('li', '', line.slice(2)));
+      else if (entry.role === 'user') content.textContent = block;
+      else for (const [index, part] of block.split(/\*\*([^*]+)\*\*/g).entries()) {
+        content.append(index % 2 ? el('strong', '', part) : document.createTextNode(part));
+      }
+      bubble.append(content);
+    }
     if (entry.role !== 'user') row.append(el('span', 'onboarding-interview__avatar', '✦'));
 
     row.append(bubble);
@@ -417,11 +429,12 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
   for (const button of shell.querySelectorAll('[data-panel]')) button.addEventListener('click', () => showPanel(button.dataset.panel));
   function setBusy(value, label = '') {
     busy = value;
+    clearInterval(activityTimer);
     shell.setAttribute('aria-busy', String(value));
     textarea.disabled = value;
     send.disabled = value;
     agentSelect.disabled = value;
-    finish.disabled = value || !state?.complete || Boolean(state?.tutorial_required && !state?.tutorial_seen);
+    finish.disabled = value || !state?.program_confirmed || Boolean(state?.tutorial_required && !state?.tutorial_seen);
     back.disabled = value;
     inspect.disabled = !state?.nodes.length || !state?.messages.some(entry => entry.brief);
     messages.querySelector('[data-loading]')?.remove();
@@ -429,14 +442,19 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
       const loading = el('div', 'onboarding-interview__row is-agent onboarding-interview__typing');
       loading.dataset.loading = 'true'; loading.setAttribute('role', 'status');
       const bubble = el('div', 'onboarding-interview__bubble');
-      const dots = el('span', 'onboarding-interview__dots'); dots.setAttribute('aria-hidden', 'true');
-      dots.append(el('i'), el('i'), el('i'));
-      bubble.append(el('span', 'onboarding-interview__typing-label', label || `${agentSelect.selectedOptions[0].textContent} изучает материалы и обновляет дерево…`), dots);
+      const activity = el('div', 'onboarding-interview__activity');
+      activity.innerHTML = activitySvg();
+      const captions = ['Агент погружается в ваше исследование', 'Агент выстраивает дерево', 'Агент выбирает программу'];
+      const caption = el('span', 'onboarding-interview__typing-label', label || captions[0]);
+      bubble.append(activity, caption);
+      let captionIndex = 0;
+      if (!label) activityTimer = setInterval(() => { caption.textContent = captions[++captionIndex % captions.length]; }, 5000);
       loading.append(el('span', 'onboarding-interview__avatar', '✦'), bubble); messages.append(loading);
       messages.scrollTop = messages.scrollHeight;
     }
   }
   function render() {
+    programStep = Boolean(state.tree_approved);
     messages.replaceChildren(...state.messages.map(messageRow));
     const briefEntry = state.messages.findLast(entry => entry.brief);
     briefPanel.replaceChildren(...(briefEntry ? [renderBrief(briefEntry)] : []));
@@ -457,9 +475,13 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
       return item;
     }));
     progress.textContent = state.phase === 'description' ? 'Описание → дерево → уточнения структуры' : `Вопросы: ${state.question_count}/4 · Подтверждения: ${state.confirmation_count}/2`;
-    finish.hidden = !state.complete;
+    finish.hidden = !state.program_confirmed;
+    finish.textContent = 'Перейти к исследованию';
     shell.querySelector('.onboarding-interview__input-wrap').hidden = false;
-    textarea.placeholder = state.phase === 'description' ? 'Хочу исследовать…' : state.complete ? 'Что исправить в дереве?' : 'Ответ одним предложением…';
+    textarea.placeholder = programStep ? (state.program_confirmation_pending ? 'Да, нет или правка' : 'Что думаешь о названии?') : state.phase === 'description' ? 'Хочу исследовать…' : state.complete ? 'ОК, дерево согласовано — или что поправить' : 'Ответ одним предложением…';
+    textarea.maxLength = 12000;
+    agentSelect.hidden = programStep;
+    if (programStep) progress.textContent = 'Дерево согласовано · Направление исследований';
     const last = messages.lastElementChild;
     if (last) messages.scrollTop = Math.max(0, last.offsetTop - messages.offsetTop);
   }
@@ -492,15 +514,15 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   });
   back.addEventListener('click', () => { if (!busy) { onBack(); if (previousFocus?.isConnected) previousFocus.focus(); } });
-  finish.addEventListener('click', async () => {
-    if (busy || !state?.complete || (state.tutorial_required && !state.tutorial_seen)) return;
-    error.textContent = ''; setBusy(true);
+  finish.addEventListener('click', () => { if (!busy && state?.program_confirmed) void createProject(); });
+  async function createProject() {
+    error.textContent = ''; setBusy(true, 'Сохраняем исследование…');
     try {
       const created = await post('/api/desktop/onboarding/interview/finish', { path: repoPath, branch, session_id: state.session_id });
       if (localSessionKey) sessionStorage.removeItem(localSessionKey);
       window.location.replace(`/?project=${encodeURIComponent(created.project_id)}`);
     } catch (problem) { error.textContent = problem.message; setBusy(false); }
-  });
+  }
   setBusy(true);
   try {
     state = await post('/api/desktop/onboarding/interview/start', { repo_path: repoPath, workspace_root: workspaceRoot, branch, project_tag: localProject?.tag, title: localProject?.title, program_id: program?.id, program_title: program?.title, session_id: localSessionKey ? sessionStorage.getItem(localSessionKey) : null, onboarding });

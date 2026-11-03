@@ -25,6 +25,22 @@ def perform(run_id, operation, args):
         run = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
         if run is None:
             raise KeyError(run_id)
+        metadata = json.loads(run["metadata"])
+        scope = metadata.get("research_scope")
+        if operation == "scope":
+            if scope and scope.get("level"):
+                raise ValueError("The agreed research scope cannot be changed; start a new research request")
+            level = args.get("level")
+            if level not in ("tree", "method"):
+                raise ValueError("Choose tree or method after user confirmation")
+            method_id = (scope or {}).get("method_id") if level == "method" else None
+            if level == "method" and not method_id:
+                raise ValueError("No method in the launch context")
+            metadata["research_scope"] = {"level": level, "method_id": method_id}
+            db.execute("UPDATE runs SET metadata=? WHERE id=?", (json.dumps(metadata, ensure_ascii=False), run_id))
+            return metadata["research_scope"]
+        if scope is not None and not scope.get("level") and operation != "view":
+            raise ValueError("Confirm the research scope with the user before starting")
         if operation == "meta":
             allowed = {"baseline_score", "trunk_score", "eval_cmd", "eval_cmd_test", "dataset_info",
                        "metric_direction", "trunk_branch", "test_trunk_score", "run_mode", "permissions"}
@@ -61,6 +77,19 @@ def perform(run_id, operation, args):
             budget = db.execute("SELECT * FROM budgets WHERE run_id=?", (run_id,)).fetchone()
             return {**project.model_dump(mode="json"), "arbor_metadata": json.loads(run["metadata"]),
                     "research_budget": dict(budget) if budget else None}
+        if scope and scope.get("level") == "method":
+            method_id = scope["method_id"]
+            board_ids = {b.id for b in project.boards if b.owner_node_id == method_id}
+            if operation in ("create_node", "delete_node"):
+                raise ValueError("Method research must stay within the selected method")
+            if operation == "update_node" and (args.get("node_id") != method_id or
+                    set(args) - {"node_id", "description"}):
+                raise ValueError("Method research may only update its own description")
+            refs = args.get("cards", []) if operation == "phase" else [args] if "board_id" in args and operation != "read_report" else []
+            if any(ref.get("board_id") not in board_ids for ref in refs):
+                raise ValueError("Experiment belongs to another method")
+            if operation == "phase" and args.get("phase") == "hypotheses" and args.get("node_ids") != [method_id]:
+                raise ValueError("Publish improvement hypotheses in the selected method description")
         if operation == "phase":
             metadata = json.loads(run["metadata"])
             workflow = metadata.get("research_workflow", {})

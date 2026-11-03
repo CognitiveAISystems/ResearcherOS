@@ -57,7 +57,7 @@ def test_explicit_resume_preserves_run_budget_and_results(tmp_path, monkeypatch)
     from koi.agent_chat import research_tools
     monkeypatch.setattr(research, "PATH", tmp_path / "runs.sqlite3")
     monkeypatch.setattr(agent_chat_activity, "ACTIVITY_DIR", tmp_path / "activity")
-    item = {'id':'aq-111', 'conversation_id':'chat-a', 'project_id':'demo', 'question':'/koi-arbor-autoresearch Develop method'}
+    item = {'id':'aq-111', 'conversation_id':'chat-a', 'project_id':'demo', 'question':'/koi-arbor-autoresearch Develop method', 'research_scope':'tree'}
     context = {'project_id':'demo'}
     research.coordinator_prompt(item, context)
     original = research.participants('chat-a')[0]
@@ -85,10 +85,10 @@ def test_only_new_slash_command_routes_to_arbor(monkeypatch):
     monkeypatch.setattr(runner, 'build_context', lambda item_id: context)
     monkeypatch.setattr(runner, 'find_item', lambda item_id: {'id':item_id})
     monkeypatch.setattr(research, 'coordinator_prompt', lambda item, ctx: 'NEW ARBOR ENTRYPOINT')
-    assert runner._sdk_prompt('aq-123') == 'NEW ARBOR ENTRYPOINT'
+    assert runner._base_sdk_prompt('aq-123') == 'NEW ARBOR ENTRYPOINT'
     for command in ('/autoresearch', '/koi-card-autoresearch', '/koi-autoresearch'):
         context['user_question'] = command + ' Original workflow'
-        assert runner._sdk_prompt('aq-123') != 'NEW ARBOR ENTRYPOINT'
+        assert runner._base_sdk_prompt('aq-123') != 'NEW ARBOR ENTRYPOINT'
 
 
 def test_budget_reply_resumes_run_with_host_launcher(tmp_path, monkeypatch):
@@ -96,14 +96,14 @@ def test_budget_reply_resumes_run_with_host_launcher(tmp_path, monkeypatch):
     monkeypatch.setattr(research, 'PATH', tmp_path/'runs.sqlite3')
     monkeypatch.setattr(agent_chat_activity, 'ACTIVITY_DIR', tmp_path/'activity')
     initial = {'id':'aq-first', 'conversation_id':'chat-intake','project_id':'demo',
-               'question':'/koi-arbor-autoresearch Develop method'}
+               'question':'/koi-arbor-autoresearch Develop method', 'research_scope':'tree'}
     research.coordinator_prompt(initial, {'project_id':'demo'})
     run = research.participants('chat-intake')[0]['run_id']
     research.finish_coordinator('aq-first','completed','Waiting for budget')
     reply = {**initial, 'id':'aq-budget', 'question':'45 минут и 3 исполнителя'}
     monkeypatch.setattr(runner,'find_item',lambda _:reply)
     monkeypatch.setattr(runner,'build_context',lambda _: {'project_id':'demo','user_question':reply['question']})
-    prompt = runner._sdk_prompt(reply['id'])
+    prompt = runner._base_sdk_prompt(reply['id'])
     assert run in prompt
     with research_runtime.broker(reply['id']):
         with research._db() as db:

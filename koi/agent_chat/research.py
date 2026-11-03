@@ -145,6 +145,8 @@ def coordinator_prompt(item, context, *, resume_id=None):
     from koi.agent_chat.conversations import item_conversation
     if not context.get('project_id'):
         raise ValueError('Выберите проект перед запуском автоисследования')
+    if item.get('research_scope') not in (None, 'tree', 'method'):
+        raise ValueError('Unknown research scope')
     cid = item_conversation(item)
     words = item['question'].strip().split()
     resume_id = resume_id or (words[2] if len(words) >= 3 and words[1].lower() in ('resume', 'продолжи') else None)
@@ -165,6 +167,15 @@ def coordinator_prompt(item, context, *, resume_id=None):
         with _db() as db:
             row = db.execute('SELECT * FROM runs WHERE item_id=? ORDER BY created_at DESC LIMIT 1', (item['id'],)).fetchone()
         run_id = row['id'] if row else create_run(cid, item['id'], context['project_id'], item['question'])
+    with _db() as db:
+        metadata = json.loads(db.execute('SELECT metadata FROM runs WHERE id=?', (run_id,)).fetchone()['metadata'])
+        if 'research_scope' not in metadata:
+            level = item.get('research_scope')
+            method = context.get('scope_method') if item.get('board_id') else None
+            if level == 'method' and not method:
+                raise ValueError('Для исследования метода откройте его канбан или карточку')
+            metadata['research_scope'] = {'level': level, 'method_id': method['id'] if method and level != 'tree' else None}
+            db.execute('UPDATE runs SET metadata=? WHERE id=?', (json.dumps(metadata, ensure_ascii=False), run_id))
     agents = participants(cid)
     coordinator = next((a for a in agents if a['run_id'] == run_id and a['role'] == 'Координатор'
                         and a['status'] in ('pending', 'running', 'waiting')), None)
