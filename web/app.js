@@ -2928,7 +2928,7 @@ function getReportBlockEditor() {
 }
 function reportGrillDraft(idea = "") {
   const seed = String(idea || "").trim();
-  if (/^\/(?:grill-me|grill_me|prose|question|run|make_report)(?:\s|$)/i.test(seed)) return seed;
+  if (/^\/(?:grill-me|grill_me|prose|compress|question|run|make_report)(?:\s|$)/i.test(seed)) return seed;
   return seed ? `/grill-me ${seed}` : "";
 }
 function formatReportGrillAnswer(text) {
@@ -8570,7 +8570,7 @@ async function submitAgentQuestion(e) {
     return;
   }
 
-  if (!mainConversations.contextScope?.card_id && /^\/(?:grill-me|grill_me|prose|run|make_report)(?:\s|$)/i.test(text)) {
+  if (!mainConversations.contextScope?.card_id && /^\/(?:grill-me|grill_me|prose|compress|run|make_report)(?:\s|$)/i.test(text)) {
     setAgentChatFormStatus("Откройте карточку, чтобы выполнить эту команду.", "error");
     return;
   }

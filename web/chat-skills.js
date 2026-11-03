@@ -6,16 +6,17 @@ export const CARD_SKILLS = [
   ...RESEARCH_SKILLS,
   {command: 'grill-me', name: 'grill-me', description: 'Уточнить цель, метрики и план эксперимента.'},
   {command: 'prose', name: 'prose', description: 'Проверить и улучшить текст карточки и отчёта.'},
+  {command: 'compress', name: 'Сжать отчёт', description: 'Сократить и упростить отчёт, сохранив результаты, ограничения и картинки.'},
   {command: 'question', name: 'question', description: 'Ответить по материалам карточки без изменений.'},
   {command: 'run', name: 'run', description: 'Выполнить карточку: план, проверки, отчёт и итоговый статус.'},
 ];
 
 export function reportChatCommand(text) {
-  const match = text.match(/^\/(grill-me|grill_me|prose|question|run|make_report)(?:\s+|$)([\s\S]*)$/i);
+  const match = text.match(/^\/(grill-me|grill_me|prose|compress|question|run|make_report)(?:\s+|$)([\s\S]*)$/i);
   if (!match) return {purpose: 'agent', question: text};
   const name = match[1].toLowerCase();
   const purpose = name === 'grill-me' ? 'grill_me' : name;
-  const defaults = {grill_me: 'Пройди постановку этой задачи.', prose: 'Проверь и улучши текст карточки и отчёта.', question: 'Ответь на вопрос по этой карточке.', run: 'Выполни эту карточку по системному процессу.', make_report: 'Собери отчёт по этой задаче.'};
+  const defaults = {compress: 'Сожми отчёт этой карточки до читабельного для человека формата.', grill_me: 'Пройди постановку этой задачи.', prose: 'Проверь и улучши текст карточки и отчёта.', question: 'Ответь на вопрос по этой карточке.', run: 'Выполни эту карточку по системному процессу.', make_report: 'Собери отчёт по этой задаче.'};
   return {purpose, question: match[2].trim() || defaults[purpose]};
 }
 

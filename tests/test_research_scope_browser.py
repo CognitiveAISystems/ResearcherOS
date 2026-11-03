@@ -63,7 +63,13 @@ async def check():
         # Card menu retains run as an independent action.
         await page.evaluate("context.card = 'card'")
         await field.fill('/')
-        assert await options.locator('strong').all_text_contents() == ['Автоисследование', 'grill-me', 'prose', 'question', 'run']
+        assert await options.locator('strong').all_text_contents() == ['Автоисследование', 'grill-me', 'prose', 'Сжать отчёт', 'question', 'run']
+        await field.fill('/compress')
+        await field.press('Enter')
+        assert await field.input_value() == '/compress '
+        assert await page.evaluate('sent.length') == 0
+        await page.evaluate("document.querySelector('#report-interview-form').requestSubmit()")
+        assert await page.evaluate('sent.pop().purpose') == 'compress'
         await field.fill('/koi-arbor-autoresearch Улучшить метод')
         await field.press('Escape')
         await page.evaluate("document.querySelector('#report-interview-form').requestSubmit()")

@@ -205,7 +205,7 @@ class AgentChatBody(BaseModel):
     question: str = Field(min_length=1)
     method_id: Optional[str] = None
     node_id: Optional[str] = None
-    purpose: Literal["agent", "question", "report_grill", "grill_me", "make_report", "prose", "run"] = "agent"
+    purpose: Literal["agent", "question", "report_grill", "grill_me", "make_report", "prose", "compress", "run"] = "agent"
     board_id: Optional[str] = None
     card_id: Optional[str] = None
     report_markdown: str = ""
