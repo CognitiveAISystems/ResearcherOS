@@ -13,12 +13,15 @@ class AgentCancelled(Exception):
     pass
 
 
-def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None, on_started=None):
+def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None, on_started=None,
+             feed_stdin=True):
     if is_cancelled and is_cancelled():
         raise AgentCancelled
     process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
         encoding="utf-8", errors="replace", start_new_session=os.name != "nt")
+    stdin, stdout = process.stdin, process.stdout
+    assert stdin is not None and stdout is not None  # stdin/stdout=subprocess.PIPE
     finished = threading.Event()
     expired = threading.Event()
     deadline = time.monotonic() + timeout
@@ -49,11 +52,12 @@ def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None, on_s
         if on_started is not None:
             on_started(process.pid)
         try:
-            process.stdin.write(prompt)
-            process.stdin.close()
+            if feed_stdin:
+                stdin.write(prompt)
+            stdin.close()
         except BrokenPipeError:
             pass
-        for line in process.stdout:
+        for line in stdout:
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -72,6 +76,6 @@ def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None, on_s
         if process.poll() is None:
             kill_group()
             process.wait()
-        for stream in (process.stdin, process.stdout):
+        for stream in (stdin, stdout):
             if getattr(stream, "close", None) and not getattr(stream, "closed", False):
                 stream.close()

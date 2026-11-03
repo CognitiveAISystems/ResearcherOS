@@ -75,7 +75,7 @@ python -m koi.projects.report_ingest.cli <project_id> <card_id>
 1. Скрипт находит карточку, собирает контекст (цепочка узлов problem→…→method,
    описание карточки, уже известные инсайты) и формирует задание агенту с жёсткими
    требованиями к отчёту (шаблон `agents/skills/koi-report-review/experiment-report.md`, все §0–§5).
-2. Агент (Claude Code CLI или Cursor SDK — см. раздел 5) проводит проверку и пишет
+2. Агент (локальный CLI: OpenCode, Claude Code, Codex или Cursor — см. раздел 5) проводит проверку и пишет
    рабочий отчёт `reports/<узел>/<карточка>.run.md`. Кроме файла отчёта агент
    ничего менять не должен.
 3. Отчёт автоматически «вливается» (`koi/projects/report_ingest/`): из §5.1 берётся вердикт
@@ -99,14 +99,18 @@ python -m koi.projects.report_ingest.cli <project_id> <card_id>
 Вливание идемпотентно: повторный ingest того же отчёта ничего не меняет; инсайты
 той же карточки заменяются, чужих карточек — сохраняются.
 
-## 5. Агентские бэкенды: Claude Code и Cursor
+## 5. Агентские бэкенды: OpenCode, Claude Code, Codex и Cursor
 
 Слой `koi/adapters/agent_backends.py` используется и проверкой гипотез, и agent-чатом
 (очередь вопросов из UI). Бэкенды пробуются по порядку; недоступные пропускаются.
 
 | Переменная | Значение по умолчанию | Смысл |
 |---|---|---|
-| `KOI_AGENT_BACKEND` | `claude,cursor` | порядок бэкендов; `off` — отключить агентов |
+| `KOI_AGENT_BACKEND` | `codex,openrouter,claude,cursor,opencode` | порядок бэкендов; `off` — отключить агентов |
+| `KOI_OPENCODE_BIN` | `opencode` из `PATH` | явный путь к OpenCode CLI (без копирования) |
+| `KOI_OPENCODE_MODEL` | (дефолт провайдера) | модель, например `openrouter/anthropic/claude-sonnet-4.5` |
+| `KOI_OPENCODE_ARGS` | — | дополнительные аргументы `opencode run` |
+
 | `KOI_CLAUDE_BIN` | `claude` | путь к Claude Code CLI |
 | `KOI_CLAUDE_MODEL` | (дефолт CLI) | модель для `claude -p` |
 | `KOI_CLAUDE_ARGS` | — | дополнительные аргументы CLI |
@@ -114,6 +118,16 @@ python -m koi.projects.report_ingest.cli <project_id> <card_id>
 | `CURSOR_API_KEY` | — | ключ Cursor (без него cursor-бэкенд недоступен) |
 | `KOI_AGENT_CHAT_MODEL` | `composer-2.5` | модель Cursor SDK |
 
+Вход OpenCode — обычный для системы: `opencode auth login` пишет в `~/.local/share/opencode`,
+рядом с бинарём ничего не появляется. Там же живут входы всех провайдеров, подключённых
+в OpenCode, — ResearcherOS их не дублирует.
+
+**Чтобы включить OpenCode**: установить CLI так же, как Codex и Claude Code, — программой
+в системе (`opencode` в `PATH`) или указав путь через `KOI_OPENCODE_BIN`, — и войти
+в него (`opencode auth login`). Вход и провайдеры живут внутри OpenCode, в его каталоге
+`~/.local/share/opencode`: ResearcherOS ничего не скачивает, не копирует и учётных
+данных не хранит. Режим задаётся флагом: без правок файлов запускается встроенный
+агент `plan`, с правками — `--auto`.
 **Чтобы включить Claude Code**: установить CLI (`npm install -g @anthropic-ai/claude-code`)
 и авторизоваться (`claude login` или переменная `ANTHROPIC_API_KEY`).
 **Чтобы включить Cursor**: `pip install cursor-sdk` в `.venv` и задать `CURSOR_API_KEY`.
@@ -123,6 +137,15 @@ python -m koi.projects.report_ingest.cli <project_id> <card_id>
 Claude Code вызывается headless: `claude -p --output-format text`, промпт через stdin;
 при проверке гипотез — с `--permission-mode acceptEdits` и списком allowed-tools,
 чтобы агент мог написать файл отчёта.
+
+OpenCode вызывается headless: `opencode run --dir <cwd> --format json --agent plan <промпт>`
+(промпт — аргументом, не через stdin). В режиме чтения используется агент `plan`, у
+которого правки запрещены; когда правки разрешены — флаг `--auto`. Шаги и ошибки из
+JSON-потока попадают в журнал чата. ACP пока не подключён: выбор `acp:*` отклоняется.
+
+Ограничение режима чтения: запрет держится на агенте `plan`, а не на изоляции. Свой
+конфиг OpenCode (`opencode.json` в проекте или в домашней папке) может расширить права
+этого агента. Аргументы запуска и переменные окружения система перекрывает полностью.
 
 ## 6. Как добавить знание руками
 

@@ -10,19 +10,37 @@ from __future__ import annotations
 
 import json
 import subprocess
-from koi.adapters.agent_backends import backend_status, cli_agents, run_agent
-from koi.agent_chat.cli import build_context
-from koi.agent_chat.auto import try_auto_answer
-from koi.agent_chat.formatting import ANSWER_FORMAT_INSTRUCTIONS, no_cursor_key_warning
-from koi.adapters.agent_chat_queue import find_item, list_pending, mark_processing, clear_processing_pid, submit_answer
+
+from koi.adapters.agent_backends import (
+    CLI_AGENTS,
+    acp_agents,
+    backend_order,
+    backend_status,
+    cli_agents,
+    run_agent,
+)
+from koi.adapters.agent_chat_queue import (
+    clear_processing_pid,
+    find_item,
+    list_pending,
+    mark_processing,
+    submit_answer,
+)
 from koi.adapters.agent_process import AgentCancelled, run_json
-from koi.agent_chat import live
-from koi.agent_chat.activity import record
-from koi.adapters.settings_store import is_api_agent_mode, is_cursor_manual_agent_mode, load_env_file
-from koi.adapters.workspace import get_workspace
-from koi.literature.cursor_agent_terminal import find_agent_bin
-from koi.agent_chat.report_grill import SKILLS
 from koi.adapters.report_grill_reply import parse_reply
+from koi.adapters.settings_store import (
+    is_api_agent_mode,
+    is_cursor_manual_agent_mode,
+    load_env_file,
+)
+from koi.adapters.workspace import get_workspace
+from koi.agent_chat import live
+from koi.agent_chat.auto import try_auto_answer  # noqa: F401 — тесты подменяют через модуль
+from koi.agent_chat.activity import record
+from koi.agent_chat.cli import build_context
+from koi.agent_chat.formatting import no_cursor_key_warning
+from koi.agent_chat.report_grill import SKILLS
+from koi.literature.cursor_agent_terminal import find_agent_bin
 
 _ws = get_workspace()
 
@@ -251,6 +269,23 @@ def _note_chat(item_id: str, message: str) -> None:
     record(item_id, message)
 
 
+_LOCAL_AGENT_CHAIN = tuple(name for name, _ in CLI_AGENTS if name != "cursor")
+
+
+def agent_catalog() -> list[dict]:
+    """Все агенты, которых можно выбрать: CLI-программы и агенты ACP."""
+    return [*cli_agents(), *acp_agents()]
+
+
+def _local_agent_chain() -> tuple[str, ...]:
+    """Порядок автоподбора в локальном чате: настройка важнее умолчания."""
+    chosen = tuple(
+        name for name in backend_order()
+        if name in dict(CLI_AGENTS) and name != "cursor"
+    )
+    return chosen or _LOCAL_AGENT_CHAIN
+
+
 def _stream_options(item_id):
     if not item_id.startswith("aq-") or not find_item(item_id):
         return {}
@@ -298,13 +333,13 @@ def _run_local_agent(
     """Prefer the same Cursor CLI used by literature, without opening Terminal.app."""
     workdir = cwd or _artifact_task_cwd(item_id) or _ws.agent_cwd()
     stream = _stream_options(item_id) if log_activity else {}
-    if cli_agent == "opencode":
+    if cli_agent and cli_agent.startswith("acp:"):
         from koi.agent_chat import acp_client, conversations
         item = find_item(item_id)
-        return acp_client.run(conversations.item_conversation(item), item_id, prompt, workdir, "acp:opencode", timeout,
+        return acp_client.run(conversations.item_conversation(item), item_id, prompt, workdir, cli_agent, timeout,
                               on_started=stream.get("on_started"), is_cancelled=stream.get("is_cancelled"),
                               on_event=stream.get("on_event")), cli_agent
-    if cli_agent in ("codex", "claude"):
+    if cli_agent and cli_agent != "cursor":
         return run_agent(prompt, cwd=workdir, backend=cli_agent, timeout=timeout, allow_edits=force,
                          **stream,
                          **({"externally_sandboxed": True} if externally_sandboxed else {}))
@@ -348,7 +383,7 @@ def _run_local_agent(
             return None, None
     if agent_bin and not fallback:
         return None, None
-    for backend in ("codex", "claude"):
+    for backend in _local_agent_chain():
         text, name = run_agent(prompt, cwd=workdir, backend=backend, timeout=timeout, allow_edits=force,
                          **stream,
                          **({"externally_sandboxed": True} if externally_sandboxed else {}))
@@ -436,28 +471,31 @@ def _process_item(item_id: str) -> bool:
 
     general_chat = item.get("purpose", "agent") in ("agent", "prose", "compress", "run")
     chosen = (item.get("cli_agent") or "").strip().lower() or None
-    catalog = cli_agents() if local_mode and chosen else []
+    catalog = agent_catalog() if chosen else []
     chosen_row = next((row for row in catalog if row["id"] == chosen), None)
     available = (
-        bool(chosen_row and chosen_row["available"])
-        if local_mode and chosen else (
-            bool(find_agent_bin() or any(backend_status()[name]["available"] for name in ("codex", "claude")))
+        bool(chosen_row["available"])
+        if chosen_row is not None else (
+            bool(backend_status().get(chosen, {}).get("available"))
+            if chosen else (
+            bool(find_agent_bin() or any(backend_status()[name]["available"] for name in _local_agent_chain()))
             if local_mode else (
-                any(backend_status().get(name, {}).get("available") for name in ("codex", "claude", "cursor"))
+                any(backend_status().get(name, {}).get("available") for name in (*_local_agent_chain(), "cursor"))
                 if general_chat else _any_backend_available()
             )
         )
+        )
     )
-    if chosen and chosen.startswith("acp:"):
-        submit_answer(item_id, "ACP отложен. Выберите Cursor, Codex, OpenCode или Claude и повторите запрос.", answer_kind="warning")
-        return True
     if not available:
         if local_mode:
-            label = chosen_row["label"] if chosen_row else "Локальный агент"
+            label = chosen_row["label"] if chosen_row else (chosen or "Локальный агент")
             missing = (
+                f"{label} сейчас недоступен. Проверьте, что установлен агент ACP и SDK протокола, "
+                "и повторите вопрос."
+                if chosen and chosen.startswith("acp:") else
                 f"{label} сейчас недоступен. Проверьте, что CLI установлен, и повторите вопрос."
                 if chosen else
-                "Локальный агент не найден. Установите и авторизуйте Cursor, Codex или Claude CLI, затем повторите вопрос."
+                "Локальный агент не найден. Установите и авторизуйте Cursor, Codex, Claude или OpenCode CLI, затем повторите вопрос."
             )
             record(item_id, missing)
             submit_answer(item_id, missing, answer_kind="warning")
@@ -486,26 +524,29 @@ def _process_item(item_id: str) -> bool:
         with broker(item_id):
             text, backend = (
                 _run_local_agent(prompt, item_id, **local_kwargs) if local_mode
-                else run_agent(prompt, cwd=_artifact_task_cwd(item_id) or _ws.agent_cwd(), allow_edits=allow_edits, **_stream_options(item_id))
+                else run_agent(
+                    prompt,
+                    cwd=_artifact_task_cwd(item_id) or _ws.agent_cwd(),
+                    allow_edits=allow_edits,
+                    backend=chosen,
+                    **_stream_options(item_id),
+                )
             )
         if live.cancelled(item_id):
             raise AgentCancelled
     except AgentCancelled:
         raise
     except Exception as exc:
-        if local_mode:
-            record(item_id, f"Ошибка запуска: {type(exc).__name__}.")
-            submit_answer(item_id, "Не удалось запустить агента. Подробности доступны в журнале работы.", answer_kind="warning")
-            return True
-        raise
+        record(item_id, f"Ошибка запуска: {type(exc).__name__}.")
+        submit_answer(item_id, "Не удалось запустить агента. Подробности доступны в журнале работы.", answer_kind="warning")
+        return True
     if text:
         progress = live.text(item_id)
         if progress.strip().endswith(text.strip()):
             text = progress
         if item.get("purpose") in ("report_grill", "grill_me"):
             text, _ = parse_reply(text)  # The interviewer never publishes writer output.
-        if local_mode:
-            record(item_id, f"Ответ получен от {backend or 'локального агента'}.")
+        record(item_id, f"Ответ получен от {backend or 'локального агента'}.")
         submit_answer(item_id, text)
         if item.get("purpose") in ("report_grill", "grill_me"):
             from koi.agent_chat.setup_pipeline import enqueue
@@ -513,11 +554,9 @@ def _process_item(item_id: str) -> bool:
         if local_mode:
             record(item_id, "Ответ опубликован в чате.")
         return True
-    if local_mode:
-        record(item_id, "Агент не вернул текст ответа.")
-        submit_answer(item_id, "Агент не вернул ответ. Проверьте локальную авторизацию и повторите вопрос.", answer_kind="warning")
-        return True
-    return False
+    record(item_id, "Агент не вернул текст ответа.")
+    submit_answer(item_id, "Агент не вернул ответ. Проверьте локальную авторизацию и повторите вопрос.", answer_kind="warning")
+    return True
 
 
 def process_all_pending() -> int:

@@ -47,3 +47,33 @@ def test_other_interfaces_are_rejected(monkeypatch, tmp_path, variant):
     monkeypatch.setattr(settings_store, "ENV_PATH", tmp_path / "settings.env")
     assert TestClient(app).put("/settings/agent-chat", json={"ui_variant": variant}).status_code == 422
     assert settings_snapshot()["ui_variant"] == "quick"
+
+
+def test_env_file_never_overrides_the_process_environment(monkeypatch, tmp_path):
+    """Файл настроек — запасной источник: уже выставленная переменная важнее."""
+    import os
+
+    destination = tmp_path / "settings.env"
+    destination.write_text('export KOI_UI_VARIANT="light"\n# comment\nCURSOR_API_KEY=\n', encoding="utf-8")
+    monkeypatch.setattr(settings_store, "ENV_PATH", destination)
+    monkeypatch.setenv("KOI_UI_VARIANT", "chats")
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
+
+    settings_store.load_env_file()
+
+    assert os.environ["KOI_UI_VARIANT"] == "chats"
+    assert os.environ["CURSOR_API_KEY"] == ""
+
+
+def test_unreadable_env_file_is_ignored(monkeypatch, tmp_path):
+    """Путь занят каталогом: чтение падает, но старт приложения — нет."""
+    import os
+
+    destination = tmp_path / "settings.env"
+    destination.mkdir()
+    monkeypatch.setattr(settings_store, "ENV_PATH", destination)
+    monkeypatch.delenv("KOI_UI_VARIANT", raising=False)
+
+    settings_store.load_env_file()
+
+    assert "KOI_UI_VARIANT" not in os.environ

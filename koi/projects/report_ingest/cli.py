@@ -4,14 +4,14 @@
 Запуск из корня репо:
 
     python -m koi.projects.report_ingest.cli <project_id> <card_id> \
-        [--backend claude|cursor] [--no-ingest] [--dry-run] [--timeout 1800]
+        [--backend opencode|codex|claude|cursor] [--no-ingest] [--dry-run] [--timeout 1800]
     python -m koi.projects.report_ingest.cli <project_id> <card_id> \
         --ingest-only [путь/к/отчёту.run.md]
 
 Конвейер:
 1. По карточке канбана находится цепочка узлов: метод → доказательство/
    ремедиация → гипотеза (cause) → проблема.
-2. Локальный агент (Claude Code CLI или Cursor SDK — koi/adapters/agent_backends.py)
+2. Локальный агент (OpenCode, Codex, Claude Code или Cursor — koi/adapters/agent_backends.py)
    получает контекст + шаблон `agents/skills/koi-report-review/experiment-report.md` и пишет
    рабочий отчёт `<отчёт-карточки>.run.md` рядом с публичным отчётом.
 3. `koi/projects/report_ingest/` разбирает «Заявку в БЗ» (§5): вердикт ставится на
@@ -30,7 +30,7 @@ import json
 from pathlib import Path
 import sys
 
-from koi.adapters.agent_backends import backend_status, run_agent
+from koi.adapters.agent_backends import backend_status, editable_backends, run_agent
 from koi.core.models import NodeType, Project
 from koi.projects.report_ingest import (
     ReportIngestError,
@@ -124,7 +124,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("project_id")
     ap.add_argument("card_id")
-    ap.add_argument("--backend", choices=["claude", "cursor"], default=None)
+    ap.add_argument("--backend", choices=editable_backends(), default=None)
     ap.add_argument("--timeout", type=int, default=1800)
     ap.add_argument("--no-ingest", action="store_true",
                     help="только сгенерировать отчёт, без интеграции")
@@ -133,6 +133,10 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true",
                     help="показать, что изменит интеграция, не меняя файлов")
     args = ap.parse_args()
+    if args.backend is not None:
+        row = backend_status().get(args.backend, {})
+        if not row.get("available"):
+            ap.error(f"Агент {args.backend} недоступен: {row.get('reason') or 'программа не найдена'}")
 
     project = load_project(args.project_id)
     if project is None:
