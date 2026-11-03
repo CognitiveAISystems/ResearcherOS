@@ -7,8 +7,18 @@ import threading
 from contextlib import suppress
 from uuid import uuid4
 
-from acp import Client, RequestError, connect_to_agent
-from acp.schema import ClientCapabilities, Implementation, TextContentBlock, RequestPermissionResponse
+try:  # noqa: I001 — порядок задан составом SDK
+    # ACP SDK не входит в зависимости: без него ACP-агенты не предлагаются, остальные работают.
+    from acp import Client, RequestError, connect_to_agent  # pragma: no cover — нужен внешний SDK
+    from acp.schema import ClientCapabilities, Implementation, TextContentBlock, RequestPermissionResponse  # pragma: no cover
+    AVAILABLE = True  # pragma: no cover — нужен внешний SDK
+except ModuleNotFoundError:  # pragma: no cover — зависит от состава окружения
+    class _MissingSDK:
+        """Заглушка: тела ACP-путей без SDK не исполняются."""
+
+    Client = RequestError = connect_to_agent = _MissingSDK
+    ClientCapabilities = Implementation = TextContentBlock = RequestPermissionResponse = _MissingSDK
+    AVAILABLE = False
 from koi.agent_chat import conversations
 from koi.agent_chat.activity import record
 
@@ -20,6 +30,8 @@ from koi.adapters.acp_agents import agents
 
 
 def snapshot(cid):
+    if not AVAILABLE:
+        return None
     with LOCK:
         state = ACTIVE.get(cid)
         if not state:
@@ -29,6 +41,8 @@ def snapshot(cid):
 
 
 def decide(cid, permission_id, option_id):
+    if not AVAILABLE:
+        return False
     with LOCK:
         state = ACTIVE.get(cid)
         permission = state.get("permission") if state else None
@@ -45,6 +59,8 @@ def decide(cid, permission_id, option_id):
 
 
 def cancel(cid):
+    if not AVAILABLE:
+        return False
     with LOCK:
         state = ACTIVE.get(cid)
         if not state:
@@ -210,6 +226,8 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout, *, transient=False, 
 
 
 def run(cid, item_id, prompt, cwd, backend, timeout=1800, *, on_started=None, is_cancelled=None, on_event=None):
+    if not AVAILABLE:
+        return None
     return asyncio.run(_run(cid, item_id, prompt, cwd, backend, timeout,
                             on_started=on_started, is_cancelled=is_cancelled, on_event=on_event))
 
@@ -217,5 +235,7 @@ def run(cid, item_id, prompt, cwd, backend, timeout=1800, *, on_started=None, is
 def run_executor(agent_id, item_id, prompt, cwd, backend, on_event, timeout=1800,
                  is_cancelled=None, on_started=None):
     """Independent child session, without creating a sidebar conversation."""
+    if not AVAILABLE:
+        return None
     return asyncio.run(_run(agent_id, item_id, prompt, cwd, backend, timeout,
                             transient=True, on_event=on_event, is_cancelled=is_cancelled, on_started=on_started))

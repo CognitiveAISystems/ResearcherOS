@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-from pathlib import Path
 
 from koi.adapters.workspace import get_workspace
 
@@ -22,14 +21,9 @@ AGENT_CHAT_MODES = frozenset(
 CURSOR_API_KEY_URL = "https://cursor.com/dashboard/integrations"
 
 
-def load_env_file() -> None:
-    """Load KOI/.env into os.environ (does not override existing vars)."""
-    if not ENV_PATH.exists():
-        return
-    try:
-        text = ENV_PATH.read_text(encoding="utf-8")
-    except OSError:
-        return
+def parse_env_text(text: str) -> dict[str, str]:
+    """Разобрать строки KEY=VALUE из файла настроек KOI/.env."""
+    values: dict[str, str] = {}
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -43,7 +37,21 @@ def load_env_file() -> None:
         value = value.strip()
         if value and value[0] in "\"'" and value[-1] == value[0]:
             value = value[1:-1]
-        if key and key not in os.environ:
+        if key:
+            values[key] = value
+    return values
+
+
+def load_env_file() -> None:
+    """Load KOI/.env into os.environ (does not override existing vars)."""
+    if not ENV_PATH.exists():
+        return
+    try:
+        text = ENV_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for key, value in parse_env_text(text).items():
+        if key not in os.environ:
             os.environ[key] = value
 
 
