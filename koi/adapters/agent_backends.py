@@ -548,9 +548,9 @@ def run_agent(
         if runner is None:
             continue
         extra: dict[str, object] = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
-        if on_started is not None:
-            extra["on_started"] = on_started
         if name in STREAMING_BACKENDS:
+            if on_started is not None:
+                extra["on_started"] = on_started
             if on_event is not None:
                 extra["on_event"] = on_event
             if is_cancelled is not None:
