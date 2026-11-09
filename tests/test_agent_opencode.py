@@ -91,6 +91,30 @@ def test_streaming_joins_text_parts(binary, tmp_path):
     assert [event["type"] for event in events][:2] == ["step_start", "tool_use"]
 
 
+def test_research_executor_uses_opencode_cli(binary, tmp_path, monkeypatch):
+    from koi.agent_chat import research, research_runtime
+    from koi.adapters import agent_chat_activity
+
+    monkeypatch.setattr(research, "PATH", tmp_path / "runs.sqlite3")
+    monkeypatch.setattr(agent_chat_activity, "ACTIVITY_DIR", tmp_path / "activity")
+    run = research.create_run("chat-opencode", "aq-opencode", "demo", "Check CLI executor")
+    result = research_runtime.execute(run, {
+        "backend": "opencode", "cwd": str(tmp_path), "task": "Write report",
+    }, timeout=10)
+    assert result["status"] == "completed"
+    assert result["result"] == "Ответ агента."
+    assert "--auto" in launched(tmp_path)
+    assert any(event["message"] == "Ответ " for event in research.events("chat-opencode", result["id"]))
+
+
+def test_cursor_sdk_does_not_receive_process_callbacks(monkeypatch):
+    def sdk(prompt, *, cwd, timeout, allow_edits):
+        return "SDK answer"
+
+    monkeypatch.setitem(backends._RUNNERS, "cursor", sdk)
+    assert backends.run_agent("Question", backend="cursor", on_started=lambda pid: None) == ("SDK answer", "cursor")
+
+
 def test_nonzero_exit_yields_no_answer(binary, tmp_path):
     from koi.adapters.agent_backends import run_opencode
 
