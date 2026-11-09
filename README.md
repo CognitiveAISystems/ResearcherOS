@@ -1,4 +1,6 @@
-<h1 align="center">ResearcherOS</h1>
+<h1 align="center">
+  <img src="docs/assets/readme-title.svg" alt="ResearcherOS" width="560" height="90">
+</h1>
 
 <p align="center"><strong>Исследуйте вместе с AI-агентами. Сохраняйте путь от вопроса до вывода.</strong></p>
 
