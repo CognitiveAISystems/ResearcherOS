@@ -13,13 +13,15 @@ from pathlib import Path
 
 from koi.adapters.agent_backends import run_agent
 from koi.adapters.agent_process import AgentCancelled
-from koi.agent_chat import acp_client, live, research
+from koi.agent_chat import live, research
 
 SKILLS = Path(__file__).resolve().parents[2] / 'agents' / 'skills'
 
 
 def _message(event):
     kind = event.get('type')
+    if kind == 'text' and isinstance(event.get('part'), dict):
+        return event['part'].get('text', '')
     if kind == 'item.completed':
         item = event.get('item', {})
         if item.get('type') == 'agent_message':
@@ -76,15 +78,10 @@ def execute(run_id, task, *, timeout=1800):
         def receive(message):
             if message:
                 research.update(agent_id, 'running', message)
-        if backend == 'opencode':
-            result = acp_client.run_executor(agent_id, run['item_id'], prompt, cwd, "acp:opencode", receive, timeout,
-                                               is_cancelled=lambda: research.cancelled(run_id),
-                                               on_started=lambda pid: research.attach_handle(agent_id, pid, group_owner=True))
-        else:
-            result, _ = run_agent(prompt, cwd=cwd, timeout=timeout, allow_edits=True, backend=backend,
-                                  on_started=lambda pid: research.attach_handle(agent_id, pid, group_owner=True),
-                                  on_event=lambda event: receive(_message(event)),
-                                  is_cancelled=lambda: research.cancelled(run_id))
+        result, _ = run_agent(prompt, cwd=cwd, timeout=timeout, allow_edits=True, backend=backend,
+                              on_started=lambda pid: research.attach_handle(agent_id, pid, group_owner=True),
+                              on_event=lambda event: receive(_message(event)),
+                              is_cancelled=lambda: research.cancelled(run_id))
         if research.cancelled(run_id):
             raise AgentCancelled
         if not result:

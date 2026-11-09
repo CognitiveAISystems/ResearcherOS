@@ -20,6 +20,13 @@
 - **cursor** — Cursor SDK (python-пакет `cursor_sdk`). Требуется
   `CURSOR_API_KEY`; модель — `KOI_AGENT_CHAT_MODEL` (по умолчанию
   composer-2.5).
+- **opencode** — локальный OpenCode CLI (headless: `opencode run`). Бинарь —
+  программа, установленная в системе, как `codex` и `claude`; явный путь —
+  `KOI_OPENCODE_BIN`. Модель — `KOI_OPENCODE_MODEL`, доп. флаги —
+  `KOI_OPENCODE_ARGS`. Без правок файлов запускается встроенный агент `plan`,
+  с правками — `--auto`. Ответ собирается из частей `text` потока
+  JSON-событий (`--format json`), как `--json` у Codex.
+- **Порядок по умолчанию** — `codex,openrouter,claude,cursor,opencode`.
 
 `allow_edits=True` (для эксперимент-агента, который пишет файл отчёта)
 у Claude Code включает `--permission-mode acceptEdits` и набор
@@ -29,18 +36,19 @@
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 import urllib.error
 import urllib.request
-import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
-from koi.adapters.workspace import get_workspace
 from koi.adapters.agent_process import run_json
+from koi.adapters.workspace import get_workspace
 
 
 def _resolve_cwd(cwd: Path | str | None) -> Path | str:
@@ -48,14 +56,12 @@ def _resolve_cwd(cwd: Path | str | None) -> Path | str:
         return get_workspace().agent_cwd()
     return cwd
 
-DEFAULT_BACKEND_ORDER = "codex,openrouter,claude,cursor"
 DEFAULT_TIMEOUT_S = 1800
 DEFAULT_CLAUDE_TOOLS = "Read,Glob,Grep,Bash,Write,Edit"
 DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.4"
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-
-def _codex_bin() -> Optional[str]:
+DEFAULT_OPENCODE_READONLY_AGENT = "plan"
+def _codex_bin() -> str | None:
     configured = os.environ.get("KOI_CODEX_BIN", "codex")
     found = shutil.which(configured)
     if found:
@@ -87,11 +93,34 @@ def _openrouter_ready() -> bool:
     return bool(_openrouter_api_key())
 
 
-def _claude_bin() -> Optional[str]:
+def _claude_bin() -> str | None:
     return shutil.which(os.environ.get("KOI_CLAUDE_BIN", "claude"))
 
 
-def _cursor_ready() -> bool:
+def _claude_ready() -> bool:
+    return _claude_bin() is not None
+
+
+def _cursor_cli_ready() -> bool:
+    from koi.literature.cursor_agent_terminal import find_agent_bin
+
+    return find_agent_bin() is not None
+
+
+def _cursor_available() -> bool:
+    """Cursor запускается и через SDK, и через CLI: годится любой из путей."""
+    return _cursor_sdk_ready() or _cursor_cli_ready()
+
+
+def _opencode_bin() -> str | None:
+    return shutil.which(os.environ.get("KOI_OPENCODE_BIN", "opencode"))
+
+
+def _opencode_ready() -> bool:
+    return _opencode_bin() is not None
+
+
+def _cursor_sdk_ready() -> bool:
     if not os.environ.get("CURSOR_API_KEY", "").strip():
         return False
     try:
@@ -111,7 +140,7 @@ def run_codex_exec(
     on_event=None,
     is_cancelled=None,
     on_started=None,
-) -> Optional[str]:
+) -> str | None:
     """Non-interactive вызов локального Codex CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
     bin_path = _codex_bin()
@@ -179,10 +208,10 @@ def run_codex_exec(
 def run_openrouter(
     prompt: str,
     *,
-    cwd: Path | str | None = None,  # noqa: ARG001 — API backend не использует cwd
+    cwd: Path | str | None = None,
     timeout: int = DEFAULT_TIMEOUT_S,
-    allow_edits: bool = False,  # noqa: ARG001 — backend только текстовый
-) -> Optional[str]:
+    allow_edits: bool = False,
+) -> str | None:
     """Вызов OpenRouter Chat Completions API; возвращает финальный текст или None."""
     _resolve_cwd(cwd)
     api_key = _openrouter_api_key()
@@ -255,7 +284,7 @@ def run_claude_code(
     on_event=None,
     is_cancelled=None,
     on_started=None,
-) -> Optional[str]:
+) -> str | None:
     """Headless-вызов Claude Code; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
     bin_path = _claude_bin()
@@ -307,9 +336,9 @@ def run_cursor_sdk(
     prompt: str,
     *,
     cwd: Path | str | None = None,
-    timeout: int = DEFAULT_TIMEOUT_S,  # noqa: ARG001 — SDK сам управляет временем
-    allow_edits: bool = False,  # noqa: ARG001 — локальный агент Cursor всегда полный
-) -> Optional[str]:
+    timeout: int = DEFAULT_TIMEOUT_S,
+    allow_edits: bool = False,
+) -> str | None:
     """Вызов Cursor SDK; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
     api_key = os.environ.get("CURSOR_API_KEY", "").strip()
@@ -338,12 +367,89 @@ def run_cursor_sdk(
     return text
 
 
-_RUNNERS: dict[str, Callable[..., Optional[str]]] = {
-    "codex": run_codex_exec,
-    "openrouter": run_openrouter,
-    "claude": run_claude_code,
-    "cursor": run_cursor_sdk,
-}
+def run_opencode(
+    prompt: str,
+    *,
+    cwd: Path | str | None = None,
+    timeout: int = DEFAULT_TIMEOUT_S,
+    allow_edits: bool = False,
+    on_event=None,
+    is_cancelled=None,
+    on_started=None,
+) -> str | None:
+    """Non-interactive вызов установленного OpenCode CLI; возвращает финальный текст или None."""
+    cwd = _resolve_cwd(cwd)
+    bin_path = _opencode_bin()
+    if not bin_path:
+        return None
+    cmd = [bin_path, "run", "--dir", str(cwd)]
+    model = os.environ.get("KOI_OPENCODE_MODEL", "").strip()
+    if model:
+        cmd += ["--model", model]
+    cmd += ["--auto"] if allow_edits else ["--agent", DEFAULT_OPENCODE_READONLY_AGENT]
+    cmd += os.environ.get("KOI_OPENCODE_ARGS", "").split()
+    try:
+        if on_event is not None:
+            cmd[2:2] = ["--format", "json"]
+            answer = ""
+
+            def receive(event):
+                nonlocal answer
+                on_event(event)
+                part = event.get("part")
+                if event.get("type") == "text" and isinstance(part, dict):
+                    answer += str(part.get("text") or "")
+
+            code = run_json(cmd + [prompt], "", cwd=cwd, timeout=timeout, on_event=receive,
+                            is_cancelled=is_cancelled, on_started=on_started, feed_stdin=False)
+            text = answer.strip()
+            return text if code == 0 and text else None
+        proc = subprocess.run(cmd + [prompt], capture_output=True, text=True,
+                              cwd=str(cwd), timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    text = (proc.stdout or "").strip()
+    return text or None
+
+
+# Единственный перечень бэкендов: порядок, подпись, поток событий, запуск, проверка.
+# Добавить агента = добавить строку здесь плюс блок в backend_status().
+_BACKENDS: tuple[tuple[str, str | None, bool, Callable[..., str | None], str], ...] = (
+    ("codex", "Codex", True, run_codex_exec, "_codex_ready"),
+    ("openrouter", None, False, run_openrouter, "_openrouter_ready"),
+    ("claude", "Claude", True, run_claude_code, "_claude_ready"),
+    ("cursor", "Cursor", False, run_cursor_sdk, "_cursor_available"),
+    ("opencode", "OpenCode", True, run_opencode, "_opencode_ready"),
+)
+DEFAULT_BACKEND_ORDER = ",".join(name for name, *_ in _BACKENDS)
+CLI_AGENTS: tuple[tuple[str, str], ...] = tuple((name, label) for name, label, *_ in _BACKENDS if label)
+STREAMING_BACKENDS = tuple(name for name, _, streams, *_ in _BACKENDS if streams)
+_RUNNERS: dict[str, Callable[..., str | None]] = {name: runner for name, _, _, runner, _ in _BACKENDS}
+
+
+def _ready(name: str) -> bool:
+    """Доступность бэкенда на этой машине; проверку ищем в модуле, чтобы её можно было подменить."""
+    for backend, _, _, _, probe in _BACKENDS:
+        if backend == name:
+            return bool(globals()[probe]())
+    return False
+
+
+def known_backend(name: str) -> bool:
+    """Может ли этот бэкенд запускать задачи агента."""
+    return name in _RUNNERS
+
+
+def editable_backend(name: str) -> bool:
+    """Может ли бэкенд править файлы проекта: текстовая модель — нет."""
+    return name in _RUNNERS and name != "openrouter"
+
+
+def editable_backends() -> list[str]:
+    """Бэкенды, которыми можно править проект, в порядке приоритета."""
+    return [name for name in DEFAULT_BACKEND_ORDER.split(",") if editable_backend(name)]
 
 
 def backend_order() -> list[str]:
@@ -355,28 +461,25 @@ def backend_order() -> list[str]:
     return [b.strip().lower() for b in raw.split(",") if b.strip() in _RUNNERS]
 
 
-CLI_AGENTS = (
-    ("cursor", "Cursor"),
-    ("codex", "Codex"),
-    ("claude", "Claude"),
-    ("opencode", "OpenCode"),
-)
-
-
 def cli_agents() -> list[dict]:
     """Какие CLI реально есть на этой машине."""
-    from koi.literature.cursor_agent_terminal import find_agent_bin
-
-    from koi.adapters.acp_agents import agents as acp_agents
-    checks = {
-        "cursor": find_agent_bin() is not None,
-        "codex": _codex_ready(),
-        "claude": _claude_bin() is not None,
-        "opencode": any(row["id"] == "acp:opencode" and row["available"] for row in acp_agents()),
-    }
     return [
-        {"id": key, "label": label, "available": checks[key]}
-        for key, label in CLI_AGENTS
+        {"id": name, "label": label, "available": _ready(name)}
+        for name, label in CLI_AGENTS
+    ]
+
+
+def acp_agents() -> list[dict]:
+    """Агенты по протоколу ACP: видны только когда есть SDK и их программа."""
+    if importlib.util.find_spec("acp") is None:
+        return []
+    try:
+        from koi.adapters.acp_agents import agents as discovered
+    except ImportError:
+        return []
+    return [
+        {"id": row["id"], "label": row["label"], "available": bool(row["available"])}
+        for row in discovered()
     ]
 
 
@@ -386,33 +489,34 @@ def backend_status() -> dict:
         "order": backend_order(),
         "cli": cli_agents(),
         "codex": {
-            "available": _codex_ready(),
+            "available": _ready("codex"),
             "bin": _codex_bin(),
             "model": os.environ.get("KOI_CODEX_MODEL") or None,
         },
         "openrouter": {
-            "available": _openrouter_ready(),
+            "available": _ready("openrouter"),
             "model": os.environ.get("KOI_OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL),
             "api_key_present": bool(_openrouter_api_key()),
         },
         "claude": {
-            "available": _claude_bin() is not None,
+            "available": _ready("claude"),
             "bin": _claude_bin(),
             "model": os.environ.get("KOI_CLAUDE_MODEL") or None,
         },
         "cursor": {
-            "available": _cursor_ready(),
+            "available": _ready("cursor"),
             "model": os.environ.get("KOI_AGENT_CHAT_MODEL", "composer-2.5"),
+        },
+        "opencode": {
+            "available": _ready("opencode"),
+            "bin": _opencode_bin(),
+            "model": os.environ.get("KOI_OPENCODE_MODEL") or None,
         },
     }
 
 
 def any_agent_available() -> bool:
-    status = backend_status()
-    return any(
-        bool(status.get(name, {}).get("available"))
-        for name in ("codex", "openrouter", "claude", "cursor")
-    )
+    return any(_ready(name) for name, *_ in _BACKENDS)
 
 
 def run_agent(
@@ -421,12 +525,12 @@ def run_agent(
     cwd: Path | str | None = None,
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
-    backend: Optional[str] = None,
+    backend: str | None = None,
     externally_sandboxed: bool = False,
     on_event=None,
     is_cancelled=None,
     on_started=None,
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """Запустить агента первым доступным бэкендом.
 
     Возвращает (текст_ответа, имя_бэкенда) либо (None, None), если ни один
@@ -443,9 +547,14 @@ def run_agent(
         runner = _RUNNERS.get(name)
         if runner is None:
             continue
-        extra = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
-        if on_event is not None and name in ("codex", "claude"):
-            extra.update(on_event=on_event, is_cancelled=is_cancelled, on_started=on_started)
+        extra: dict[str, object] = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
+        if name in STREAMING_BACKENDS:
+            if on_started is not None:
+                extra["on_started"] = on_started
+            if on_event is not None:
+                extra["on_event"] = on_event
+            if is_cancelled is not None:
+                extra["is_cancelled"] = is_cancelled
         text = runner(prompt, cwd=cwd, timeout=timeout, allow_edits=allow_edits, **extra)
         if text:
             return text, name

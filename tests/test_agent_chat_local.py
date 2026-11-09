@@ -132,6 +132,7 @@ def test_cli_agents_report_only_installed_bins(monkeypatch) -> None:
     monkeypatch.setattr(cursor_agent_terminal, "find_agent_bin", lambda: Path("/usr/bin/agent"))
     monkeypatch.setattr(agent_backends, "_codex_ready", lambda: False)
     monkeypatch.setattr(agent_backends, "_claude_bin", lambda: None)
+    monkeypatch.setattr(agent_backends, "_opencode_ready", lambda: False)
     from koi.adapters import acp_agents
     monkeypatch.setattr(acp_agents, "agents", lambda: [])
     monkeypatch.setattr(agent_backends.shutil, "which", lambda _: None)
