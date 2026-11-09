@@ -31,7 +31,7 @@ ResearcherOS связывает дерево исследования, эксп�
 ### Что понадобится
 
 - [Git](https://git-scm.com/downloads) и [Git LFS](https://git-lfs.com/).
-- Установленный и настроенный агент командной строки (CLI), который вы будете использовать в ResearcherOS.
+- Перед запуском ResearcherOS убедитесь, что установлен и настроен хотя бы один агент командной строки (CLI): [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation) или [OpenCode CLI](https://opencode.ai/docs/). По ссылкам — официальные инструкции по установке.
 - Git-репозиторий вашего исследовательского проекта хотя бы с одним коммитом.
 
 ### 1. Получите приложение
