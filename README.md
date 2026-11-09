@@ -13,9 +13,9 @@ ResearcherOS связывает дерево исследования, эксп�
   <a href="#новости-проекта">Новости</a>
 </p>
 
-![Обзор ResearcherOS: проекты и деревья исследования](docs/site/features/media/readme-overview.png)
+[![Смотреть видео о ResearcherOS на YouTube](https://img.youtube.com/vi/FZC6wRcdMI8/maxresdefault.jpg)](https://youtu.be/FZC6wRcdMI8)
 
-*Дерево связывает исследовательскую проблему, гипотезы и методы проверки. У методов есть канбан с экспериментами.*
+[Смотреть видео на YouTube](https://youtu.be/FZC6wRcdMI8)
 
 ## Возможности
 
