@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="docs/assets/readme-title.svg" alt="ResearcherOS" width="560" height="90">
+  <img src="docs/assets/readme-title.svg" alt="ResearcherOS" width="560">
 </h1>
 
 <p align="center"><strong>Исследуйте вместе с AI-агентами. Сохраняйте путь от вопроса до вывода.</strong></p>
