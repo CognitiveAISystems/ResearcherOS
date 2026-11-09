@@ -13,7 +13,7 @@ ResearcherOS связывает дерево исследования, эксп�
   <a href="#новости-проекта">Новости</a>
 </p>
 
-[![Смотреть видео о ResearcherOS на YouTube](https://img.youtube.com/vi/FZC6wRcdMI8/maxresdefault.jpg)](https://youtu.be/FZC6wRcdMI8)
+[![Смотреть видео о ResearcherOS на YouTube](docs/site/features/media/readme-preview.gif)](https://youtu.be/FZC6wRcdMI8)
 
 [Смотреть видео на YouTube](https://youtu.be/FZC6wRcdMI8)
 
