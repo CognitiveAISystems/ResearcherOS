@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/researcher_os_logo.png" alt="ResearcherOS" width="420">
-</p>
-
 <h1 align="center">ResearcherOS</h1>
 
 <p align="center"><strong>Исследуйте вместе с AI-агентами. Сохраняйте путь от вопроса до вывода.</strong></p>
