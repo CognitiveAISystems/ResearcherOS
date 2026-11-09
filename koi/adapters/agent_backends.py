@@ -61,6 +61,12 @@ DEFAULT_CLAUDE_TOOLS = "Read,Glob,Grep,Bash,Write,Edit"
 DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.4"
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OPENCODE_READONLY_AGENT = "plan"
+
+
+class AgentBackendError(RuntimeError):
+    """A backend reported a user-facing failure rather than an answer."""
+
+
 def _codex_bin() -> str | None:
     configured = os.environ.get("KOI_CODEX_BIN", "codex")
     found = shutil.which(configured)
@@ -382,7 +388,7 @@ def run_opencode(
     bin_path = _opencode_bin()
     if not bin_path:
         return None
-    cmd = [bin_path, "run", "--dir", str(cwd)]
+    cmd = [bin_path, "run"]
     model = os.environ.get("KOI_OPENCODE_MODEL", "").strip()
     if model:
         cmd += ["--model", model]
@@ -392,16 +398,21 @@ def run_opencode(
         if on_event is not None:
             cmd[2:2] = ["--format", "json"]
             answer = ""
+            error_message = ""
 
             def receive(event):
-                nonlocal answer
+                nonlocal answer, error_message
                 on_event(event)
+                if event.get("type") == "error" and isinstance(event.get("error"), dict):
+                    error_message = str(event["error"].get("message") or "Ошибка провайдера")
                 part = event.get("part")
                 if event.get("type") == "text" and isinstance(part, dict):
                     answer += str(part.get("text") or "")
 
             code = run_json(cmd + [prompt], "", cwd=cwd, timeout=timeout, on_event=receive,
                             is_cancelled=is_cancelled, on_started=on_started, feed_stdin=False)
+            if error_message:
+                raise AgentBackendError("OpenCode: " + error_message)
             text = answer.strip()
             return text if code == 0 and text else None
         proc = subprocess.run(cmd + [prompt], capture_output=True, text=True,
