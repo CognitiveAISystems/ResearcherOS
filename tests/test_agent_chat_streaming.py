@@ -17,10 +17,13 @@ import json, pathlib, subprocess, sys, time
 backend = pathlib.Path(sys.argv[0]).name
 if backend == "codex": assert "--json" in sys.argv
 if backend == "claude": assert "--verbose" in sys.argv and "stream-json" in sys.argv
-prompt = sys.stdin.read()
+prompt = sys.argv[-1] if backend == "opencode" else sys.stdin.read()
 def send(text, final=False):
     if backend == "codex":
         print(json.dumps({"type":"item.completed", "item":{"type":"agent_message", "text":text}}), flush=True)
+    elif backend == "opencode":
+        assert "--standalone" in sys.argv
+        print(json.dumps({"type":"text", "part":{"type":"text", "text":text}}), flush=True)
     else:
         print(json.dumps({"type":"assistant", "message":{"id":str(final), "content":[{"type":"text", "text":text}]}}), flush=True)
 print('non-json diagnostic', flush=True)
@@ -48,17 +51,18 @@ def state(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "_ws", SimpleNamespace(agent_cwd=lambda: tmp_path))
     monkeypatch.setattr(runner, "is_api_agent_mode", lambda: False)
     monkeypatch.setattr(runner, "is_cursor_manual_agent_mode", lambda: False)
-    monkeypatch.setattr(runner, "cli_agents", lambda: [{"id": b, "label": b, "available": True} for b in ("cursor", "codex", "claude")])
+    monkeypatch.setattr(runner, "cli_agents", lambda: [{"id": b, "label": b, "available": True} for b in ("cursor", "codex", "claude", "opencode")])
     monkeypatch.setattr(runner, "_sdk_prompt", lambda iid: queue.find_item(iid)["question"])
     monkeypatch.setattr(agents, "load_project", lambda *_a, **_kw: SimpleNamespace(boards=[]))
     scripts = {}
-    for name in ("cursor", "codex", "claude"):
+    for name in ("cursor", "codex", "claude", "opencode"):
         script = tmp_path / name
         script.write_text(f"#!{sys.executable}\n" + SCRIPT)
         script.chmod(0o755)
         scripts[name] = script
     monkeypatch.setattr(backends, "_codex_bin", lambda: str(scripts["codex"]))
     monkeypatch.setattr(backends, "_claude_bin", lambda: str(scripts["claude"]))
+    monkeypatch.setattr(backends, "_opencode_bin", lambda: str(scripts["opencode"]))
     monkeypatch.setattr(runner, "find_agent_bin", lambda: scripts["cursor"])
     return tmp_path
 
@@ -73,7 +77,7 @@ def wait_for(check):
     pytest.fail("Timed out waiting for subprocess progress")
 
 
-@pytest.mark.parametrize("backend", ["cursor", "codex", "claude"])
+@pytest.mark.parametrize("backend", ["cursor", "codex", "claude", "opencode"])
 def test_progress_visible_before_completion_and_preserved(state, backend):
     chat = conversations.create("demo")
     item = queue.enqueue_question("demo", "finish", cli_agent=backend, conversation_id=chat["id"])
@@ -93,7 +97,7 @@ def test_progress_visible_before_completion_and_preserved(state, backend):
     assert agents.get_conversation(chat["id"])["live"] is None
 
 
-@pytest.mark.parametrize("backend", ["cursor", "codex", "claude"])
+@pytest.mark.parametrize("backend", ["cursor", "codex", "claude", "opencode"])
 def test_cancel_silent_process_and_children_preserves_text_and_releases_chat(state, backend):
     chat, other = conversations.create("demo"), conversations.create("demo")
     item = queue.enqueue_question("demo", "wait", cli_agent=backend, conversation_id=chat["id"])
@@ -122,6 +126,17 @@ def test_pending_cancel_does_not_launch_and_legacy_item_is_supported(state, monk
     assert not agents.cancel_agent_chat_item(item["id"])["ok"]
 
 
+@pytest.mark.parametrize("conversation", [True, False])
+def test_cancel_survives_deleted_card(state, monkeypatch, conversation):
+    chat = conversations.create("demo")
+    item = queue.enqueue_question("demo", "wait", conversation_id=chat["id"])
+    monkeypatch.setattr(agents, "_check_scope", lambda *a, **kw: (_ for _ in ()).throw(
+        agents.HTTPException(404, "Card not found")))
+    result = agents.cancel_conversation(chat["id"]) if conversation else agents.cancel_agent_chat_item(item["id"])
+    assert result["ok"]
+    assert queue.find_item(item["id"])["status"] == "answered"
+
+
 def test_timeout_stops_process_without_stdout(state):
     import subprocess
     started = time.monotonic()
@@ -131,7 +146,7 @@ def test_timeout_stops_process_without_stdout(state):
     assert time.monotonic() - started < 2
 
 
-@pytest.mark.parametrize("backend", ["cursor", "codex", "claude"])
+@pytest.mark.parametrize("backend", ["cursor", "codex", "claude", "opencode"])
 def test_git_analysis_uses_the_same_progress_and_cancel_signals(state, monkeypatch, backend):
     from koi.agent_chat import git_changes
     from koi.adapters.agent_process import AgentCancelled
