@@ -16,7 +16,7 @@ FAKE = r'''
 import json, pathlib, sys
 argv = sys.argv[1:]
 pathlib.Path("argv.json").write_text(json.dumps(argv))
-assert argv[0] == "run", argv
+assert argv[:2] == ["--standalone", "run"], argv
 assert "--dir" not in argv, "OpenCode 2.2 does not support --dir; use subprocess cwd"
 assert sys.stdin.read() == "", "prompt must arrive as an argument, not on stdin"
 prompt = argv[-1]
@@ -57,7 +57,7 @@ def test_runs_read_only_by_default(binary, tmp_path):
 
     assert run_opencode("Вопрос", cwd=tmp_path, timeout=10) == "Ответ агента."
     argv = launched(tmp_path)
-    assert argv[:3] == ["run", "--agent", "plan"]
+    assert argv[:4] == ["--standalone", "run", "--agent", "plan"]
     assert "--auto" not in argv
     assert argv[-1] == "Вопрос"
 

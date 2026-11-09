@@ -388,7 +388,7 @@ def run_opencode(
     bin_path = _opencode_bin()
     if not bin_path:
         return None
-    cmd = [bin_path, "run"]
+    cmd = [bin_path, "--standalone", "run"]
     model = os.environ.get("KOI_OPENCODE_MODEL", "").strip()
     if model:
         cmd += ["--model", model]
@@ -396,7 +396,7 @@ def run_opencode(
     cmd += os.environ.get("KOI_OPENCODE_ARGS", "").split()
     try:
         if on_event is not None:
-            cmd[2:2] = ["--format", "json"]
+            cmd += ["--format", "json"]
             answer = ""
             error_message = ""
 

@@ -307,6 +307,9 @@ def _stream_options(item_id):
                 output += "\n\n"
             message_id = current_id
             output += message
+        elif kind == "text" and isinstance(event.get("part"), dict):
+            message = str(event["part"].get("text") or "")
+            output += message
         else:
             return
         if coordinator and message:

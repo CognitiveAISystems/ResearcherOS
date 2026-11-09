@@ -223,7 +223,9 @@ def get_conversation_activity(cid: str):
 
 @router.post("/agent-conversations/{cid}/cancel")
 def cancel_conversation(cid: str):
-    _conversation(cid)
+    # Stopping an existing local chat must work even after its card was removed.
+    if not conversations.find(cid):
+        raise HTTPException(404, "Chat not found")
     item = next((i for i in conversations.messages(cid) if i["status"] != "answered"), None)
     from koi.agent_chat import research
     from koi.agent_chat import acp_client
@@ -248,7 +250,6 @@ def cancel_agent_chat_item(item_id: str):
     item = find_item(item_id)
     if not item:
         raise HTTPException(404, "Сообщение не найдено")
-    _check_scope(item["project_id"], item.get("board_id"), item.get("card_id"))
     return {"ok": _cancel_turn(item)}
 
 
