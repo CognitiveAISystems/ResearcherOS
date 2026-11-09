@@ -94,6 +94,24 @@ def test_streaming_joins_text_parts(binary, tmp_path):
     assert [event["type"] for event in events][:2] == ["step_start", "tool_use"]
 
 
+def test_chat_shows_opencode_work_before_any_text(monkeypatch):
+    from koi.agent_chat import live, research
+
+    monkeypatch.setattr(runner, "find_item", lambda iid: {"id": iid})
+    monkeypatch.setattr(research, "coordinator_for_item", lambda iid: None)
+    published = []
+    monkeypatch.setattr(live, "publish", lambda iid, text: published.append(text))
+    receive = runner._stream_options("aq-progress")["on_event"]
+    receive({"type": "step_start", "part": {}})
+    assert published[-1] == "OpenCode обрабатывает запрос…"
+    receive({"type": "tool_use", "part": {"tool": "read"}})
+    assert published[-1] == "OpenCode читает файлы…"
+    receive({"type": "text", "part": {"text": "Итог.", "messageID": "one"}})
+    assert published[-1] == "Итог."
+    receive({"type": "text", "part": {"text": "Продолжение.", "messageID": "two"}})
+    assert published[-1] == "Итог.\n\nПродолжение."
+
+
 def test_research_executor_uses_opencode_cli(binary, tmp_path, monkeypatch):
     from koi.agent_chat import research, research_runtime
     from koi.adapters import agent_chat_activity

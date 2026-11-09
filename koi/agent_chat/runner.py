@@ -309,7 +309,26 @@ def _stream_options(item_id):
             output += message
         elif kind == "text" and isinstance(event.get("part"), dict):
             message = str(event["part"].get("text") or "")
+            current_id = event["part"].get("messageID")
+            if current_id and message_id and current_id != message_id and output:
+                output += "\n\n"
+            message_id = current_id
             output += message
+        elif kind in ("step_start", "tool_use"):
+            tool = event.get("part", {}).get("tool")
+            message = {
+                "read": "OpenCode читает файлы…",
+                "glob": "OpenCode ищет файлы…",
+                "grep": "OpenCode ищет в содержимом файлов…",
+                "bash": "OpenCode выполняет команду…",
+                "task": "OpenCode ожидает результат подзадачи…",
+                "edit": "OpenCode изменяет файл…",
+                "write": "OpenCode записывает файл…",
+            }.get(tool, "OpenCode обрабатывает запрос…")
+            live.publish(item_id, (output + "\n\n" if output else "") + message)
+            if coordinator:
+                research.update(coordinator, "running", message)
+            return
         else:
             return
         if coordinator and message:
