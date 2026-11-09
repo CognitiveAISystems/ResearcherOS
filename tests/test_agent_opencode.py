@@ -17,9 +17,13 @@ import json, pathlib, sys
 argv = sys.argv[1:]
 pathlib.Path("argv.json").write_text(json.dumps(argv))
 assert argv[0] == "run", argv
+assert "--dir" not in argv, "OpenCode 2.2 does not support --dir; use subprocess cwd"
 assert sys.stdin.read() == "", "prompt must arrive as an argument, not on stdin"
 prompt = argv[-1]
 if prompt == "boom":
+    raise SystemExit(1)
+if prompt == "limit":
+    print(json.dumps({"type": "error", "error": {"message": "Free usage limit reached"}}), flush=True)
     raise SystemExit(1)
 if prompt == "slow":
     import time; time.sleep(20)
@@ -53,8 +57,7 @@ def test_runs_read_only_by_default(binary, tmp_path):
 
     assert run_opencode("Вопрос", cwd=tmp_path, timeout=10) == "Ответ агента."
     argv = launched(tmp_path)
-    assert argv[:4] == ["run", "--dir", str(tmp_path), "--agent"]
-    assert argv[4] == "plan"
+    assert argv[:3] == ["run", "--agent", "plan"]
     assert "--auto" not in argv
     assert argv[-1] == "Вопрос"
 
@@ -119,6 +122,11 @@ def test_nonzero_exit_yields_no_answer(binary, tmp_path):
     from koi.adapters.agent_backends import run_opencode
 
     assert run_opencode("boom", cwd=tmp_path, timeout=10) is None
+
+
+def test_provider_error_is_not_reported_as_missing_auth(binary, tmp_path):
+    with pytest.raises(backends.AgentBackendError, match="OpenCode: Free usage limit reached"):
+        backends.run_opencode("limit", cwd=tmp_path, timeout=10, on_event=lambda event: None)
 
 
 def test_timeout_yields_no_answer(binary, tmp_path):
@@ -284,6 +292,22 @@ def test_api_mode_failure_still_answers_the_chat(monkeypatch):
                         lambda _id, answer, **kw: answers.append((answer, kw.get("answer_kind"))))
     assert runner.process_item(item["id"]) is True
     assert answers == [("Агент не вернул ответ. Проверьте локальную авторизацию и повторите вопрос.", "warning")]
+
+
+def test_provider_failure_is_shown_in_chat(monkeypatch):
+    item = {"id": "aq-limit", "project_id": None, "question": "Question",
+            "status": "pending", "purpose": "agent", "cli_agent": "opencode"}
+    _api_item(monkeypatch, item)
+    answers = []
+
+    def fail(*args, **kwargs):
+        raise backends.AgentBackendError("OpenCode: Free usage limit reached")
+
+    monkeypatch.setattr(runner, "run_agent", fail)
+    monkeypatch.setattr(runner, "submit_answer",
+                        lambda _id, answer, **kw: answers.append((answer, kw.get("answer_kind"))))
+    assert runner.process_item(item["id"]) is True
+    assert answers == [("OpenCode: Free usage limit reached", "warning")]
 
 
 def test_unexpected_failure_still_answers_the_chat(monkeypatch):

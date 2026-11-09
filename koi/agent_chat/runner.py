@@ -12,6 +12,7 @@ import json
 import subprocess
 
 from koi.adapters.agent_backends import (
+    AgentBackendError,
     CLI_AGENTS,
     acp_agents,
     backend_order,
@@ -536,6 +537,10 @@ def _process_item(item_id: str) -> bool:
             raise AgentCancelled
     except AgentCancelled:
         raise
+    except AgentBackendError as exc:
+        record(item_id, str(exc))
+        submit_answer(item_id, str(exc), answer_kind="warning")
+        return True
     except Exception as exc:
         record(item_id, f"Ошибка запуска: {type(exc).__name__}.")
         submit_answer(item_id, "Не удалось запустить агента. Подробности доступны в журнале работы.", answer_kind="warning")

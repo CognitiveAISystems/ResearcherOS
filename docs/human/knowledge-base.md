@@ -138,7 +138,8 @@ Claude Code вызывается headless: `claude -p --output-format text`, п�
 при проверке гипотез — с `--permission-mode acceptEdits` и списком allowed-tools,
 чтобы агент мог написать файл отчёта.
 
-OpenCode вызывается headless: `opencode run --dir <cwd> --format json --agent plan <промпт>`
+OpenCode вызывается headless: `opencode run --format json --agent plan <промпт>`
+(рабочий каталог задаётся через cwd процесса).
 (промпт — аргументом, не через stdin). В режиме чтения используется агент `plan`, у
 которого правки запрещены; когда правки разрешены — флаг `--auto`. Шаги и ошибки из
 JSON-потока попадают в журнал чата. ACP пока не подключён: выбор `acp:*` отклоняется.
