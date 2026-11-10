@@ -315,6 +315,9 @@ def run_claude_code(
     elif mcp_args:
         cmd += ['--permission-mode', 'plan', '--allowed-tools',
                 'Read,Glob,Grep,mcp__researcheros__spawn_agents,mcp__researcheros__list_agents']
+    else:
+        cmd += ['--tools', 'Read,Glob,Grep', '--strict-mcp-config',
+                '--mcp-config', '{"mcpServers":{}}']
     extra = os.environ.get("KOI_CLAUDE_ARGS", "").split()
     cmd += extra
     cmd += list(mcp_args)

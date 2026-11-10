@@ -99,6 +99,7 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
                 notes = (self.root / 'release-notes.md').read_text()
                 self.assertIn('abc123', notes)
                 self.assertIn('https://example.org/build/1', notes)
+                self.assertIn('Claude Code доступен в чате и в окне «Новое дерево»', notes)
                 assets = self.root / 'built-installers'
                 for line in (assets / 'SHA256SUMS.txt').read_text().splitlines():
                     digest, filename = line.split('  ', 1)
