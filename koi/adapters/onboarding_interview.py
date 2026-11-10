@@ -146,15 +146,20 @@ def _cursor_cli_text(prompt: str, repo: Path) -> str | None:
     return text or None
 
 
+INTERVIEW_AGENTS = {"cursor": "Cursor", "codex": "Codex", "claude": "Claude"}
+AGENT_CHOICE_ERROR = "Выберите Cursor, Codex или Claude."
+
+
 def _ask_agent(prompt: str, repo: Path, *, cli_agent: str = "cursor") -> dict[str, Any]:
-    if cli_agent not in {"cursor", "codex"}:
-        raise InterviewError("Выберите Cursor или Codex.")
+    if cli_agent not in INTERVIEW_AGENTS:
+        raise InterviewError(AGENT_CHOICE_ERROR)
     if cli_agent == "cursor":
         result = _cursor_cli_text(prompt, repo)
     else:
-        result, _backend = run_agent(prompt, cwd=repo, backend="codex", allow_edits=False, timeout=120)
+        # Codex and Claude Code run headless and read-only here: the interview only needs their text answer.
+        result, _backend = run_agent(prompt, cwd=repo, backend=cli_agent, allow_edits=False, timeout=120)
     if not result:
-        label = "Cursor" if cli_agent == "cursor" else "Codex"
+        label = INTERVIEW_AGENTS[cli_agent]
         raise InterviewError(f"{label} не вернул ответ за отведённое время или завершился с ошибкой. Проверь авторизацию либо выбери другого агента и повтори отправку.")
     return _json_reply(result)
 
@@ -561,8 +566,8 @@ def _program_dialog(state: dict, answer: str, repo: Path, *, cli_agent: str = "c
 
 
 def reply_interview(repo_raw: str | None, answer: str, decision: str = "answer", *, branch: str | None = None, phase: str | None = None, session_id: str | None = None, cli_agent: str | None = None, node_payload: dict | None = None) -> dict:
-    if cli_agent is not None and cli_agent not in {"cursor", "codex"}:
-        raise InterviewError("Выберите Cursor или Codex.")
+    if cli_agent is not None and cli_agent not in INTERVIEW_AGENTS:
+        raise InterviewError(AGENT_CHOICE_ERROR)
     if decision not in {"answer", "edit_node", "add_node", "tutorial_seen"} or (decision == "answer" and (not isinstance(answer, str) or not answer.strip() or len(answer) > 12000)):
         raise InterviewError("Напишите ответ длиной до 12 000 знаков.")
     path = _draft_path(repo_raw, branch, session_id)
