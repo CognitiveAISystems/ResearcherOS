@@ -71,6 +71,8 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
         assets.mkdir()
         (assets / 'ResearcherOS Setup 0.3.0.exe').write_bytes(b'windows')
         (assets / 'ResearcherOS-0.3.0.AppImage').write_bytes(b'linux')
+        (assets / 'ResearcherOS-0.3.0-arm64.dmg').write_bytes(b'mac-arm64')
+        (assets / 'ResearcherOS-0.3.0-x64.dmg').write_bytes(b'mac-x64')
         bin_dir = self.root / 'bin'
         bin_dir.mkdir()
         gh = bin_dir / 'gh'
@@ -92,6 +94,8 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
                 self.assertEqual('--prerelease' in args, prerelease == 'true')
                 self.assertEqual('--latest=false' in args, prerelease == 'true')
                 self.assertIn('built-installers/ResearcherOS.Setup.0.3.0.exe', args)
+                self.assertIn('built-installers/ResearcherOS-0.3.0-arm64.dmg', args)
+                self.assertIn('built-installers/ResearcherOS-0.3.0-x64.dmg', args)
                 notes = (self.root / 'release-notes.md').read_text()
                 self.assertIn('abc123', notes)
                 self.assertIn('https://example.org/build/1', notes)
@@ -103,6 +107,14 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
     def test_missing_platform_prevents_publication(self):
         self.prepare_publish()
         (self.root / 'built-installers/ResearcherOS-0.3.0.AppImage').unlink()
+        result = self.run_script('Publish verified installers to GitHub Releases',
+                                 PRERELEASE='false', RELEASE_TAG='v0.3.0')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'gh-args.json').exists())
+
+    def test_missing_mac_architecture_prevents_publication(self):
+        self.prepare_publish()
+        (self.root / 'built-installers/ResearcherOS-0.3.0-x64.dmg').unlink()
         result = self.run_script('Publish verified installers to GitHub Releases',
                                  PRERELEASE='false', RELEASE_TAG='v0.3.0')
         self.assertNotEqual(result.returncode, 0)
