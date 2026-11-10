@@ -62,8 +62,13 @@ def _artifact_task_cwd(item_id: str):
 
 def _sdk_prompt(item_id: str) -> str:
     from koi.adapters.glossary import prompt
+    from koi.agent_chat.project_skills import context, CREATOR, POLICY
     item = find_item(item_id) or {}
-    return prompt(item.get("project_id")) + "\n\n" + _base_sdk_prompt(item_id)
+    skills = context(item["project_id"], method_id=item.get("method_id"),
+                     board_id=item.get("board_id"), card_id=item.get("card_id"), question=item.get("question", "")) if item.get("project_id") else {
+                         "skill_creator_path": str(CREATOR), "project_skill_instructions": POLICY}
+    return (prompt(item.get("project_id")) + "\n\n" + POLICY + "\n"
+            + json.dumps(skills, ensure_ascii=False) + "\n\n" + _base_sdk_prompt(item_id))
 
 
 def _base_sdk_prompt(item_id: str) -> str:
@@ -445,6 +450,10 @@ def _review_grill_proposal(item_id: str, proposal: dict[str, str], *, local_mode
     from koi.adapters.glossary import prompt as vocabulary_prompt
     item = find_item(item_id) or {}
     prompt = vocabulary_prompt(item.get("project_id")) + "\n\n" + prompt
+    if evidence:
+        prompt += ("\n\n" + evidence.get("project_skill_instructions", "") + "\n"
+                   + json.dumps({"applicable_project_skills": evidence.get("applicable_project_skills", []),
+                                 "skill_errors": evidence.get("skill_errors", [])}, ensure_ascii=False))
     if local_mode:
         answer, _ = _run_local_agent(prompt, item_id, mode="ask", force=False, log_activity=log_activity)
     else:

@@ -9022,6 +9022,7 @@ function initSettings() {
 }
 
 function initAgentChat() {
+  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: agentChatProjectId, getCardId: () => null, getMethodId: () => agentChatContext().method_id });
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {

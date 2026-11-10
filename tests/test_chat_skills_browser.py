@@ -16,6 +16,9 @@ async def check():
         async def serve(route):
             from urllib.parse import urlparse
             name = urlparse(route.request.url).path.lstrip('/') or 'index.html'
+            if name == 'api/projects/demo/skills':
+                await route.fulfill(json={'items': [], 'errors': []})
+                return
             path = ROOT / 'web' / name
             if not path.is_file():
                 await route.abort()
@@ -47,17 +50,18 @@ async def check():
             attachReportChatResize(document.querySelector('#report-interview'));
         }""")
         panel = page.locator('#report-interview')
+        await page.evaluate("document.querySelector('.report-workspace').style.setProperty('--report-chat-width', '400px')")
         before = await panel.bounding_box()
         handle = page.locator('.report-chat-resize')
         box = await handle.bounding_box()
-        await page.mouse.move(box['x'] + 4, box['y'] + 100)
+        await page.mouse.move(box['x'] + 1, box['y'] + 100)
         await page.mouse.down()
-        await page.mouse.move(box['x'] - 96, box['y'] + 100)
+        await page.mouse.move(box['x'] + 100, box['y'] + 100)
         await page.mouse.up()
         after = await panel.bounding_box()
         assert after['width'] > before['width'] + 90, (before, after)
         await handle.focus()
-        await page.keyboard.press('ArrowRight')
+        await page.keyboard.press('ArrowLeft')
         narrower = await panel.bounding_box()
         assert narrower['width'] < after['width'] - 20
         await page.evaluate("document.querySelector('.report-workspace').style.removeProperty('--report-chat-width')")
@@ -67,16 +71,16 @@ async def check():
         field = page.locator('#report-interview-input')
         await field.fill('/')
         options = page.locator('.chat-skills [role="option"]')
-        assert await options.locator('strong').all_text_contents() == ['grill-me','prose','question','run']
+        assert await options.locator('strong').all_text_contents() == ['Автоисследование','Добавить скилл','grill-me','prose','Сжать отчёт','question','run']
         await field.press('ArrowDown')
         await field.press('Enter')
-        assert await field.input_value() == '/prose '
+        assert await field.input_value() == '/add-skill '
         assert await page.evaluate('sent') == 0
         await field.fill('/run')
         await options.first.click()
         assert await field.input_value() == '/run '
         await field.fill('/nothing')
-        assert await page.locator('.chat-skills-empty').inner_text() == 'Скиллы не найдены'
+        assert await page.locator('[role="listbox"] .chat-skills-empty').inner_text() == 'Скиллы не найдены'
         await field.press('Escape')
         assert not await page.locator('.chat-skills').is_visible()
         out = ROOT / '.run/chat-skills'
@@ -92,7 +96,7 @@ async def check():
                 assert 0 <= rect['x'] and rect['x'] + rect['width'] <= width + 1
                 assert 0 <= rect['y'] and rect['y'] + rect['height'] <= 901
         await browser.close()
-        print('PASS: four commands, keyboard/mouse selection, no automatic send, filtering, Escape, six layouts')
+        print('PASS: skill creation in menu, keyboard/mouse selection, no automatic send, filtering, Escape, six layouts')
 
 if __name__ == '__main__':
     asyncio.run(check())

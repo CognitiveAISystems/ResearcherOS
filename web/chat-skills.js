@@ -1,5 +1,6 @@
 export const RESEARCH_SKILLS = [
   {command: 'koi-arbor-autoresearch', name: 'Автоисследование', description: 'Искать идеи и гипотезы для дерева или улучшать выбранный метод.'},
+  {command: 'add-skill', name: 'Добавить скилл', description: 'Создать или установить скилл для карточек, методов или дерева.'},
 ];
 
 export const CARD_SKILLS = [
@@ -21,7 +22,7 @@ export function reportChatCommand(text) {
 }
 
 /** Slash menu shared by the project chat and the report chat. */
-export function attachSkillMenu(input, { getProjectId, getCardId = () => true }) {
+export function attachSkillMenu(input, { getProjectId, getCardId = () => true, getMethodId = () => null }) {
   const hint = 'Введите /, чтобы посмотреть доступные скиллы для ИИ';
   input.placeholder = hint;
   input.title = hint;
@@ -38,9 +39,14 @@ export function attachSkillMenu(input, { getProjectId, getCardId = () => true })
   list.setAttribute('role', 'listbox');
   list.setAttribute('aria-label', 'Доступные скиллы');
   popup.append(title, list);
+  const status = document.createElement('p');
+  status.className = 'chat-skills-empty';
+  status.hidden = true;
+  popup.append(status);
   document.body.append(popup);
   input.setAttribute('aria-controls', list.id);
-  let filtered = [], active = 0, project = null;
+  let filtered = [], active = 0, project = null, request = 0, level = null;
+  const currentLevel = () => getCardId() ? 'card' : getMethodId() ? 'method' : 'tree';
   const query = () => input.value.slice(0, input.selectionStart).match(/^\/([^\s/]*)$/)?.[1];
   const open = () => popup.matches(':popover-open');
   function close() {
@@ -58,7 +64,7 @@ export function attachSkillMenu(input, { getProjectId, getCardId = () => true })
   }
   function select(index) {
     const skill = filtered[index];
-    if (!skill || query() === undefined || project !== getProjectId()) return;
+    if (!skill || query() === undefined || project !== getProjectId() || level !== currentLevel()) return;
     input.setRangeText(`/${skill.command} `, 0, input.selectionStart, 'end');
     close();
     input.focus();
@@ -98,14 +104,38 @@ export function attachSkillMenu(input, { getProjectId, getCardId = () => true })
     position();
     if (filtered.length) highlight();
   }
-  function refresh() {
+  async function refresh() {
+    const version = ++request;
     const term = query();
     if (term === undefined || document.activeElement !== input) { close(); return; }
     project = getProjectId();
+    level = currentLevel();
     active = 0;
+    status.hidden = true;
     if (!project) { filtered = []; render('Сначала выберите дерево'); return; }
-    filtered = (getCardId() ? CARD_SKILLS : RESEARCH_SKILLS).filter(row => `${row.command} ${row.name} ${row.description}`.toLocaleLowerCase().includes(term.toLocaleLowerCase()));
+    const builtins = level === 'card' ? CARD_SKILLS : RESEARCH_SKILLS;
+    const matches = row => `${row.command} ${row.name} ${row.description}`.toLocaleLowerCase().includes(term.toLocaleLowerCase());
+    filtered = builtins.filter(matches);
     render();
+    const requestedProject = project, requestedLevel = level;
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(project)}/skills?level=${level}`);
+      if (!response.ok) throw new Error('Skills unavailable');
+      const result = await response.json();
+      if (version !== request || requestedProject !== getProjectId() || requestedLevel !== currentLevel() || query() !== term || document.activeElement !== input) return;
+      const commands = new Set(builtins.map(row => row.command));
+      filtered = [...builtins, ...result.items.filter(row => !commands.has(row.command))].filter(matches);
+      active = Math.min(active, Math.max(0, filtered.length - 1));
+      render();
+      status.hidden = !result.errors?.length;
+      status.textContent = result.errors?.length ? 'Некоторые скиллы проекта недоступны. Проверьте их файлы через чат.' : '';
+      position();
+    } catch {
+      if (version !== request || requestedProject !== getProjectId() || requestedLevel !== currentLevel() || document.activeElement !== input || query() !== term) return;
+      status.textContent = 'Не удалось загрузить скиллы проекта. Введите / ещё раз.';
+      status.hidden = false;
+      position();
+    }
   }
   input.addEventListener('input', refresh);
   input.addEventListener('click', refresh);
