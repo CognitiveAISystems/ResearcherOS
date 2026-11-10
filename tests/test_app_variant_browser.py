@@ -114,7 +114,9 @@ async def smoke(url):
             await field.fill("/")
             menu = page.locator(".chat-skills:popover-open")
             await menu.wait_for(state="visible")
-            assert await menu.locator("[role=option] strong").all_text_contents() == ["grill-me", "prose", "question", "run"]
+            assert await menu.locator("[role=option] strong").all_text_contents() == ["Автоисследование", "Добавить скилл", "grill-me", "prose", "Сжать отчёт", "question", "run"]
+            await field.press("ArrowDown")
+            await field.press("ArrowDown")
             await field.press("ArrowDown")
             await field.press("Enter")
             assert await field.input_value() == "/prose "
@@ -122,7 +124,7 @@ async def smoke(url):
             await menu.locator("[role=option]").click()
             assert await field.input_value() == "/run "
             await field.fill("/nothing")
-            assert await menu.locator(".chat-skills-empty").inner_text() == "Скиллы не найдены"
+            assert await menu.locator('[role="listbox"] .chat-skills-empty').inner_text() == "Скиллы не найдены"
             await field.press("Escape")
             assert await menu.count() == 0
             assert await page.locator("#card-report-modal").is_visible()

@@ -13,6 +13,7 @@ from koi.adapters.workspace import get_workspace
 _ws = get_workspace()
 
 from koi.agent_chat.formatting import ANSWER_FORMAT_INSTRUCTIONS
+from koi.agent_chat.project_skills import context as skill_context
 from koi.agent_chat.card_links import INSTRUCTIONS as CARD_LINK_INSTRUCTIONS
 from koi.adapters.agent_chat_queue import list_for_project, find_item, list_pending, mark_processing, submit_answer
 from koi.adapters.card_reports import read_report
@@ -196,6 +197,8 @@ def build_context(item_id: str) -> dict:
             interview["task"] = "Собери отчёт по этой задаче, следуя скиллу koi-execute-card."
     return {
         **interview,
+        **skill_context(
+            project.id, method_id=method_id, board_id=item.get("board_id"), card_id=item.get("card_id"), question=item["question"]),
         "glossary": vocabulary,
         "queue_id": item["id"],
         "enqueued_at": item["enqueued_at"],

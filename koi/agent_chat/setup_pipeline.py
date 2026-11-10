@@ -110,6 +110,7 @@ def _writer_prompt(context: dict, feedback: str = "") -> str:
     skill = (SKILLS / "koi-grill-experiment" / "SKILL.md").read_text(encoding="utf-8")
     return (
         context.get("glossary", {}).get("instructions", "") + "\n"
+        + context.get("project_skill_instructions", "") + "\n"
         + "Ты отдельный агент-писатель постановки. Не отвечай пользователю и не меняй файлы. "
         "Возьми последнюю реплику, всю историю карточки и текущий документ. "
         "Обнови накопленное резюме по известным решениям; неизвестное явно отметь как открытое. "

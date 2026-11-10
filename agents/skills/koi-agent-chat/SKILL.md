@@ -36,6 +36,17 @@ KOI/.venv/bin/python -m koi.agent_chat.cli pending
 
 ## Главное правило ответа
 
+### Скиллы проекта
+
+Для просьбы создать, установить или подключить скилл используй
+[koi-create-project-skill](../koi-create-project-skill/SKILL.md).
+Уточни уровень работы: карточка, метод или дерево; явный выбор не спрашивай снова.
+Это не привязка к отдельной карточке или методу: скилл доступен из любого
+объекта выбранного уровня и работает в границах текущего объекта.
+Контекст содержит `project_skills_root`, `skill_creator_path`,
+`applicable_project_skills` и `project_skill_instructions`. Прочитай применимые
+SKILL.md перед работой. Этот запрос — поручение, а не поиск вывода в research.json.
+
 ### Изменения Git
 
 Для `purpose: git_notice` и `purpose: git_chat` используй `git_instructions`,

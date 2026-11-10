@@ -9550,7 +9550,7 @@ function initAgentChat() {
     });
   }
   document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
-  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: agentChatProjectId, getCardId: () => mainConversations.contextScope?.card_id });
+  attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: agentChatProjectId, getCardId: () => mainConversations.contextScope?.card_id, getMethodId: () => mainConversations.contextScope?.board_id });
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
   document.querySelectorAll("[data-cli-agent]").forEach((select) => {
     select.addEventListener("change", () => {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from api.schemas import (
@@ -80,6 +82,13 @@ def get_conversations(project_id: str | None = None, board_id: str | None = None
         _check_scope(project_id, board_id, card_id)
     return {"items": [row for row in conversations.list_conversations(project_id, board_id, card_id)
                       if row.get("kind") not in ("literature", "morphology", "morphology_explain")]}
+
+
+@router.get("/projects/{project_id}/skills")
+def get_project_skills(project_id: str, level: Literal["card", "method", "tree"]):
+    _check_scope(project_id)
+    from koi.agent_chat.project_skills import menu
+    return menu(project_id, level)
 
 
 @router.post("/agent-conversations")
