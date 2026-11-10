@@ -177,6 +177,17 @@ def test_description_tree_brief_and_method_question(theme, source, failure, monk
                 page.screenshot(path=str(output / 'tree-node-actions-light.png'))
                 page.get_by_role('button', name='Добавить: Метод', exact=True).click()
                 editor = page.get_by_role('dialog', name='Добавить узел', exact=True)
+                expect(editor.get_by_label('Название', exact=True)).to_be_focused()
+                for width, height in [(1440, 1000), (1280, 750), (320, 640)]:
+                    page.set_viewport_size({'width': width, 'height': height})
+                    box = editor.bounding_box()
+                    assert box['width'] <= 480
+                    assert abs(box['x'] + box['width'] / 2 - width / 2) <= 1
+                    assert abs(box['y'] + box['height'] / 2 - height / 2) <= 1
+                    assert box['height'] <= height - 32
+                page.set_viewport_size({'width': 1280, 'height': 750})
+                page.screenshot(path=str(output / 'tree-add-node-centered-light.png'))
+                page.set_viewport_size({'width': 1440, 'height': 1000})
                 editor.get_by_label('Тип узла', exact=True).select_option('method')
                 editor.get_by_label('Название', exact=True).fill('Второй метод')
                 editor.get_by_role('button', name='Добавить узел', exact=True).click()
