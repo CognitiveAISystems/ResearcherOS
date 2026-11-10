@@ -31,7 +31,7 @@ ResearcherOS связывает дерево исследования, эксп�
 ### ℹ️ Перед началом подготовьте
 
 > - **Git** — [установить](https://git-scm.com/downloads).
-> - **Одного AI-агента** — установите и настройте [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation) или [OpenCode CLI](https://opencode.ai/docs/).
+> - **Одного AI-агента** — установите и настройте [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation), [Claude Code](https://www.anthropic.com/claude-code) или [OpenCode CLI](https://opencode.ai/docs/).
 > - **Проект** — локальный Git-репозиторий хотя бы с одним коммитом.
 
 ### Скачайте подходящую версию ResearcherOS [↗](https://github.com/CognitiveAISystems/ResearcherOS/releases "Открыть GitHub Releases")
@@ -108,6 +108,7 @@ cd ReseachOS
 |------|---------|
 | 2026-11-10 | **Готовые установщики.** ResearcherOS можно скачать для macOS, Windows и Linux из GitHub Releases. |
 | 2026-11-10 | **Редактор отчётов.** Таблицы, списки задач и формулы можно добавлять и редактировать в интерфейсе. |
+| 2026-11-10 | **Claude в онбординге и построении дерева.** Claude Code можно выбрать в окне «Новое дерево» рядом с Cursor и Codex. Для IDE добавлены `CLAUDE.md` и шаблон hooks. |
 | 2026-11-10 | **Навыки проекта.** Инструкции для агента можно создавать и привязывать к карточке, методу или всему дереву. |
 
 

@@ -21,6 +21,9 @@ REFACTORING_PLAN.md
 # Local Cursor IDE config/hooks/skill links
 .cursor/
 
+# Local Claude Code settings and skill links (template in agents/claude-settings.json)
+.claude/
+
 /mockups/
 
 *.zip

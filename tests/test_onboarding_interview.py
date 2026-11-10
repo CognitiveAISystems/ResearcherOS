@@ -268,6 +268,45 @@ def test_selected_codex_does_not_try_other_backends(tmp_path, monkeypatch):
     assert calls[0]['backend'] == 'codex' and calls[0]['timeout'] == 120
 
 
+def test_selected_claude_runs_headless_read_only_and_skips_other_backends(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(interview, '_cursor_cli_text', lambda *_: pytest.fail('Cursor must not run'))
+    def run(prompt, **kwargs):
+        calls.append(kwargs)
+        return '{"ok":true}', 'Claude'
+    monkeypatch.setattr(interview, 'run_agent', run)
+    assert interview._ask_agent('prompt', tmp_path, cli_agent='claude') == {'ok': True}
+    assert calls[0]['backend'] == 'claude' and calls[0]['allow_edits'] is False and calls[0]['timeout'] == 120
+
+
+def test_claude_failure_names_claude_and_does_not_fall_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(interview, '_cursor_cli_text', lambda *_: pytest.fail('No fallback is allowed'))
+    monkeypatch.setattr(interview, 'run_agent', lambda *_args, **_kwargs: (None, ''))
+    with pytest.raises(interview.InterviewError, match='Claude'):
+        interview._ask_agent('prompt', tmp_path, cli_agent='claude')
+
+
+@pytest.mark.parametrize('agent', ['opencode', 'gemini', ''])
+def test_agent_outside_the_interview_list_is_rejected(tmp_path, monkeypatch, agent):
+    monkeypatch.setattr(interview, 'run_agent', lambda *_args, **_kwargs: pytest.fail('Unknown agents must not run'))
+    with pytest.raises(interview.InterviewError, match='Claude'):
+        interview._ask_agent('prompt', tmp_path, cli_agent=agent)
+    with pytest.raises(interview.InterviewError, match='Claude'):
+        interview.reply_interview(str(tmp_path), 'ответ', cli_agent=agent)
+
+
+def test_api_passes_claude_to_interview(repo, tmp_path, monkeypatch):
+    calls = []
+    def ask(prompt, cwd, **kwargs):
+        calls.append(kwargs)
+        return reply()
+    monkeypatch.setattr(interview, '_ask_agent', ask)
+    with TestClient(app) as client:
+        start(client, repo, tmp_path / 'research')
+        answer(client, repo, 'Описание и выбранный метод', cli_agent='claude')
+    assert calls == [{'cli_agent': 'claude'}]
+
+
 def test_cursor_failure_is_recoverable_without_silent_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(interview, '_cursor_cli_text', lambda *_: None)
     monkeypatch.setattr(interview, 'run_agent', lambda *_args, **_kwargs: pytest.fail('No fallback is allowed'))
