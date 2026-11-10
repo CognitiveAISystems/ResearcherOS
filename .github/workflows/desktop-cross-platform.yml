@@ -186,6 +186,11 @@ jobs:
           # Require both packages before publishing any release.
           test "$(find built-installers -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
           test "$(find built-installers -maxdepth 1 -name '*.AppImage' | wc -l)" -eq 1
+          # GitHub replaces spaces in asset names; hash the published names.
+          for file in built-installers/*.exe; do
+            normalized="${file// /.}"
+            if [[ "$file" != "$normalized" ]]; then mv -- "$file" "$normalized"; fi
+          done
           (cd built-installers && sha256sum -- *.exe *.AppImage > SHA256SUMS.txt)
           {
             if [[ "$PRERELEASE" == true ]]; then
