@@ -91,7 +91,7 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
                 self.assertIn('--verify-tag', args)
                 self.assertEqual('--prerelease' in args, prerelease == 'true')
                 self.assertEqual('--latest=false' in args, prerelease == 'true')
-                self.assertIn('built-installers/ResearcherOS Setup 0.3.0.exe', args)
+                self.assertIn('built-installers/ResearcherOS.Setup.0.3.0.exe', args)
                 notes = (self.root / 'release-notes.md').read_text()
                 self.assertIn('abc123', notes)
                 self.assertIn('https://example.org/build/1', notes)

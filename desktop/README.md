@@ -120,9 +120,8 @@ Stable downloads: https://github.com/CognitiveAISystems/ResearcherOS/releases/la
 A/B-test downloads: choose a `beta-test` prerelease at
 https://github.com/CognitiveAISystems/ResearcherOS/releases
 
-The first tagged release must be published before these download instructions can
-be used. Keep the old LFS installers until the replacement release has been checked.
-They are no longer updated by CI. macOS still uses the source installer; signed,
+Windows and Linux installers are distributed through Releases, outside Git.
+macOS still uses the source installer; signed,
 notarized DMG distribution is a separate step requiring Apple Developer credentials
 and validation on Apple Silicon and Intel hardware. In-place upgrades still need
 manual validation; back up research data before the first upgrade.

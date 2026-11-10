@@ -1,21 +1,12 @@
-# Установщики ResearcherOS
+# Установка ResearcherOS
 
-Новые сборки Windows и Linux публикуются в [GitHub Releases](https://github.com/CognitiveAISystems/ResearcherOS/releases): стабильные — `vX.Y.Z`, для A/B-тестирования — `vX.Y.Z-beta-test.N` с отметкой Pre-release. Первые файлы появятся после успешного запуска сборки по тегу.
+Готовые установщики Windows и Linux доступны в [GitHub Releases](https://github.com/CognitiveAISystems/ResearcherOS/releases). Скачивать репозиторий и устанавливать Git LFS не нужно.
 
-Файлы в этой папке оставлены для переходного периода и больше не обновляются автоматически. Для macOS пока используется установщик из исходников, описанный ниже.
+- [Стабильный выпуск](https://github.com/CognitiveAISystems/ResearcherOS/releases/latest): `.exe` для Windows или `.AppImage` для Linux x86_64.
+- [Сборки для A/B-тестирования](https://github.com/CognitiveAISystems/ResearcherOS/releases): выпуски `beta-test` с отметкой Pre-release. Они не заменяют стабильную версию.
 
-Клонируйте репозиторий с установленным [Git LFS](https://git-lfs.com/), затем запустите файл для своей системы.
+На Linux разрешите выполнение `.AppImage` в свойствах файла. Нужна glibc 2.35 или новее (Ubuntu 22.04 и новее). Для подключения исследовательских репозиториев нужен Git.
 
-| Система | Файл |
-|---------|------|
-| macOS | [Установить ResearcherOS.command](Установить%20ResearcherOS.command) |
-| Windows | [ResearcherOS Setup 0.1.0.exe](ResearcherOS%20Setup%200.1.0.exe) |
-| Linux | [ResearcherOS-0.1.0.AppImage](ResearcherOS-0.1.0.AppImage) |
+В этой папке остаётся только [установщик macOS из исходников](Установить%20ResearcherOS.command). Запускайте его из клона репозитория; готовые DMG пока не выпускаются.
 
-На macOS установщик собирает приложение из исходников текущего клона. Установщики Windows и Linux собраны из коммита `a358fb3` ветки `main` в [GitHub Actions](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/42776408961).
-
-Сборка Windows прошла автоматическую проверку установки и запуска. Linux AppImage собран на Ubuntu 22.04 (x86_64, glibc 2.35) и прошёл проверку запуска на Ubuntu 22.04 и 24.04 на виртуальном экране Xvfb. Обновление поверх прежней установки и работу с физическим экраном для этих сборок не проверяли. Python и Node.js пользователю устанавливать не нужно; для подключения Git-репозиториев нужен Git.
-
-Если `.exe` или `.AppImage` не запускается и вместо приложения скачался маленький текстовый файл, выполните `git lfs install` и `git lfs pull` из корня репозитория.
-
-[Подробная установка и подключение проектов](../README.md#установка).
+[Подробная установка и подключение проектов](../README.md#быстрый-старт).

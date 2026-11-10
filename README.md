@@ -30,7 +30,7 @@ ResearcherOS связывает дерево исследования, эксп�
 
 ### Что понадобится
 
-- [Git](https://git-scm.com/downloads) для подключения исследовательских репозиториев. Git LFS нужен только для старых установщиков из клона.
+- [Git](https://git-scm.com/downloads) для подключения исследовательских репозиториев.
 - Перед запуском ResearcherOS убедитесь, что установлен и настроен хотя бы один агент командной строки (CLI): [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation) или [OpenCode CLI](https://opencode.ai/docs/). По ссылкам — официальные инструкции по установке.
 - Git-репозиторий вашего исследовательского проекта хотя бы с одним коммитом.
 
@@ -39,8 +39,6 @@ ResearcherOS связывает дерево исследования, эксп�
 **Windows и Linux:** откройте [последний стабильный релиз](https://github.com/CognitiveAISystems/ResearcherOS/releases/latest) и скачайте `.exe` или `.AppImage` из раздела Assets. Клонировать ResearcherOS и устанавливать Git LFS не нужно.
 
 Для участия в A/B-тестировании выберите выпуск с `beta-test` в названии на [странице релизов](https://github.com/CognitiveAISystems/ResearcherOS/releases). Эти сборки из ветки `beta` помечаются Pre-release и не заменяют стабильный выпуск. Канал распространения сам по себе не распределяет участников по вариантам эксперимента.
-
-Переход на Releases подготовлен: файлы появятся после первого успешного выпуска по тегу. До этого готовые сборки Windows и Linux доступны [в папке старых установщиков](installers/README.md).
 
 **macOS:** пока используется сборка из исходников. Установите Git, затем выполните:
 
