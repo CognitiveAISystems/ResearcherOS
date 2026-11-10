@@ -1,4 +1,46 @@
 import { marked } from "./vendor-marked.mjs";
+import katex from "./vendor/katex.mjs";
+
+// Tokenize before Markdown can consume TeX backslashes, underscores and pipes.
+function mathToken(source, block) {
+  const pattern = block
+    ? /^(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])(?:[ \t]*\n|$)/
+    : /^(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|\$(?!\s)([^\n$]*?\S)\$(?!\d))/;
+  const match = pattern.exec(source);
+  if (!match) return;
+  return {
+    type: block ? "blockMath" : "inlineMath",
+    raw: match[0],
+    text: match.slice(1).find(value => value !== undefined),
+    display: block || source.startsWith("$$") || source.startsWith("\\["),
+  };
+}
+
+function renderMathToken(token) {
+  const math = katex.renderToString(token.text, {
+    displayMode: token.display,
+    output: "mathml",
+    throwOnError: false,
+    trust: false,
+  });
+  return token.display
+    ? `<div class="md-math-display" style="overflow-x:auto;margin:1em 0;padding:.25em 0">${math}</div>\n`
+    : math;
+}
+
+marked.use({ extensions: [
+  {
+    name: "blockMath", level: "block",
+    tokenizer(source) { return mathToken(source, true); },
+    renderer: renderMathToken,
+  },
+  {
+    name: "inlineMath", level: "inline",
+    start(source) { return source.search(/\$|\\[([]/); },
+    tokenizer(source) { return mathToken(source, false); },
+    renderer: renderMathToken,
+  },
+] });
 
 marked.setOptions({
   breaks: true,
