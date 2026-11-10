@@ -146,6 +146,8 @@ def run_codex_exec(
     on_event=None,
     is_cancelled=None,
     on_started=None,
+    mcp_args=(),
+    mcp_env=None,
 ) -> str | None:
     """Non-interactive вызов локального Codex CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -182,17 +184,18 @@ def run_codex_exec(
         run_dir.mkdir(parents=True, exist_ok=True)
         extra += ["--add-dir", str(run_dir.resolve())]
     extra += os.environ.get("KOI_CODEX_ARGS", "").split()
+    extra += list(mcp_args)
     if extra:
         cmd[2:2] = extra
     try:
         if on_event is not None:
             cmd.insert(2, "--json")
             returncode = run_json(cmd, prompt, cwd=cwd, timeout=timeout,
-                                  on_event=on_event, is_cancelled=is_cancelled, on_started=on_started)
+                                  on_event=on_event, is_cancelled=is_cancelled, on_started=on_started, env=mcp_env)
             stdout = ""
         else:
             proc = subprocess.run(cmd, input=prompt, capture_output=True,
-                                  text=True, cwd=str(cwd), timeout=timeout)
+                                  text=True, cwd=str(cwd), timeout=timeout, env=mcp_env)
             stdout, returncode = proc.stdout, proc.returncode
         if output_path.exists():
             text = output_path.read_text(encoding="utf-8").strip()
@@ -290,6 +293,8 @@ def run_claude_code(
     on_event=None,
     is_cancelled=None,
     on_started=None,
+    mcp_args=(),
+    mcp_env=None,
 ) -> str | None:
     """Headless-вызов Claude Code; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -303,10 +308,16 @@ def run_claude_code(
     if allow_edits:
         cmd += ["--permission-mode", "acceptEdits"]
         tools = os.environ.get("KOI_CLAUDE_ALLOWED_TOOLS", DEFAULT_CLAUDE_TOOLS)
+        if mcp_args:
+            tools = ','.join(filter(None, [tools, 'mcp__researcheros__spawn_agents,mcp__researcheros__list_agents']))
         if tools.strip():
             cmd += ["--allowed-tools", tools]
+    elif mcp_args:
+        cmd += ['--permission-mode', 'plan', '--allowed-tools',
+                'Read,Glob,Grep,mcp__researcheros__spawn_agents,mcp__researcheros__list_agents']
     extra = os.environ.get("KOI_CLAUDE_ARGS", "").split()
     cmd += extra
+    cmd += list(mcp_args)
     try:
         if on_event is not None:
             cmd[cmd.index("--output-format") + 1] = "stream-json"
@@ -320,7 +331,7 @@ def run_claude_code(
                     answer = str(event.get("result") or "").strip()
                     failed = bool(event.get("is_error"))
             code = run_json(cmd, prompt, cwd=cwd, timeout=timeout,
-                            on_event=receive, is_cancelled=is_cancelled, on_started=on_started)
+                            on_event=receive, is_cancelled=is_cancelled, on_started=on_started, env=mcp_env)
             return answer if code == 0 and not failed and answer else None
         proc = subprocess.run(
             cmd,
@@ -329,6 +340,7 @@ def run_claude_code(
             text=True,
             cwd=str(cwd),
             timeout=timeout,
+            env=mcp_env,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -344,9 +356,31 @@ def run_cursor_sdk(
     cwd: Path | str | None = None,
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
+    mcp_args=(),
+    mcp_env=None,
+    on_event=None,
+    is_cancelled=None,
+    on_started=None,
 ) -> str | None:
     """Вызов Cursor SDK; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
+    if mcp_args:
+        from koi.agent_chat.runner import _cursor_print_command, find_agent_bin
+        binary = find_agent_bin()
+        if not binary:
+            return None
+        answer = ''
+        def receive(event):
+            nonlocal answer
+            if on_event:
+                on_event(event)
+            if event.get('type') == 'result':
+                answer = str(event.get('result') or '').strip()
+        command = _cursor_print_command(binary, mode=None if allow_edits else 'ask', force=allow_edits)
+        command += list(mcp_args)
+        code = run_json(command, prompt, cwd=cwd, timeout=timeout, on_event=receive,
+                        is_cancelled=is_cancelled, on_started=on_started, env=mcp_env)
+        return answer if code == 0 and answer else None
     api_key = os.environ.get("CURSOR_API_KEY", "").strip()
     if not api_key:
         return None
@@ -382,6 +416,8 @@ def run_opencode(
     on_event=None,
     is_cancelled=None,
     on_started=None,
+    mcp_args=(),
+    mcp_env=None,
 ) -> str | None:
     """Non-interactive вызов установленного OpenCode CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -394,6 +430,7 @@ def run_opencode(
         cmd += ["--model", model]
     cmd += ["--auto"] if allow_edits else ["--agent", DEFAULT_OPENCODE_READONLY_AGENT]
     cmd += os.environ.get("KOI_OPENCODE_ARGS", "").split()
+    cmd += list(mcp_args)
     try:
         if on_event is not None:
             cmd += ["--format", "json"]
@@ -410,13 +447,13 @@ def run_opencode(
                     answer += str(part.get("text") or "")
 
             code = run_json(cmd + [prompt], "", cwd=cwd, timeout=timeout, on_event=receive,
-                            is_cancelled=is_cancelled, on_started=on_started, feed_stdin=False)
+                            is_cancelled=is_cancelled, on_started=on_started, feed_stdin=False, env=mcp_env)
             if error_message:
                 raise AgentBackendError("OpenCode: " + error_message)
             text = answer.strip()
             return text if code == 0 and text else None
         proc = subprocess.run(cmd + [prompt], capture_output=True, text=True,
-                              cwd=str(cwd), timeout=timeout)
+                              cwd=str(cwd), timeout=timeout, env=mcp_env)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if proc.returncode != 0:
@@ -541,6 +578,7 @@ def run_agent(
     on_event=None,
     is_cancelled=None,
     on_started=None,
+    delegation=None,
 ) -> tuple[str | None, str | None]:
     """Запустить агента первым доступным бэкендом.
 
@@ -559,14 +597,18 @@ def run_agent(
         if runner is None:
             continue
         extra: dict[str, object] = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
-        if name in STREAMING_BACKENDS:
+        if name in STREAMING_BACKENDS or (name == 'cursor' and delegation):
             if on_started is not None:
                 extra["on_started"] = on_started
             if on_event is not None:
                 extra["on_event"] = on_event
             if is_cancelled is not None:
                 extra["is_cancelled"] = is_cancelled
-        text = runner(prompt, cwd=cwd, timeout=timeout, allow_edits=allow_edits, **extra)
+        from koi.agent_chat.research_mcp import configuration
+        with configuration(name, delegation) as (mcp_args, mcp_env):
+            if delegation and name != 'openrouter':
+                extra.update(mcp_args=mcp_args, mcp_env={**os.environ, **mcp_env} if mcp_env else None)
+            text = runner(prompt, cwd=cwd, timeout=timeout, allow_edits=allow_edits, **extra)
         if text:
             return text, name
     return None, None

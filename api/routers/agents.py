@@ -119,10 +119,15 @@ def _conversation(cid):
 def get_conversation(cid: str):
     from koi.agent_chat import research
     from koi.agent_chat import acp_client
+    from koi.agent_chat import approvals
     row = _conversation(cid)
     items = conversations.messages(cid)
     active = next((i for i in items if i["status"] != "answered"), None)
-    return {"conversation": row, "items": items, "live": acp_client.snapshot(cid) or (live.snapshot(active) if active else None),
+    current_live = acp_client.snapshot(cid) or (live.snapshot(active) if active else None)
+    consent = approvals.snapshot(cid) if active else None
+    if consent:
+        current_live = {**(current_live or {}), **consent}
+    return {"conversation": row, "items": items, "live": current_live,
             "participants": research.participants(cid)}
 
 
@@ -266,7 +271,10 @@ def cancel_agent_chat_item(item_id: str):
 def decide_permission(cid: str, body: PermissionBody):
     _conversation(cid)
     from koi.agent_chat import acp_client
+    from koi.agent_chat import approvals
     try:
+        if approvals.decide(cid, body.permission_id, body.option_id):
+            return {"ok": True}
         acp_client.decide(cid, body.permission_id, body.option_id)
     except ValueError as exc:
         raise HTTPException(409, "Нет активного запроса разрешения") from exc

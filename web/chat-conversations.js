@@ -502,26 +502,40 @@ export class ChatConversations {
     if (controlsSignature === this.controlsSignature) return;
     this.controlsSignature = controlsSignature;
     const focusedOption = this.controls.contains(document.activeElement) ? document.activeElement.dataset.permissionOption : null;
+    this.controls.querySelector("dialog[open]")?.close();
     this.controls.replaceChildren();
     if (live) {
       if (live.permission) {
+        const dialog = document.createElement("dialog");
+        dialog.setAttribute("aria-label", live.permission.title);
+        dialog.style.cssText = "max-width:min(640px,90vw);max-height:80vh;overflow:auto;overscroll-behavior:contain;padding:24px;border-radius:12px";
+        this.controls.append(dialog);
         const title = document.createElement("p"); title.textContent = live.permission.title;
-        this.controls.append(title);
+        dialog.append(title);
         const call = live.permission.tool_call;
         if (call?.rawInput) {
           const details = document.createElement("details");
           const summary = document.createElement("summary"); summary.textContent = "Подробности действия";
           const pre = document.createElement("pre"); pre.textContent = JSON.stringify(call.rawInput, null, 2);
-          details.append(summary, pre); this.controls.append(details);
+          pre.style.whiteSpace = "pre-wrap";
+          details.append(summary, pre); dialog.append(details);
         }
         for (const option of live.permission.options) {
           const button = document.createElement("button");
           button.type = "button"; button.className = "btn btn-small";
           button.dataset.permissionOption = option.optionId;
           button.dataset.permission = live.permission.id;
-          button.textContent = option.name; this.controls.append(button);
+          button.textContent = option.name; dialog.append(button);
           if (focusedOption === option.optionId) button.focus({ preventScroll: true });
         }
+        dialog.showModal();
+        [...dialog.querySelectorAll("[data-permission-option]")]
+          .find(button => button.dataset.permissionOption === (focusedOption || "reject"))?.focus();
+        const reopen = document.createElement("button");
+        reopen.type = "button"; reopen.className = "btn btn-small";
+        reopen.textContent = "Открыть запрос согласования";
+        reopen.addEventListener("click", () => dialog.showModal());
+        this.controls.append(reopen);
       }
     }
     if (this.log) requestAnimationFrame(() => this.scheduleRead());

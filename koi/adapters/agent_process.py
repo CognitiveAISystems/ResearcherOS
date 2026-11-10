@@ -14,12 +14,12 @@ class AgentCancelled(Exception):
 
 
 def run_json(command, prompt, *, cwd, timeout, on_event, is_cancelled=None, on_started=None,
-             feed_stdin=True):
+             feed_stdin=True, env=None):
     if is_cancelled and is_cancelled():
         raise AgentCancelled
     process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-        encoding="utf-8", errors="replace", start_new_session=os.name != "nt")
+        encoding="utf-8", errors="replace", start_new_session=os.name != "nt", env=env)
     stdin, stdout = process.stdin, process.stdout
     assert stdin is not None and stdout is not None  # stdin/stdout=subprocess.PIPE
     finished = threading.Event()

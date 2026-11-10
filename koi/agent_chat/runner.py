@@ -357,19 +357,21 @@ def _run_local_agent(
     log_activity: bool = True,
     cli_agent: str | None = None,
     externally_sandboxed: bool = False,
+    delegation=None,
 ) -> tuple[str | None, str | None]:
     """Prefer the same Cursor CLI used by literature, without opening Terminal.app."""
     workdir = cwd or _artifact_task_cwd(item_id) or _ws.agent_cwd()
     stream = _stream_options(item_id) if log_activity else {}
+    extra = {'delegation': delegation} if delegation else {}
     if cli_agent and cli_agent.startswith("acp:"):
         from koi.agent_chat import acp_client, conversations
         item = find_item(item_id)
         return acp_client.run(conversations.item_conversation(item), item_id, prompt, workdir, cli_agent, timeout,
                               on_started=stream.get("on_started"), is_cancelled=stream.get("is_cancelled"),
-                              on_event=stream.get("on_event")), cli_agent
+                              on_event=stream.get("on_event"), **extra), cli_agent
     if cli_agent and cli_agent != "cursor":
         return run_agent(prompt, cwd=workdir, backend=cli_agent, timeout=timeout, allow_edits=force,
-                         **stream,
+                         **stream, **extra,
                          **({"externally_sandboxed": True} if externally_sandboxed else {}))
     if cli_agent == "cursor":
         fallback = False
@@ -398,7 +400,9 @@ def _run_local_agent(
             elif kind == "result":
                 result_text = str(event.get("result") or "").strip()
         try:
-            code = run_json(_cursor_print_command(agent_bin, mode=mode, force=force, model=model),
+            from koi.agent_chat.research_mcp import configuration
+            with configuration('cursor', delegation) as (mcp_args, _):
+                code = run_json(_cursor_print_command(agent_bin, mode=mode, force=force, model=model) + list(mcp_args),
                             prompt, cwd=workdir, timeout=timeout, on_event=receive,
                             is_cancelled=stream.get("is_cancelled"), on_started=stream.get("on_started"))
         except subprocess.TimeoutExpired:
@@ -413,7 +417,7 @@ def _run_local_agent(
         return None, None
     for backend in _local_agent_chain():
         text, name = run_agent(prompt, cwd=workdir, backend=backend, timeout=timeout, allow_edits=force,
-                         **stream,
+                         **stream, **extra,
                          **({"externally_sandboxed": True} if externally_sandboxed else {}))
         if text:
             return text, name
@@ -549,7 +553,11 @@ def _process_item(item_id: str) -> bool:
                        "отправляй короткие промежуточные сообщения для пользователя. "
                        "В конце дай итоговый ответ.")
         allow_edits = general_chat
+        from koi.agent_chat import research
+        run_id, parent_id = research.prepare_delegation(item, allow_edits=allow_edits)
+        prompt += research.delegation_prompt(run_id, parent_id)
         local_kwargs = {"mode": None, "force": True} if allow_edits else {}
+        local_kwargs['delegation'] = (run_id, parent_id)
         if chosen:
             local_kwargs["cli_agent"] = chosen
         from koi.agent_chat.research_runtime import broker
@@ -561,6 +569,7 @@ def _process_item(item_id: str) -> bool:
                     cwd=_artifact_task_cwd(item_id) or _ws.agent_cwd(),
                     allow_edits=allow_edits,
                     backend=chosen,
+                    delegation=(run_id, parent_id),
                     **_stream_options(item_id),
                 )
             )

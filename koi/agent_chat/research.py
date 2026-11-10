@@ -52,6 +52,10 @@ def _db():
                 id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
                 payload TEXT NOT NULL, status TEXT NOT NULL,
                 result TEXT NOT NULL DEFAULT '');
+            CREATE TABLE IF NOT EXISTS tool_requests (
+                id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+                payload TEXT NOT NULL, status TEXT NOT NULL,
+                result TEXT NOT NULL DEFAULT '');
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES participants(id),
                 at TEXT NOT NULL, message TEXT NOT NULL);
@@ -60,6 +64,11 @@ def _db():
             db.execute("ALTER TABLE runs ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
         if "group_owner" not in {row[1] for row in db.execute("PRAGMA table_info(handles)")} :
             db.execute("ALTER TABLE handles ADD COLUMN group_owner INTEGER NOT NULL DEFAULT 0")
+        columns = {row[1] for row in db.execute("PRAGMA table_info(participants)")}
+        if "parent_id" not in columns:
+            db.execute("ALTER TABLE participants ADD COLUMN parent_id TEXT REFERENCES participants(id)")
+        if "allow_edits" not in columns:
+            db.execute("ALTER TABLE participants ADD COLUMN allow_edits INTEGER NOT NULL DEFAULT 1")
         yield db
 
 
@@ -76,15 +85,20 @@ def create_run(conversation_id, item_id, project_id, goal):
     return run_id
 
 
-def register(run_id, role, task, backend, *, card_id=None, board_id=None):
+def register(run_id, role, task, backend, *, card_id=None, board_id=None, parent_id=None, allow_edits=True):
     if not all(isinstance(v, str) and v.strip() for v in (role, task, backend)):
         raise ValueError("Role, task and backend are required")
     if bool(card_id) != bool(board_id):
         raise ValueError("Card and board must be specified together")
     agent_id = "agent-" + uuid4().hex
     with _db() as db:
-        db.execute("INSERT INTO participants (id,run_id,role,task,backend,status,card_id,board_id,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                   (agent_id, run_id, role, task, backend, "pending", card_id, board_id, _now()))
+        if parent_id:
+            parent = db.execute("SELECT * FROM participants WHERE id=? AND run_id=?", (parent_id, run_id)).fetchone()
+            if parent is None or parent["status"] in TERMINAL:
+                raise ValueError("Parent must be an active participant in this run")
+            allow_edits = bool(allow_edits and parent["allow_edits"])
+        db.execute("INSERT INTO participants (id,run_id,role,task,backend,status,card_id,board_id,updated_at,parent_id,allow_edits) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                   (agent_id, run_id, role, task, backend, "pending", card_id, board_id, _now(), parent_id, int(allow_edits)))
     return agent_id
 
 
@@ -130,7 +144,7 @@ def continuation_run(item):
     from koi.agent_chat.conversations import item_conversation
     with _db() as db:
         row = db.execute('SELECT r.id,b.run_id AS budget_run FROM runs r LEFT JOIN budgets b ON b.run_id=r.id '
-                         'WHERE r.conversation_id=? AND r.project_id=? ORDER BY r.created_at DESC LIMIT 1',
+                         "WHERE r.conversation_id=? AND r.project_id=? AND json_extract(r.metadata, '$.delegation') IS NOT 1 ORDER BY r.created_at DESC LIMIT 1",
                          (item_conversation(item), item['project_id'])).fetchone()
     first = item.get('question', '').lower().strip().split(maxsplit=1)
     explicit = first and first[0].rstrip(',.!') in ('продолжи', 'продолжай', 'продолжить', 'resume')
@@ -319,6 +333,82 @@ def coordinator_for_item(item_id):
     with _db() as db:
         row = db.execute("SELECT p.id FROM participants p JOIN runs r ON r.id=p.run_id WHERE r.item_id=? AND p.role='Координатор' AND p.status IN ('pending','running','waiting') ORDER BY p.rowid DESC LIMIT 1", (item_id,)).fetchone()
     return row['id'] if row else None
+
+
+def prepare_delegation(item, *, allow_edits):
+    """Host-owned turn identity and permissions, shared by all CLI agents."""
+    import json
+    import time
+    from koi.agent_chat.conversations import item_conversation
+    with _db() as db:
+        row = db.execute('SELECT * FROM runs WHERE item_id=? ORDER BY created_at DESC LIMIT 1', (item['id'],)).fetchone()
+    if row is None:
+        run_id = create_run(item_conversation(item), item['id'], item.get('project_id') or '__workspace__', item['question'])
+        with _db() as db:
+            db.execute('UPDATE runs SET metadata=? WHERE id=?',
+                       (json.dumps({'delegation': True, 'max_parallel': 4}), run_id))
+            # ponytail: bounded per-turn delegation; Arbor keeps its agreed contract.
+            db.execute('INSERT INTO budgets VALUES (?,?,?,0,?)',
+                       (run_id, time.time() + 1800, 32, 'Finish the current chat request'))
+    else:
+        run_id = row['id']
+    if item.get('project_id'):
+        from koi.agent_chat.project_skills import context as skill_context
+        skills = skill_context(item['project_id'], method_id=item.get('method_id'),
+                               board_id=item.get('board_id'), card_id=item.get('card_id'),
+                               question=item['question'])
+        if skills.get('selected_project_skill'):
+            with _db() as db:
+                metadata = json.loads(db.execute('SELECT metadata FROM runs WHERE id=?', (run_id,)).fetchone()[0])
+                metadata['skill_execution_scope'] = skills['skill_execution_scope']
+                metadata['selected_project_skill'] = skills['selected_project_skill']
+                db.execute('UPDATE runs SET metadata=? WHERE id=?', (json.dumps(metadata, ensure_ascii=False), run_id))
+    agent_id = coordinator_for_item(item['id'])
+    if agent_id is None:
+        agent_id = register(run_id, 'Координатор', item['question'], item.get('cli_agent') or 'auto', allow_edits=allow_edits)
+        attach_handle(agent_id)
+        update(agent_id, 'running', 'Агент выполняет запрос')
+    with _db() as db:
+        db.execute('UPDATE participants SET allow_edits=? WHERE id=?', (int(allow_edits), agent_id))
+    return run_id, agent_id
+
+
+def delegation_prompt(run_id, agent_id):
+    import json
+    from pathlib import Path
+    from koi.adapters.agent_backends import cli_agents
+    return ('\n\nПодагенты ResearcherOS: для независимого критика или другой подзадачи '
+            'используй MCP-инструмент researcheros.spawn_agents, если он доступен. '
+            'Иначе вызови tool_commands.dispatch из engine_root с JSON на stdin. '
+            'Это общий сервис ResearcherOS; не полагайся на встроенный сервис подагентов провайдера. '
+            'Вложенные вызовы разрешены. Указывай parent_id из контекста. '
+            'Для критика указывай readonly=true; не выдавай самопроверку за независимое ревью. '
+            'Все участники, их статусы, журнал и результат видны в исходном чате. '
+            'Если нужно явное согласие пользователя, в том числе после третьего FAIL '
+            'koi-prose-style, вызови researcheros.request_approval с вопросом в title '
+            'и конкретными правками и замечаниями в details. Вызов ждёт ответа пользователя. '
+            'Один текстовый вопрос не создаёт запрос согласования. '
+            'Продолжай согласуемое действие только при approved=true; отказ, отмена '
+            'и ошибка инструмента не являются согласием. '
+            'Результат status=failed/cancelled означает, что задача не выполнена. '
+            'Не запускай параллельных писателей в одном каталоге.\n'
+            + json.dumps({'engine_root': str(Path(__file__).resolve().parents[2]),
+                          'run_id': run_id, 'parent_id': agent_id, 'tool_commands': tool_commands(),
+                          'available_cli_agents': cli_agents(),
+                          'dispatch_example': {'run_id': run_id, 'parent_id': agent_id,
+                              'tasks': [{'backend': 'codex', 'cwd': '<absolute project directory>',
+                                         'role': 'Критик', 'task': '<independent review task>', 'readonly': True}],
+                              'timeout': 300}}, ensure_ascii=False))
+
+
+def participant_cancelled(run_id, parent_id=None):
+    if cancelled(run_id):
+        return True
+    if parent_id:
+        with _db() as db:
+            parent = db.execute('SELECT status FROM participants WHERE id=? AND run_id=?', (parent_id, run_id)).fetchone()
+        return parent is None or parent['status'] in TERMINAL
+    return False
 
 
 

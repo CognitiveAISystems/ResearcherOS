@@ -9,6 +9,7 @@ from koi.adapters import agent_chat_activity
 
 @pytest.fixture
 def state(tmp_path, monkeypatch):
+    monkeypatch.delenv('CODEX_SANDBOX', raising=False)
     monkeypatch.setattr(research, 'PATH', tmp_path / 'runs.sqlite3')
     monkeypatch.setattr(agent_chat_activity, 'ACTIVITY_DIR', tmp_path / 'activity')
     run = research.create_run('chat-a', 'aq-123', 'demo', 'Develop method')
