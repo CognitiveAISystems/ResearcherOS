@@ -18678,3 +18678,49 @@ button.kb-doc {
 .glossary-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .report-agent-menu { display: grid; gap: 0.25rem; min-width: 0; max-width: calc(100vw - 16px); }
 .report-agent-menu .btn { text-align: left; min-height: 44px; white-space: normal; }
+
+/* Block picker stays in the report scroller, including on narrow screens. */
+.report-block:has(.report-block-input) { position: relative; padding-inline-start: 36px; }
+.report-block-plus { position: absolute; inset-inline-start: 0; top: 0; width: 32px; min-height: 32px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: inherit; font-size: 1.3rem; cursor: pointer; }
+.report-block-plus:hover { color: var(--text); background: var(--surface-card-hover); }
+.report-block-plus:focus-visible,
+.report-block-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.report-block-menu { width: min(100%, 360px); max-height: 320px; overflow-y: auto; margin-block: 8px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-modal); color: var(--text); box-shadow: 0 8px 24px var(--shadow-heavy); }
+.report-block-menu-title { padding: 8px; color: var(--muted); font-size: 0.75rem; }
+.report-block-menu-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.report-block-menu-item > span:first-child { flex: 0 0 28px; text-align: center; }
+.report-block-menu-item:hover,
+.report-block-menu-item[aria-selected="true"] { background: var(--surface-card-hover); outline: 1px solid var(--border); outline-offset: -1px; }
+
+.report-block:has(.report-block-input):hover,
+.report-block.report-tasks:hover,
+.report-block.report-table-block:hover { background: transparent; }
+.report-block-input:focus-visible { outline: none; }
+.report-block:has(.report-block-input):focus-within { box-shadow: inset 2px 0 var(--border); }
+.report-block-menu { position: fixed; z-index: 1200; margin: 0; }
+.report-task-row { display: flex; align-items: flex-start; gap: 10px; padding-block: 3px; }
+.report-task-row > input { margin: 7px 0 0; width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+.report-task-text,
+.report-table-block textarea { display: block; width: 100%; min-width: 0; min-height: 32px; resize: none; border: 0; border-radius: 3px; padding: 2px 4px; background: transparent; color: var(--text); font: inherit; line-height: 1.6; }
+.report-task-text { overflow: hidden; }
+.report-task-row:has(input:checked) .report-task-text { text-decoration: line-through; color: var(--muted); }
+.report-task-text:focus-visible { outline: 1px solid var(--border); outline-offset: -1px; }
+.report-table-scroll { overflow-x: auto; padding-block: 4px 32px; }
+.report-table-grid { display: flex; align-items: stretch; gap: 8px; width: 100%; min-width: max-content; }
+.modal-panel--report .report-table-grid table { flex: 1; width: auto; table-layout: fixed; margin: 0; border-collapse: collapse; border: 1px solid var(--border); border-radius: 0; overflow: visible; }
+.modal-panel--report .report-table-grid :is(th, td) { min-width: 140px; border: 1px solid var(--border); padding: 0; vertical-align: top; background: transparent; }
+.modal-panel--report .report-table-grid th { background: var(--surface-card-hover); }
+.modal-panel--report .report-table-grid textarea { min-height: 42px; padding: 8px 10px; border: 0; border-radius: 0; box-shadow: none; background: transparent; outline: none; }
+.modal-panel--report .report-table-grid :is(th, td):focus-within { box-shadow: inset 0 0 0 1px var(--muted); }
+.report-table-add-column { position: relative; flex: 0 0 26px; align-self: stretch; min-height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); background: var(--surface-card-hover); font: inherit; font-size: 1.1rem; cursor: pointer; }
+.report-table-add-column:hover { color: var(--text); background: var(--surface-muted-btn-hover); }
+.report-table-add-column:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.report-table-hint { position: absolute; top: calc(100% + 6px); right: 0; z-index: 2; padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-modal); color: var(--text); font-size: 0.75rem; white-space: nowrap; visibility: hidden; pointer-events: none; }
+.report-table-add-column:is(:hover, :focus-visible) .report-table-hint { visibility: visible; }
+.report-table-next { margin-top: -16px; }
+.report-formula:hover { background: transparent; }
+.report-formula-preview { overflow-x: auto; min-height: 48px; }
+.report-formula summary { width: fit-content; padding: 6px 0; color: var(--muted); cursor: pointer; font-size: 0.85rem; }
+.report-formula label { display: grid; gap: 6px; margin-block: 8px; color: var(--muted); font-size: 0.85rem; }
+.report-formula-input { width: 100%; min-height: 80px; resize: vertical; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-input); color: var(--text); font: inherit; }
+.report-formula-input:focus-visible { outline: 2px solid var(--border); outline-offset: 2px; }

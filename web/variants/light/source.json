@@ -15,7 +15,7 @@
   "index_bootstrap": "Original files and source_commit record provenance. current_files verifies the maintained Light assets, including shared feature updates; backend, transport and onboarding remain shared.",
   "current_files": {
     "index.html": "84cda1b0245469f5a6066f9be389246b1bb021079d1165c326022884466f0421",
-    "app.js": "8fae608aca8268c55e70752d1360a6e9252fa019659bf021d8cce63dfe2798b5",
+    "app.js": "0e6631074b796e89d1affc413c10dcafa5d3f06c1351052d8b2b283a18c43707",
     "styles.css": "992f27e757de442b935c5b4ba945d63697ce8784bf3567ab5281073502c3d7c1",
     "node-tree-help.js": "c7518d724da70446e5f85223c893b5517c5b2cc7a8db5c5287722d4aac4acc78",
     "report-chat-resize.js": "ba765b25fde342b06c0b1cc58144cda88701f4558d4edf206cd8768e6ed129bd",
