@@ -3030,11 +3030,11 @@ async function refreshReportInterview() {
 async function refreshOpenReportFromServer(identity) {
   if (reportSyncBusy || identity !== reportIdentity() || reportLinkedReadOnly) return;
   const editor = document.getElementById("card-report-editor");
-  if (!editor || state.reportDirty || reportSaving || document.querySelector("#card-report-preview .report-block-input")) return;
+  if (!editor || state.reportDirty || reportSaving || document.querySelector("#card-report-preview .report-block-input, #card-report-preview .report-block:focus-within")) return;
   reportSyncBusy = true;
   try {
     const data = await KoiApi.getCardReport(reportWriteProjectId(), state.reportBoardId, state.reportCardId);
-    if (identity !== reportIdentity() || state.reportDirty || reportSaving || document.querySelector("#card-report-preview .report-block-input")) return;
+    if (identity !== reportIdentity() || state.reportDirty || reportSaving || document.querySelector("#card-report-preview .report-block-input, #card-report-preview .report-block:focus-within")) return;
     const content = typeof data?.content === "string" ? data.content : "";
     if (content && content !== editor.value && editor.value === reportLastSyncedContent) {
       editor.value = content;
