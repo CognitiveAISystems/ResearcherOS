@@ -18,11 +18,16 @@ def main() -> int:
     parser.add_argument("--paper-edit-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--research-tools", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--research-runtime", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--research-mcp", nargs=3, help=argparse.SUPPRESS)
     parser.add_argument("--project-skills", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.project_skills is not None:
         from koi.agent_chat.project_skills import main as skills_main
         skills_main(args.project_skills)
+        return 0
+    if args.research_mcp:
+        from koi.agent_chat.research_mcp import main as mcp_main
+        mcp_main(args.research_mcp)
         return 0
     if args.research_tools:
         from koi.agent_chat.research_tools import main as tools_main

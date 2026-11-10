@@ -7,10 +7,13 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import os
 import re
 import sys
+import time
 from dataclasses import fields
 from pathlib import Path
+from uuid import uuid4
 
 from koi.adapters import repository, card_reports
 from koi.core.models import NodeType, EdgeType
@@ -29,7 +32,12 @@ def perform(run_id, operation, args):
         if run is None:
             raise KeyError(run_id)
         metadata = json.loads(run["metadata"])
+        skill_scope = metadata.get("skill_execution_scope")
+        if skill_scope and skill_scope["level"] != "tree" and operation in ("scope", "meta"):
+            raise ValueError("A skill cannot expand its execution level or edit tree settings")
         scope = metadata.get("research_scope")
+        if not scope and skill_scope and skill_scope["level"] == "method":
+            scope = skill_scope
         if operation == "scope":
             if scope and scope.get("level"):
                 raise ValueError("The agreed research scope cannot be changed; start a new research request")
@@ -80,6 +88,11 @@ def perform(run_id, operation, args):
             budget = db.execute("SELECT * FROM budgets WHERE run_id=?", (run_id,)).fetchone()
             return {**project.model_dump(mode="json"), "arbor_metadata": json.loads(run["metadata"]),
                     "research_budget": dict(budget) if budget else None}
+        if skill_scope and skill_scope["level"] == "card" and operation != "read_report":
+            if operation not in ("write_report", "complete_subtask", "publish_image", "update_card", "conclusion"):
+                raise ValueError("Card-level skill may only change the current card task")
+            if args.get("card_id") != skill_scope["card_id"] or args.get("board_id") != skill_scope["board_id"]:
+                raise ValueError("Card-level skill cannot change another card")
         if scope and scope.get("level") == "method":
             method_id = scope["method_id"]
             board_ids = {b.id for b in project.boards if b.owner_node_id == method_id}
@@ -246,11 +259,41 @@ def perform(run_id, operation, args):
         return result.model_dump(mode="json")
 
 
+def request(run_id, operation, args, *, timeout=60):
+    """Let the live host perform validated operations outside the CLI sandbox."""
+    with research._db() as db:
+        host = db.execute('SELECT * FROM brokers WHERE run_id=?', (run_id,)).fetchone()
+    if host is None or research._process_start(host['pid']) != host['started']:
+        if os.environ.get('CODEX_SANDBOX'):
+            raise RuntimeError('ResearcherOS host is unavailable; restart the research from the app')
+        return perform(run_id, operation, args)
+    if host['pid'] == os.getpid():
+        return perform(run_id, operation, args)
+    request_id = 'tool-' + uuid4().hex
+    with research._db() as db:
+        db.execute('INSERT INTO tool_requests VALUES (?,?,?,?,?)',
+                   (request_id, run_id, json.dumps({'operation': operation, 'args': args}), 'pending', ''))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if research.cancelled(run_id):
+            raise RuntimeError('Research was cancelled')
+        with research._db() as db:
+            row = db.execute('SELECT * FROM tool_requests WHERE id=?', (request_id,)).fetchone()
+        if row['status'] == 'completed':
+            return json.loads(row['result'])
+        if row['status'] == 'failed':
+            raise RuntimeError(row['result'])
+        time.sleep(.1)
+    with research._db() as db:
+        db.execute("UPDATE tool_requests SET status='failed',result='Request timed out' WHERE id=? AND status='pending'", (request_id,))
+    raise TimeoutError('ResearcherOS host did not finish the operation; inspect state before retrying')
+
+
 def main():
-    request = json.load(sys.stdin)
+    payload = json.load(sys.stdin)
     try:
-        result = perform(request["run_id"], request["operation"], request.get("args", {}))
-    except (ValueError, KeyError, TypeError) as exc:
+        result = request(payload["run_id"], payload["operation"], payload.get("args", {}))
+    except (ValueError, KeyError, TypeError, RuntimeError, OSError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         raise SystemExit(1) from exc
     print(json.dumps(result, ensure_ascii=False))

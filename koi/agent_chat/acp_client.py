@@ -140,7 +140,7 @@ class UIClient(Client):
 
 
 async def _run(cid, item_id, prompt, cwd, backend, timeout, *, transient=False, on_event=None,
-               is_cancelled=None, on_started=None):
+               is_cancelled=None, on_started=None, delegation=None):
     command = next((r["command"] for r in agents() if r["id"] == backend and r["available"]), None)
     if not command:
         raise ValueError("ACP-агент не установлен или не настроен")
@@ -176,11 +176,17 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout, *, transient=False, 
             if init.protocol_version != 1:
                 raise ValueError("Агент не поддерживает ACP v1")
             row = None if transient else conversations.find(cid)
+            mcp_servers = []
+            if delegation:
+                from acp.schema import McpServerStdio
+                from koi.agent_chat.research_mcp import command
+                cmd = command(delegation)
+                mcp_servers = [McpServerStdio(name='researcheros', command=cmd[0], args=cmd[1:], env=[])]
             sid = row.get("acp_session_id") if row and row.get("acp_backend") == backend else None
             if sid and init.agent_capabilities.load_session:
                 client.replaying = True
                 try:
-                    await conn.load_session(cwd=str(cwd), session_id=sid, mcp_servers=[])
+                    await conn.load_session(cwd=str(cwd), session_id=sid, mcp_servers=mcp_servers)
                 except RequestError:
                     sid = None
                     record(item_id, "Сессия агента недоступна; восстановлю контекст из истории чата.")
@@ -189,7 +195,7 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout, *, transient=False, 
             else:
                 sid = None
             if not sid:
-                session = await conn.new_session(cwd=str(cwd), mcp_servers=[])
+                session = await conn.new_session(cwd=str(cwd), mcp_servers=mcp_servers)
                 sid = session.session_id
             state["session_id"] = sid
             if not transient:
@@ -225,11 +231,12 @@ async def _run(cid, item_id, prompt, cwd, backend, timeout, *, transient=False, 
                     await proc.wait()
 
 
-def run(cid, item_id, prompt, cwd, backend, timeout=1800, *, on_started=None, is_cancelled=None, on_event=None):
+def run(cid, item_id, prompt, cwd, backend, timeout=1800, *, on_started=None, is_cancelled=None, on_event=None, delegation=None):
     if not AVAILABLE:
         return None
     return asyncio.run(_run(cid, item_id, prompt, cwd, backend, timeout,
-                            on_started=on_started, is_cancelled=is_cancelled, on_event=on_event))
+                            on_started=on_started, is_cancelled=is_cancelled, on_event=on_event,
+                            **({'delegation': delegation} if delegation else {})))
 
 
 def run_executor(agent_id, item_id, prompt, cwd, backend, on_event, timeout=1800,

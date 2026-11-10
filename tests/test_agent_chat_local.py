@@ -10,6 +10,14 @@ from fastapi import BackgroundTasks, HTTPException
 from koi.agent_chat import runner
 
 
+@pytest.fixture(autouse=True)
+def isolated_delegation(tmp_path, monkeypatch):
+    from koi.agent_chat import research
+    from koi.adapters import agent_chat_activity
+    monkeypatch.setattr(research, 'PATH', tmp_path / 'runs.sqlite3')
+    monkeypatch.setattr(agent_chat_activity, 'ACTIVITY_DIR', tmp_path / 'activity')
+
+
 def test_local_agent_uses_cursor_print_mode(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(runner, "find_agent_bin", lambda: Path("/usr/bin/agent"))
     monkeypatch.setattr(runner, "_ws", SimpleNamespace(agent_cwd=lambda: tmp_path))
@@ -71,7 +79,7 @@ def test_local_process_records_progress_and_answer(monkeypatch) -> None:
     monkeypatch.setattr(runner, "mark_processing", lambda _id: events.append("processing"))
     monkeypatch.setattr(runner, "record", lambda _id, message: events.append(message))
     monkeypatch.setattr(runner, "_sdk_prompt", lambda _id: "prompt")
-    monkeypatch.setattr(runner, "_run_local_agent", lambda _prompt, _id, **kwargs: ("Ответ", "Cursor CLI") if kwargs == {"mode": None, "force": True} else None)
+    monkeypatch.setattr(runner, "_run_local_agent", lambda _prompt, _id, **kwargs: ("Ответ", "Cursor CLI") if kwargs.get('force') is True and kwargs.get('delegation') else None)
     monkeypatch.setattr(runner, "submit_answer", lambda _id, answer, **_kw: answers.append(answer))
 
     assert runner.process_item(item["id"])
@@ -192,7 +200,13 @@ def test_chat_edit_permissions_do_not_depend_on_project_binding(monkeypatch, pro
     monkeypatch.setattr(runner, '_run_local_agent', lambda _prompt, _id, **kw: calls.append(kw) or ('Ответ', 'Cursor CLI'))
     monkeypatch.setattr(runner, 'submit_answer', lambda *_args: None)
     assert runner.process_item(item['id'])
+    assert len(calls) == 1
+    run_id, parent_id = calls[0].pop('delegation')
     assert calls == ([{'mode': None, 'force': True}] if allow_edits else [{}])
+    from koi.agent_chat import research
+    with research._db() as db:
+        parent = db.execute('SELECT * FROM participants WHERE id=? AND run_id=?', (parent_id, run_id)).fetchone()
+    assert bool(parent['allow_edits']) is allow_edits
     prompt = runner._sdk_prompt(item['id'])
     if purpose == 'question':
         assert 'Не меняй файлы' in prompt

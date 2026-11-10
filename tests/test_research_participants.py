@@ -111,4 +111,5 @@ def test_budget_reply_resumes_run_with_host_launcher(tmp_path, monkeypatch):
     research_tools.perform(run, 'contract', {'max_seconds':2700,'max_parallel':3,
         'max_executors':1000,'stop_condition':'Goal or deadline'})
     assert research.continuation_run({**reply,'question':'Какой статус?'}) is None
+    research.prepare_delegation({**reply, 'id': 'aq-status', 'question': 'Какой статус?'}, allow_edits=False)
     assert research.continuation_run({**reply,'question':'Продолжи исследование'}) == run

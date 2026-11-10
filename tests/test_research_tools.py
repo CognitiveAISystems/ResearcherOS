@@ -26,6 +26,73 @@ def test_root_guard_and_existing_commands(context):
     assert project.nodes[0].title == 'Original'
 
 
+@pytest.mark.parametrize('during_dispatch', [False, True])
+def test_sandboxed_tool_request_is_saved_by_host(context, tmp_path, monkeypatch, during_dispatch):
+    import json
+    import os
+    import subprocess
+    import sys
+    from koi.agent_chat import research_runtime
+
+    run, project = context
+    marker = tmp_path / 'project.md'
+    monkeypatch.setattr(research_tools.repository, 'save_project',
+                        lambda *args: marker.write_text('saved by host'))
+    client = '''
+import json,os,sys
+from pathlib import Path
+from koi.agent_chat import research,research_tools
+research.PATH=Path(sys.argv[1])
+os.environ['CODEX_SANDBOX']='seatbelt'
+if os.environ.get('RESEARCHOS_TEST_SEATBELT'):
+    try:
+        Path(sys.argv[5]).write_text('Forbidden direct write')
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError('Sandbox did not deny direct file write')
+def forbidden(*args):
+    raise PermissionError('Child may not write project.md directly')
+research_tools.perform=forbidden
+result=research_tools.request(sys.argv[2],sys.argv[3],json.loads(sys.argv[4]),timeout=5)
+print(json.dumps(result))
+'''
+    def invoke(operation='update_node', args=None):
+        command = [sys.executable, '-c', client, str(research.PATH), run,
+                   operation, json.dumps(args or {'node_id':'method','title':'Updated'}), str(marker)]
+        if os.environ.get('RESEARCHOS_TEST_SEATBELT'):
+            profile = '(version 1)(allow default)(deny file-write* (literal ' + json.dumps(str(marker)) + '))'
+            command = ['sandbox-exec', '-p', profile, *command]
+        proc = subprocess.run(command,
+                              capture_output=True, text=True, timeout=8)
+        return proc
+    with research_runtime.broker('aq-123'):
+        if during_dispatch:
+            monkeypatch.setattr(research_runtime, '_dispatch_local',
+                                lambda *a, **kw: {'code': invoke().returncode})
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor() as pool:
+                result = pool.submit(research_runtime.dispatch, run,
+                    [{'backend': 'codex', 'cwd': str(tmp_path), 'task': 'Check host tools'}], timeout=5).result(timeout=8)
+            assert result['code'] == 0
+        else:
+            proc = invoke()
+            assert proc.returncode == 0, proc.stderr
+        assert marker.read_text() == 'saved by host'
+        assert project.nodes[1].title == 'Updated'
+        refused = invoke('update_node', {'node_id':'root','title':'Forbidden'})
+        assert refused.returncode != 0 and 'protected' in refused.stderr
+        assert project.nodes[0].title == 'Original'
+
+
+def test_sandboxed_tool_without_host_fails_before_writing(context, monkeypatch):
+    run, _ = context
+    monkeypatch.setenv('CODEX_SANDBOX', 'seatbelt')
+    monkeypatch.setattr(research_tools, 'perform', lambda *a: pytest.fail('Direct write attempted'))
+    with pytest.raises(RuntimeError, match='host is unavailable'):
+        research_tools.request(run, 'view', {})
+
+
 def test_unknown_run_and_operations_fail(context):
     run, project = context
     with pytest.raises(KeyError):
