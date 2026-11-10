@@ -78,6 +78,7 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - name: Set package version from release tag
+        shell: bash
         if: needs.release-metadata.outputs.version != ''
         working-directory: desktop
         env:
