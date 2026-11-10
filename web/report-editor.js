@@ -269,29 +269,156 @@ export class ReportEditor {
       const line = row => `| ${row.map(encode).join(" | ")} |`;
       save([line(rows[0]), line(rows[0].map((_, i) => align[i] === "center" ? ":---:" : align[i] === "right" ? "---:" : align[i] === "left" ? ":---" : "---")), ...rows.slice(1).map(line)].join("\n"));
     };
+    this.closeTableMenu?.();
+    let selected = null;
+    const focusCell = (r, c) => el.querySelector(`tbody [data-row="${r}"][data-column="${c}"] textarea`)?.focus();
+    const select = (axis, at) => {
+      selected = { axis, at };
+      el.querySelectorAll("[data-row], [data-column]").forEach(cell => {
+        const active = axis === "table" || (axis === "row" ? cell.dataset.row === String(at) : cell.dataset.column === String(at));
+        cell.classList.toggle("report-table-target", active);
+        if (cell.matches("button")) cell.setAttribute("aria-pressed", String(active));
+      });
+    };
+    const repaint = (r = 1, c = 0) => { persist(); this.visualBlock(el, index); focusCell(Math.min(r, rows.length - 1), Math.min(c, rows[0].length - 1)); };
+    const move = (axis, from, to) => {
+      if (from === to || to < 0 || (axis === "row" && (from === 0 || to === 0))) return;
+      if (axis === "column") {
+        if (from === 0 || to === 0 || to >= rows[0].length) return;
+        rows.forEach(row => row.splice(to, 0, row.splice(from, 1)[0]));
+        align.splice(to, 0, align.splice(from, 1)[0]);
+      } else {
+        if (to >= rows.length) return;
+        rows.splice(to, 0, rows.splice(from, 1)[0]);
+      }
+      repaint(axis === "row" ? to : 1, axis === "column" ? to : 0);
+    };
+    const showMenu = (axis, at, trigger, point = null) => {
+      this.closeTableMenu?.(); select(axis, at);
+      const menu = document.createElement("div"); menu.className = "report-table-context";
+      menu.tabIndex = -1; menu.setAttribute("popover", "manual");
+      menu.setAttribute("role", "group"); menu.setAttribute("aria-label", "Действия с выделением таблицы");
+      const close = () => { menu.remove(); document.removeEventListener("pointerdown", outside); this.closeTableMenu = null; };
+      const outside = e => { if (!menu.contains(e.target) && !trigger.contains(e.target)) close(); };
+      this.closeTableMenu = close;
+      const action = (label, run, disabled = false, danger = false) => {
+        const button = document.createElement("button"); button.type = "button"; button.className = `btn btn-small${danger ? " btn-danger" : ""}`;
+        button.textContent = label; button.disabled = disabled;
+        button.onclick = () => { close(); run(); }; menu.append(button);
+      };
+      if (axis !== "table") {
+        const column = axis === "column";
+        if (!column) action("Вставить строку снизу", () => { rows.splice(at + 1, 0, rows[0].map(() => "")); repaint(at + 1, 0); });
+        action(column ? "Переместить влево" : "Переместить вверх", () => move(axis, at, at - 1), at <= 1);
+        action(column ? "Переместить вправо" : "Переместить вниз", () => move(axis, at, at + 1), at >= (column ? rows[0].length : rows.length) - 1 || at === 0);
+      }
+      const requestDelete = (whole = false) => {
+        const panel = document.createElement("div"); panel.className = "report-table-confirm";
+        panel.setAttribute("role", "group"); panel.setAttribute("aria-label", "Подтверждение удаления");
+        const text = document.createElement("p");
+        whole ||= axis === "column" && rows[0].length === 1;
+        text.textContent = whole ? "Удалить таблицу целиком вместе с содержимым?" : `Удалить ${axis === "column" ? "колонку" : "строку"} ${at + (axis === "column" ? 1 : 0)} вместе с содержимым?`;
+        const cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "btn btn-small"; cancel.textContent = "Отмена";
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "btn btn-small btn-danger"; remove.textContent = "Удалить";
+        const unblock = () => { el.querySelector(".report-table-scroll").inert = false; panel.remove(); };
+        cancel.onclick = () => { unblock(); trigger.focus(); };
+        remove.onclick = () => {
+          unblock();
+          if (whole) { block.raw = ""; block.type = "paragraph"; this.changed(); this.paint(index); }
+          else if (axis === "column") { rows.forEach(row => row.splice(at, 1)); align.splice(at, 1); repaint(1, at); }
+          else { rows.splice(at, 1); repaint(at, 0); }
+        };
+        panel.append(text, cancel, remove); el.prepend(panel);
+        el.querySelector(".report-table-scroll").inert = true; cancel.focus();
+        panel.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel.click(); } };
+      };
+      action(axis === "column" ? "Удалить колонку" : "Удалить строку", () => requestDelete(), at === 0, true);
+      action("Удалить таблицу", () => requestDelete(true), false, true);
+      (this.host.closest(".modal-panel") || el).append(menu);
+      menu.showPopover();
+      const rect = trigger.getBoundingClientRect();
+      const x = point?.x ?? rect.left, y = point?.y ?? rect.bottom;
+      menu.style.left = `${Math.max(8, Math.min(x + 4, window.innerWidth - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(y + 4, window.innerHeight - menu.offsetHeight - 8))}px`;
+      document.addEventListener("pointerdown", outside);
+      menu.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); trigger.focus(); } };
+      (menu.querySelector("button:not(:disabled)") || menu).focus();
+    };
     const table = document.createElement("table");
+    // ponytail: character counts estimate readable widths; measure fonts if exact fitting is needed.
+    const widths = rows[0].map((_, c) => Math.min(320, Math.max(96, ...rows.map(row => row[c].length * 7 + 24))));
+    const columns = document.createElement("colgroup");
+    widths.forEach(width => { const col = document.createElement("col"); col.style.width = `${width}px`; columns.append(col); });
+    table.append(columns);
+    const body = document.createElement("tbody");
     rows.forEach((row, r) => {
       const tr = document.createElement("tr");
       row.forEach((value, c) => {
-        const cell = document.createElement(r === 0 ? "th" : "td");
+        const cell = document.createElement(r === 0 || c === 0 ? "th" : "td");
+        const axis = r === 0 ? "column" : c === 0 ? "row" : null;
+        const at = axis === "column" ? c : r;
+        cell.ondblclick = e => { if (axis) { e.preventDefault(); select(axis, at); } };
+        cell.dataset.row = r; cell.dataset.column = c;
+        cell.oncontextmenu = e => {
+          const choice = axis ? {axis, at} : selected || { axis: "row", at: r };
+          if (!choice) return;
+          e.preventDefault(); e.stopPropagation(); showMenu(choice.axis, choice.at, cell, { x: e.clientX, y: e.clientY });
+        };
         const field = document.createElement("textarea");
         field.rows = 1; field.value = value.replace(/\\\|/g, "|");
         field.setAttribute("aria-label", `${r === 0 ? "Заголовок" : `Строка ${r}`}, столбец ${c + 1}`);
-        field.oninput = () => { rows[r][c] = field.value; persist(); field.style.height = "auto"; field.style.height = `${field.scrollHeight}px`; };
+        field.oninput = () => { rows[r][c] = field.value; persist(); };
         field.onkeydown = e => {
           if (e.isComposing) return;
+          if (axis && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) { e.preventDefault(); e.stopPropagation(); showMenu(axis, at, field); return; }
+          if (axis && axis !== "table" && e.altKey && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) { e.preventDefault(); move(axis, at, at + (["ArrowLeft", "ArrowUp"].includes(e.key) ? -1 : 1)); return; }
           if (e.key === "Tab" && !e.shiftKey && r === rows.length - 1 && c === row.length - 1) {
-            e.preventDefault(); rows.push(row.map(() => "")); persist(); this.visualBlock(el, index);
-            el.querySelectorAll("tr")[r + 1].querySelector("textarea").focus();
-          } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); field.blur(); el.focus(); }
+            e.preventDefault(); rows.push(row.map(() => "")); repaint(r + 1, 0);
+          } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); this.closeTableMenu?.(); selected = null; el.querySelectorAll(".report-table-target").forEach(x => x.classList.remove("report-table-target")); field.blur(); el.focus(); }
         };
         cell.append(field); tr.append(cell);
       });
-      table.append(tr);
+      body.append(tr);
     });
+    table.append(body);
+    // Holding a cell starts axis-constrained dragging; ordinary text selection stays native.
+    table.onpointerdown = e => {
+      if (e.button !== 0) return;
+      const target = e.target.closest("[data-row], [data-column]");
+      if (!target) return;
+      const isHandle = target.matches("th");
+      const fromRow = Number(target.dataset.row), fromColumn = Number(target.dataset.column);
+      const startX = e.clientX, startY = e.clientY;
+      let armed = isHandle, dragging = false, axis = isHandle ? (fromRow === 0 ? "column" : "row") : null;
+      let destination = null;
+      const timer = setTimeout(() => { armed = true; }, 350);
+      const cleanup = () => {
+        clearTimeout(timer); window.removeEventListener("pointermove", track); window.removeEventListener("pointerup", end); window.removeEventListener("pointercancel", cancel);
+        table.classList.remove("report-table-dragging"); el.querySelectorAll(".report-table-drop").forEach(x => x.classList.remove("report-table-drop"));
+      };
+      const track = event => {
+        const dx = event.clientX - startX, dy = event.clientY - startY;
+        if (Math.hypot(dx, dy) < 6) return;
+        if (!armed) { cleanup(); return; }
+        axis ||= Math.abs(dx) > Math.abs(dy) ? "column" : "row";
+        if (axis === "row" && fromRow === 0) { cleanup(); return; }
+        dragging = true; event.preventDefault(); window.getSelection()?.removeAllRanges();
+        table.classList.add("report-table-dragging");
+        const over = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-row], [data-column]");
+        destination = over && table.contains(over) && over.dataset[axis] !== undefined ? Number(over.dataset[axis]) : null;
+        el.querySelectorAll(".report-table-drop").forEach(x => x.classList.remove("report-table-drop"));
+        if (destination !== null && !(axis === "row" && destination === 0)) {
+          select(axis, axis === "row" ? fromRow : fromColumn);
+          el.querySelectorAll(`[data-${axis}="${destination}"]`).forEach(x => x.classList.add("report-table-drop"));
+        }
+      };
+      const end = () => { cleanup(); if (dragging && destination !== null) move(axis, axis === "row" ? fromRow : fromColumn, destination); };
+      const cancel = () => cleanup();
+      window.addEventListener("pointermove", track, { passive: false }); window.addEventListener("pointerup", end, { once: true }); window.addEventListener("pointercancel", cancel, { once: true });
+    };
     const scroll = document.createElement("div"); scroll.className = "report-table-scroll";
     const grid = document.createElement("div"); grid.className = "report-table-grid";
-    table.style.minWidth = `${rows[0].length * 140}px`;
+    table.style.minWidth = `${widths.reduce((sum, width) => sum + width, 0)}px`;
     const addColumn = document.createElement("button");
     addColumn.type = "button"; addColumn.className = "report-table-add-column";
     addColumn.textContent = "+";
@@ -301,9 +428,18 @@ export class ReportEditor {
     hint.setAttribute("aria-hidden", "true"); addColumn.append(hint);
     addColumn.onclick = () => {
       rows.forEach(row => row.push("")); persist(); this.visualBlock(el, index);
-      el.querySelectorAll("tr")[0].querySelectorAll("textarea")[rows[0].length - 1].focus();
+      el.querySelectorAll("tbody > tr")[0].querySelectorAll("textarea")[rows[0].length - 1].focus();
     };
-    grid.append(table, addColumn); scroll.append(grid); el.append(scroll);
+    const addRow = document.createElement("button");
+    addRow.type = "button"; addRow.className = "report-table-add-column report-table-add-row";
+    addRow.setAttribute("aria-label", "Добавить строку"); addRow.textContent = "+";
+    const rowHint = hint.cloneNode(true); rowHint.textContent = "Добавить строку";
+    addRow.append(rowHint);
+    addRow.onclick = () => {
+      rows.push(rows[0].map(() => "")); persist(); this.visualBlock(el, index);
+      el.querySelectorAll("tbody > tr")[rows.length - 1].querySelector("textarea").focus();
+    };
+    grid.append(table, addColumn, addRow); scroll.append(grid); el.append(scroll);
     const next = document.createElement("button");
     next.type = "button"; next.className = "report-block-placeholder report-table-next";
     next.textContent = "Напишите или введите / для выбора блока…";
@@ -314,6 +450,7 @@ export class ReportEditor {
   }
   paint(focusIndex = null) {
     this.closeBlockMenu?.();
+    this.closeTableMenu?.();
     this.host.replaceChildren();
     this.blocks.forEach((block, index) => {
       const el = document.createElement("div");

@@ -96,11 +96,11 @@ async def check():
         assert await page.locator('.report-table-block table').count() == 1
         await page.get_by_role('textbox', name='Строка 1, столбец 1', exact=True).fill('a | b')
         await page.get_by_role('button', name='Добавить колонку', exact=True).click()
-        assert await page.locator('.report-table-block th').count() == 3
-        await page.get_by_role('textbox', name='Строка 1, столбец 3', exact=True).press('Tab')
-        assert await page.locator('.report-table-block tr').count() == 3
+        assert await page.locator('.report-table-block tbody tr').first.locator('textarea').count() == 3
+        await page.get_by_role('button', name='Добавить строку', exact=True).click()
+        assert await page.locator('.report-table-block tbody tr').count() == 3
         await page.get_by_role('textbox', name='Строка 2, столбец 3', exact=True).press('Tab')
-        assert await page.locator('.report-table-block tr').count() == 4
+        assert await page.locator('.report-table-block tbody tr').count() == 4
         assert r'a \| b' in await page.evaluate('editor.getValue()')
         await page.evaluate('editor.setValue(editor.getValue())')
         assert await page.get_by_role('textbox', name='Строка 1, столбец 1', exact=True).input_value() == 'a | b'
@@ -153,6 +153,75 @@ async def check():
         await page.get_by_role('textbox', name='Текст задачи 1', exact=True).press('Backspace')
         assert await page.locator('.report-task-text').count() == 0
         assert await field.evaluate('(e) => e === document.activeElement')
+        await page.set_viewport_size({'width': 1440, 'height': 900})
+        await page.evaluate("editor.setValue('| Name | A | B |\\n| --- | ---: | :--- |\\n| Row one | a | b |\\n| Row two | c | d |\\n\\n')")
+        assert await page.locator('.report-table-ruler').count() == 0
+        heading = page.get_by_role('textbox', name='Заголовок, столбец 2', exact=True)
+        await heading.dblclick()
+        assert await page.locator('tbody .report-table-target').count() == 3
+        await heading.click(button='right')
+        await page.get_by_role('button', name='Удалить колонку', exact=True).click()
+        await page.get_by_role('button', name='Отмена', exact=True).click()
+        await heading.focus()
+        await heading.press('Alt+ArrowRight')
+        assert await heading.input_value() == 'B'
+        assert await page.get_by_role('textbox', name='Строка 1, столбец 2', exact=True).input_value() == 'b'
+        row = page.get_by_role('textbox', name='Строка 1, столбец 1', exact=True)
+        await row.dblclick()
+        await row.click(button='right')
+        await page.get_by_role('button', name='Вставить строку снизу', exact=True).click()
+        assert await page.get_by_role('textbox', name='Строка 2, столбец 1', exact=True).input_value() == ''
+        assert await page.get_by_role('textbox', name='Строка 3, столбец 1', exact=True).input_value() == 'Row two'
+        await page.get_by_role('textbox', name='Строка 3, столбец 1', exact=True).press('Alt+ArrowUp')
+        assert await page.get_by_role('textbox', name='Строка 2, столбец 1', exact=True).input_value() == 'Row two'
+        panel = page.locator('#card-report-modal .modal-panel')
+        await panel.evaluate("e => { e.style.width = '1000px'; e.style.transform = 'translateX(140px)'; }")
+        rect = await row.bounding_box()
+        x, y = rect['x'] + 20, rect['y'] + 15
+        await page.mouse.click(x, y, button='right')
+        popup = await page.locator('.report-table-context').bounding_box()
+        assert abs(popup['x'] - x - 4) < 2 and abs(popup['y'] - y - 4) < 2
+        await page.keyboard.press('Escape')
+        await panel.evaluate("e => { e.style.width = ''; e.style.transform = ''; }")
+        for theme in ['light', 'dark']:
+            await page.evaluate('theme => document.documentElement.dataset.theme = theme', theme)
+            await page.mouse.move(5, 5)
+            await page.screenshot(path=f'/tmp/report-table-clean-{theme}.png')
+        first_header = page.get_by_role('textbox', name='Заголовок, столбец 1', exact=True)
+        await first_header.dblclick()
+        assert await page.locator('tbody .report-table-target').count() == 4
+        await first_header.click(button='right')
+        assert await page.get_by_role('button', name='Удалить колонку', exact=True).count() == 1
+        assert await page.get_by_role('button', name='Удалить таблицу', exact=True).is_enabled()
+        await page.keyboard.press('Escape')
+        await page.get_by_role('textbox', name='Строка 1, столбец 2', exact=True).click(button='right')
+        assert await page.get_by_role('button', name='Удалить таблицу', exact=True).is_enabled()
+        await page.keyboard.press('Escape')
+        await page.get_by_role('textbox', name='Строка 1, столбец 1', exact=True).click(button='right')
+        assert await page.get_by_role('button', name='Удалить строку', exact=True).count() == 1
+        assert await page.get_by_role('button', name='Удалить таблицу', exact=True).is_enabled()
+        await page.get_by_role('button', name='Удалить таблицу', exact=True).click()
+        await page.get_by_role('button', name='Удалить', exact=True).click()
+        assert await page.locator('.report-table-block table').count() == 0
+        await page.evaluate("""() => {
+            const header = '| № | Описание | Результат | Инструменты | Проверка |';
+            const divider = '| --- | --- | --- | --- | --- |';
+            const text = 'Длинное описание со словами, которые должны переноситься и полностью помещаться в ячейке. '.repeat(5);
+            editor.setValue([header, divider, ...Array.from({length: 20}, (_, i) => `| ${i + 1} | ${text} | ${text} | search_entities → read_entity | ${text} |`)].join('\\n'));
+        }""")
+        await page.wait_for_timeout(100)
+        assert await page.locator('.report-table-block textarea').evaluate_all('(items) => items.every(e => e.scrollHeight <= e.clientHeight + 2)')
+        scroll = page.locator('.report-table-scroll')
+        assert await scroll.evaluate('(e) => e.scrollHeight > e.clientHeight')
+        assert await scroll.evaluate('(e) => e.clientHeight <= Math.min(innerHeight * .65, 640) + 1')
+        long_cell = page.get_by_role('textbox', name='Строка 1, столбец 2', exact=True)
+        before = await long_cell.evaluate('(e) => e.clientHeight')
+        await long_cell.fill('Коротко')
+        assert await long_cell.evaluate('(e) => e.clientHeight') < before
+        for width in [390, 1440]:
+            await page.set_viewport_size({'width': width, 'height': 900})
+            assert await page.locator('.report-table-block textarea').evaluate_all('(items) => items.every(e => e.scrollHeight <= e.clientHeight + 2)')
+            await page.screenshot(path=f'/tmp/report-table-large-{width}.png')
         await browser.close()
         print('PASS: picker, tasks, checkboxes, Enter, table cells, rows/columns, Tab, formula preview/reload and mobile themes')
 
