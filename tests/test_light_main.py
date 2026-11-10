@@ -1,4 +1,9 @@
 """Saved legacy interface settings cannot replace Quick Navigation assets."""
+import hashlib
+import json
+
+import pytest
+
 from pathlib import Path
 from threading import Thread
 from urllib.request import Request, urlopen
@@ -9,6 +14,13 @@ from api.web_proxy import KoiWebHandler
 from koi.adapters import settings_store
 
 ROOT = Path(__file__).resolve().parents[1]
+LIGHT = ROOT / "web/variants/light"
+SOURCE = json.loads((LIGHT / "source.json").read_text())
+
+
+@pytest.mark.parametrize("name,expected", SOURCE["current_files"].items())
+def test_maintained_light_assets_match_manifest(name, expected):
+    assert hashlib.sha256((LIGHT / name).read_bytes()).hexdigest() == expected
 
 
 def test_legacy_selection_serves_quick_navigation_without_stale_cache(monkeypatch, tmp_path):
