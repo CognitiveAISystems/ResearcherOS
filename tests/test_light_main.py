@@ -16,11 +16,9 @@ LIGHT = ROOT / "web/variants/light"
 SOURCE = json.loads((LIGHT / "source.json").read_text())
 
 
-@pytest.mark.parametrize("name,expected", SOURCE["files"].items())
+@pytest.mark.parametrize("name,expected", SOURCE["current_files"].items())
 def test_light_frontend_matches_main(name, expected):
     content = (LIGHT / name).read_bytes()
-    if name == "index.html":
-        content = content.replace(b'src="light-bootstrap.js"', b'src="app.js?v=20261021paper-edits"')
     assert hashlib.sha256(content).hexdigest() == expected
 
 
