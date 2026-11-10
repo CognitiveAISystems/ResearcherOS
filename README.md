@@ -34,7 +34,7 @@ ResearcherOS связывает дерево исследования, эксп�
 > - **Одного AI-агента** — установите и настройте [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation) или [OpenCode CLI](https://opencode.ai/docs/).
 > - **Проект** — локальный Git-репозиторий хотя бы с одним коммитом.
 
-### [Скачайте подходящую версию ResearcherOS](https://github.com/CognitiveAISystems/ResearcherOS/releases)
+### Скачайте подходящую версию ResearcherOS [↗](https://github.com/CognitiveAISystems/ResearcherOS/releases "Открыть GitHub Releases")
 
 | Ваш компьютер | Что скачать | Что сделать |
 |---|---|---|
