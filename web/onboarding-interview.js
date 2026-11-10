@@ -257,7 +257,7 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
         <div class="onboarding-interview__composer">
           <div class="onboarding-interview__input-wrap">
             <textarea id="tree-interview-answer" class="onboarding-interview__input" rows="1" placeholder="Ваш ответ…" aria-label="Ваш ответ"></textarea>
-            <select class="agent-cli-select" aria-label="Выбрать агента"><option value="cursor">Cursor</option><option value="codex">Codex</option></select>
+            <select class="agent-cli-select" aria-label="Выбрать агента"><option value="cursor">Cursor</option><option value="codex">Codex</option><option value="claude">Claude</option></select>
             <button class="btn btn-primary agent-chat-send onboarding-interview__send" type="button" aria-label="Отправить сообщение" title="Отправить сообщение"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></button>
           </div>
           <button class="desktop-onboarding__button desktop-onboarding__button--primary onboarding-interview__finish" type="button" hidden>Создать проект с этим деревом</button>
@@ -281,7 +281,7 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
   const textarea = shell.querySelector('textarea');
   const send = shell.querySelector('.onboarding-interview__send');
   const agentSelect = shell.querySelector('.agent-cli-select');
-  try { agentSelect.value = localStorage.getItem('koi-chat-cli-agent') === 'codex' ? 'codex' : 'cursor'; } catch { /* private mode */ }
+  try { const saved = localStorage.getItem('koi-chat-cli-agent'); agentSelect.value = ['codex', 'claude'].includes(saved) ? saved : 'cursor'; } catch { /* private mode */ }
   agentSelect.addEventListener('change', () => {
     try { localStorage.setItem('koi-chat-cli-agent', agentSelect.value); } catch { /* private mode */ }
   });
