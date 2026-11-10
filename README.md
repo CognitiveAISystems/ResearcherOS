@@ -28,8 +28,8 @@ ResearcherOS связывает дерево исследования, эксп�
 
 ## Установка
 
-> ℹ️ **Перед началом подготовьте:**
->
+### ℹ️ Перед началом подготовьте
+
 > - **Git** — [установить](https://git-scm.com/downloads).
 > - **Одного AI-агента** — установите и настройте [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation) или [OpenCode CLI](https://opencode.ai/docs/).
 > - **Проект** — локальный Git-репозиторий хотя бы с одним коммитом.
