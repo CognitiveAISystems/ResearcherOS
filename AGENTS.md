@@ -65,6 +65,7 @@ python -m koi.projects.install_cli install <name> --create # пустой про
 | Проверить гипотезу (карточку канбана) | `python -m koi.projects.report_ingest.cli <project_id> <card_id>`. Если серверный бэкенд недоступен (обычный случай в клоне) — **выполни работу агента сам** (**koi-execute-card**): проведи эксперимент, заполни `agents/skills/koi-report-review/experiment-report.md` → `projects/<id>/reports/<узел>/<карточка>.run.md` (**koi-report-review**, критик 4), затем `… --ingest-only` (сначала `--dry-run`). Публичный отчёт по skeleton — **koi-report-review** на каждой фазе |
 | Вывод по done-карточке | скилл `koi-done-research` (question/narrative — человеческим языком, метрики — в `answer`) |
 | Ответ на вопрос из UI | скилл `koi-agent-chat` (сначала `research.json`, отчёты — только если не хватает) |
+| Добавить скилл через чат проекта | скилл `koi-create-project-skill` — назначение и уровень работы (карточка / метод / дерево), файлы в `koi-structure/skills/`, привязки через `python -m koi.agent_chat.project_skills` |
 | Глубокая суммаризация знаний | скилл `koi-knowledge-curator` — кросс-анализ отчётов и инсайтов, курируемые документы в `projects/<id>/knowledge/` |
 | Карточки, описания, человекочитаемый текст | скилл `koi-prose-style` — черновик → subagent-ревью → переписать до PASS, затем запись в файл |
 | Отчёт по эксперименту (постановка / результаты) | скилл `koi-report-review` — критики 1–3 при §1–§3, критик 4 при §4+ / `.run.md` |
