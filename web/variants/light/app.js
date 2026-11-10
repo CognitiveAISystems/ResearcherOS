@@ -8964,6 +8964,8 @@ async function refreshProjectDiscovery() {
     }
 
     const currentId = state.project?.id;
+    const previousNode = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
+    const previousBoard = previousNode && getBoardForNode(state.project, previousNode);
     await loadLab();
     if (currentId) {
       await loadProjectList(currentId);
@@ -8978,6 +8980,11 @@ async function refreshProjectDiscovery() {
     renderLabMindmap({
       fitLab: (added.length > 0 || removed.length > 0) && getViewMode() === "chief",
     });
+    const node = state.project?.nodes?.find((n) => n.id === state.kanbanNodeId);
+    const board = node && getBoardForNode(state.project, node);
+    if (board && isKanbanModalOpen() && JSON.stringify(board) !== JSON.stringify(previousBoard)) {
+      renderActiveKanbanView(board, node);
+    }
     projectDiscoveryRevision = data.revision ?? projectDiscoveryRevision;
 
     for (const item of added) {
