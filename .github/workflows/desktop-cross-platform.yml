@@ -1,4 +1,4 @@
-name: Desktop Windows and Linux
+name: Desktop macOS, Windows and Linux
 
 on:
   workflow_dispatch:
@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/desktop-cross-platform.yml"
       - "tests/test_desktop_release_workflow.py"
+      - "tests/test_desktop_mac_dmg.py"
       - "desktop/**"
       - "api/**"
       - "koi/**"
@@ -36,6 +37,8 @@ jobs:
           fetch-depth: 0
       - name: Check release gates
         run: python3 -m unittest discover -s tests -p test_desktop_release_workflow.py
+      - name: Check DMG verification
+        run: python3 -m unittest discover -s tests -p test_desktop_mac_dmg.py
       - name: Validate release tag and source branch
         id: metadata
         if: startsWith(github.ref, 'refs/tags/')
@@ -65,7 +68,7 @@ jobs:
       matrix:
         # Build against the oldest supported glibc, then test this same artifact
         # on newer Ubuntu releases below.
-        os: [windows-2022, ubuntu-22.04]
+        os: [windows-2022, ubuntu-22.04, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -101,6 +104,15 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: desktop
         run: npm run pack:linux -- --publish never
+      - name: Build macOS DMG without Developer ID
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run pack:mac:dmg -- --publish never
+      - name: Smoke test macOS DMG installation
+        if: runner.os == 'macOS'
+        run: python desktop/verify_mac_dmg.py
       - name: Smoke test Windows installation
         if: runner.os == 'Windows'
         shell: pwsh
@@ -131,6 +143,7 @@ jobs:
           path: |
             desktop/dist/*.exe
             desktop/dist/*.AppImage
+            desktop/dist/*.dmg
           if-no-files-found: error
 
   linux-compatibility:
@@ -183,15 +196,17 @@ jobs:
           BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          # Require both packages before publishing any release.
+          # Require every platform before publishing any release.
           test "$(find built-installers -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
           test "$(find built-installers -maxdepth 1 -name '*.AppImage' | wc -l)" -eq 1
+          test "$(find built-installers -maxdepth 1 -name '*-arm64.dmg' | wc -l)" -eq 1
+          test "$(find built-installers -maxdepth 1 -name '*-x64.dmg' | wc -l)" -eq 1
           # GitHub replaces spaces in asset names; hash the published names.
           for file in built-installers/*.exe; do
             normalized="${file// /.}"
             if [[ "$file" != "$normalized" ]]; then mv -- "$file" "$normalized"; fi
           done
-          (cd built-installers && sha256sum -- *.exe *.AppImage > SHA256SUMS.txt)
+          (cd built-installers && sha256sum -- *.exe *.AppImage *.dmg > SHA256SUMS.txt)
           {
             if [[ "$PRERELEASE" == true ]]; then
               echo 'Канал beta-test: сборка для A/B-тестирования из ветки beta.'
@@ -201,16 +216,19 @@ jobs:
             echo
             echo 'Windows: скачайте .exe. Linux x86_64: скачайте .AppImage и разрешите выполнение.'
             echo 'Git LFS и клонирование ResearcherOS для установки не нужны.'
-            echo 'macOS пока устанавливается из исходников; готового DMG в этом выпуске нет.'
+            echo 'macOS: скачайте arm64.dmg для Apple Silicon или x64.dmg для Intel и перенесите приложение в Applications.'
+            echo 'DMG без сертификата Developer ID и notarization. Если macOS блокирует первый запуск, разрешите его в Системных настройках → Конфиденциальность и безопасность.'
+            echo 'Альтернатива для macOS: скрипт installers/Установить ResearcherOS.command в клоне репозитория.'
             echo
             echo "Source: $SOURCE_SHA"
             echo "Build and smoke checks: $BUILD_RUN_URL"
-            echo 'Проверены установка и запуск Windows, запуск Linux на Ubuntu 22.04 и 24.04.'
+            echo 'Проверены установка и запуск macOS на Apple Silicon и Intel, установка и запуск Windows, запуск Linux на Ubuntu 22.04 и 24.04.'
+            echo 'Проверка Gatekeeper после скачивания в браузере на отдельном Mac пока не выполнена.'
             echo 'Обновление поверх прежней установки и работа на физическом экране требуют отдельной проверки.'
           } > release-notes.md
           flags=(--prerelease=false)
           if [[ "$PRERELEASE" == true ]]; then
             flags=(--prerelease --latest=false)
           fi
-          gh release create "$RELEASE_TAG" built-installers/*.exe built-installers/*.AppImage built-installers/SHA256SUMS.txt \
+          gh release create "$RELEASE_TAG" built-installers/*.exe built-installers/*.AppImage built-installers/*.dmg built-installers/SHA256SUMS.txt \
             --verify-tag --title "ResearcherOS $RELEASE_TAG" --notes-file release-notes.md "${flags[@]}"

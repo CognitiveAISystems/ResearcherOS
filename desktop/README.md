@@ -65,8 +65,8 @@ From the repository root, create a Python 3.10+ virtual environment and install
 
 Run `npm run pack:mac` from `desktop/`. The script builds the Python server and
 creates `desktop/dist/mac-arm64/ResearcherOS.app` on Apple Silicon. The installer uses an ad-hoc signature, which does not identify the developer
-to Apple. Public distribution still needs a Developer ID signature, notarization,
-and checks on a separate clean Mac. The current build is for local testing.
+to Apple. Release DMGs use ad-hoc signing without Developer ID or notarization.
+Gatekeeper approval after a browser download still needs a check on a separate Mac.
 
 The desktop renderer has no Node.js access. External links open in the system
 browser; they can later become isolated ResearcherOS browser tabs.
@@ -75,8 +75,8 @@ browser; they can later become isolated ResearcherOS browser tabs.
 
 The desktop UI and local Python server are shared across platforms. Windows and
 Linux packages must be built on their respective operating systems because
-PyInstaller does not cross-compile. The `Desktop Windows and Linux` GitHub
-Actions workflow builds a Windows NSIS installer and a Linux AppImage, verifies
+PyInstaller does not cross-compile. The `Desktop macOS, Windows and Linux` GitHub
+Actions workflow builds native macOS DMGs, a Windows NSIS installer and a Linux AppImage, verifies
 the bundled API and UI, then launches the packaged application in a clean runner.
 Branch builds are available as workflow artifacts. Tagged releases publish verified installers to GitHub Releases. This is an automated
 smoke check; installation, onboarding, Git integration, and updates still need
@@ -95,7 +95,7 @@ then run `python desktop/build_server.py`. In `desktop/`, run `npm ci` and eithe
 `desktop/dist/`. The installer does not supply Git, which is required to attach
 research repositories.
 
-## Release channels (Windows and Linux)
+## Release channels (macOS, Windows and Linux)
 
 Push `vX.Y.Z` on a commit reachable from `main` for a stable release, or
 `vX.Y.Z-beta-test.N` on a commit reachable from `beta` for an A/B-test release.
@@ -117,7 +117,7 @@ git push origin v0.3.0-beta-test.1
 
 Use a new tag for each release; do not move published tags. The workflow validates
 the tag and branch ancestry before building, sets the packaged version from the
-tag, and publishes only after Windows and Linux checks pass. Releases include
+tag, and publishes only after macOS, Windows and Linux checks pass. Releases include
 checksums, the source commit, and a link to the build. The standard GITHUB_TOKEN
 with contents:write in the publishing job is sufficient; no extra token is needed.
 Branch pushes and manual workflow runs build artifacts without publishing releases.
@@ -129,8 +129,23 @@ Stable downloads: https://github.com/CognitiveAISystems/ResearcherOS/releases/la
 A/B-test downloads: choose a `beta-test` prerelease at
 https://github.com/CognitiveAISystems/ResearcherOS/releases
 
-Windows and Linux installers are distributed through Releases, outside Git.
-macOS still uses the source installer; signed,
-notarized DMG distribution is a separate step requiring Apple Developer credentials
-and validation on Apple Silicon and Intel hardware. In-place upgrades still need
-manual validation; back up research data before the first upgrade.
+Installers for all three platforms are distributed through Releases, outside Git.
+macOS has separate native DMGs for Apple Silicon (`arm64`) and Intel (`x64`),
+built on `macos-15` and `macos-15-intel`. Each DMG is mounted read-only, the app is
+copied out, its signature and executable architectures are checked, and the app
+is launched with isolated test data. This does not simulate Gatekeeper quarantine
+after a browser download on another Mac, or validate older macOS versions.
+
+After building the server with `python desktop/build_server.py` and running
+`npm ci` in `desktop/`, use `npm run pack:mac:dmg -- --publish never` to build a DMG.
+This command explicitly uses ad-hoc signing, disables hardened runtime and skips
+notarization; it needs no Apple Developer certificate. A later certified release
+will need a separate signing/notarization configuration. The existing
+`pack:mac` command and `installers/Установить ResearcherOS.command` source-install
+flow remain available.
+
+To install a DMG, copy ResearcherOS.app to Applications (or ~/Applications).
+If macOS blocks the first launch, approve it in System Settings → Privacy & Security.
+Close the app before replacing it with an update. Settings and research data live
+outside the application bundle. In-place upgrades still need manual validation;
+back up research data before the first upgrade.

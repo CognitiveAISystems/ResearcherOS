@@ -10,7 +10,8 @@
     "build:server:portable": "python ../desktop/build_server.py",
     "pack:mac": "npm run build:server && electron-builder --mac dir",
     "pack:win": "electron-builder --win nsis",
-    "pack:linux": "electron-builder --linux AppImage"
+    "pack:linux": "electron-builder --linux AppImage",
+    "pack:mac:dmg": "electron-builder --mac dmg -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false"
   },
   "devDependencies": {
     "electron": "^38.0.0",
@@ -35,8 +36,9 @@
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Запись речи для локальной расшифровки в чате ResearcherOS"
-      }
+        "NSMicrophoneUsageDescription": "\u0417\u0430\u043f\u0438\u0441\u044c \u0440\u0435\u0447\u0438 \u0434\u043b\u044f \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e\u0439 \u0440\u0430\u0441\u0448\u0438\u0444\u0440\u043e\u0432\u043a\u0438 \u0432 \u0447\u0430\u0442\u0435 ResearcherOS"
+      },
+      "artifactName": "ResearcherOS-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis"
