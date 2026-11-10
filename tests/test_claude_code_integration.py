@@ -4,10 +4,26 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 from koi.adapters import agent_backends
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_readonly_claude_excludes_write_tools_and_local_mcp(tmp_path, monkeypatch):
+    commands = []
+    monkeypatch.setattr(agent_backends, '_claude_bin', lambda: '/mock/claude')
+    monkeypatch.delenv('KOI_CLAUDE_ARGS', raising=False)
+    def run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout='{}')
+    monkeypatch.setattr(agent_backends.subprocess, 'run', run)
+    assert agent_backends.run_claude_code('prompt', cwd=tmp_path, allow_edits=False) == '{}'
+    command = commands[0]
+    assert command[command.index('--tools') + 1] == 'Read,Glob,Grep'
+    assert '--strict-mcp-config' in command
+    assert json.loads(command[command.index('--mcp-config') + 1]) == {'mcpServers': {}}
 
 
 def test_claude_md_imports_agents_md():
