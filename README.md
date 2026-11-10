@@ -30,26 +30,26 @@ ResearcherOS связывает дерево исследования, эксп�
 
 ### Что понадобится
 
-- [Git](https://git-scm.com/downloads) и [Git LFS](https://git-lfs.com/).
+- [Git](https://git-scm.com/downloads) для подключения исследовательских репозиториев. Git LFS нужен только для старых установщиков из клона.
 - Перед запуском ResearcherOS убедитесь, что установлен и настроен хотя бы один агент командной строки (CLI): [Codex CLI](https://developers.openai.com/codex/cli/), [Cursor CLI](https://cursor.com/docs/cli/installation) или [OpenCode CLI](https://opencode.ai/docs/). По ссылкам — официальные инструкции по установке.
 - Git-репозиторий вашего исследовательского проекта хотя бы с одним коммитом.
 
 ### 1. Получите приложение
 
+**Windows и Linux:** откройте [последний стабильный релиз](https://github.com/CognitiveAISystems/ResearcherOS/releases/latest) и скачайте `.exe` или `.AppImage` из раздела Assets. Клонировать ResearcherOS и устанавливать Git LFS не нужно.
+
+Для участия в A/B-тестировании выберите выпуск с `beta-test` в названии на [странице релизов](https://github.com/CognitiveAISystems/ResearcherOS/releases). Эти сборки из ветки `beta` помечаются Pre-release и не заменяют стабильный выпуск. Канал распространения сам по себе не распределяет участников по вариантам эксперимента.
+
+Переход на Releases подготовлен: файлы появятся после первого успешного выпуска по тегу. До этого готовые сборки Windows и Linux доступны [в папке старых установщиков](installers/README.md).
+
+**macOS:** пока используется сборка из исходников. Установите Git, затем выполните:
+
 ```bash
-git lfs install
 git clone --branch main https://github.com/CognitiveAISystems/ResearcherOS.git ReseachOS
 cd ReseachOS
-git lfs pull
 ```
 
-Запустите установщик для своей системы из папки `installers`:
-
-| macOS | Windows | Linux |
-|:-----:|:-------:|:-----:|
-| [Установить ResearcherOS.command](installers/Установить%20ResearcherOS.command) | [ResearcherOS Setup 0.1.0.exe](installers/ResearcherOS%20Setup%200.1.0.exe) | [ResearcherOS-0.1.0.AppImage](installers/ResearcherOS-0.1.0.AppImage) |
-
-Установщик macOS загружает зависимости и собирает приложение; нужен интернет. Windows и Linux используют готовые сборки. Большие файлы установщиков хранятся через Git LFS: используйте клонирование, поскольку их наличие в Download ZIP зависит от настроек GitHub.
+Запустите `installers/Установить ResearcherOS.command`. Установщик загрузит зависимости и соберёт приложение; нужен интернет. Готовые подписанные DMG пока не выпускаются.
 
 <details>
 <summary>Установка и обновление на macOS</summary>
@@ -70,7 +70,7 @@ git lfs pull
 
 ### Windows
 
-1. В папке `installers` запустите `ResearcherOS Setup 0.1.0.exe`.
+1. Скачайте `.exe` выбранного релиза и запустите его.
 2. Следуйте шагам установщика, затем откройте ResearcherOS.
 </details>
 
@@ -81,9 +81,11 @@ git lfs pull
 
 Сборка предназначена для Intel/AMD x86_64 с glibc 2.35 или новее (Ubuntu 22.04 и новее). Проверена на Pop!_OS 22.04; другие версии проверяются отдельно.
 
-1. В папке `installers` в свойствах файла `ResearcherOS-0.1.0.AppImage` разрешите выполнение как программы.
+1. Скачайте `.AppImage` выбранного релиза и в свойствах файла разрешите выполнение как программы.
 2. Запустите файл и пройдите первоначальную настройку ResearcherOS.
 </details>
+
+Для обновления Windows или Linux закройте приложение и установите новую версию из того же канала. Перед первым обновлением сохраните копию исследовательских данных: обновление поверх прежней установки ещё требует проверки.
 
 ### 2. Подключите проект
 

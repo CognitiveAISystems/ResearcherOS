@@ -69,7 +69,7 @@ Linux packages must be built on their respective operating systems because
 PyInstaller does not cross-compile. The `Desktop Windows and Linux` GitHub
 Actions workflow builds a Windows NSIS installer and a Linux AppImage, verifies
 the bundled API and UI, then launches the packaged application in a clean runner.
-Download the installers from that workflow's artifacts. This is an automated
+Branch builds are available as workflow artifacts. Tagged releases publish verified installers to GitHub Releases. This is an automated
 smoke check; installation, onboarding, Git integration, and updates still need
 manual checks on a user desktop before release.
 
@@ -85,3 +85,44 @@ then run `python desktop/build_server.py`. In `desktop/`, run `npm ci` and eithe
 `npm run pack:win` or `npm run pack:linux`. The packages appear in
 `desktop/dist/`. The installer does not supply Git, which is required to attach
 research repositories.
+
+## Release channels (Windows and Linux)
+
+Push `vX.Y.Z` on a commit reachable from `main` for a stable release, or
+`vX.Y.Z-beta-test.N` on a commit reachable from `beta` for an A/B-test release.
+The `beta` branch keeps its name. `beta-test` identifies the distribution channel;
+it does not implement assignment to experiment variants. Each experiment release
+is marked Pre-release and explicitly excluded from Latest.
+
+For example, after these workflow changes are present in the relevant branch:
+
+```bash
+# Stable, from the reviewed main commit:
+git tag v0.2.0 <main-commit>
+git push origin v0.2.0
+
+# A/B testing, from the reviewed beta commit:
+git tag v0.3.0-beta-test.1 <beta-commit>
+git push origin v0.3.0-beta-test.1
+```
+
+Use a new tag for each release; do not move published tags. The workflow validates
+the tag and branch ancestry before building, sets the packaged version from the
+tag, and publishes only after Windows and Linux checks pass. Releases include
+checksums, the source commit, and a link to the build. The standard GITHUB_TOKEN
+with contents:write in the publishing job is sufficient; no extra token is needed.
+Branch pushes and manual workflow runs build artifacts without publishing releases.
+To retry a failed tagged build, rerun that workflow. If a release already exists,
+publication fails rather than replacing its assets; use a new version for changes.
+
+Stable downloads: https://github.com/CognitiveAISystems/ResearcherOS/releases/latest
+
+A/B-test downloads: choose a `beta-test` prerelease at
+https://github.com/CognitiveAISystems/ResearcherOS/releases
+
+The first tagged release must be published before these download instructions can
+be used. Keep the old LFS installers until the replacement release has been checked.
+They are no longer updated by CI. macOS still uses the source installer; signed,
+notarized DMG distribution is a separate step requiring Apple Developer credentials
+and validation on Apple Silicon and Intel hardware. In-place upgrades still need
+manual validation; back up research data before the first upgrade.

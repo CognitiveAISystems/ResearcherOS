@@ -4,10 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: [main, beta]
+    tags: ["v*"]
     paths-ignore: ["installers/**"]
   pull_request:
     paths:
       - ".github/workflows/desktop-cross-platform.yml"
+      - "tests/test_desktop_release_workflow.py"
       - "desktop/**"
       - "api/**"
       - "koi/**"
@@ -18,8 +20,46 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  release-metadata:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check release gates
+        run: python3 -m unittest discover -s tests -p test_desktop_release_workflow.py
+      - name: Validate release tag and source branch
+        id: metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            branch=main
+            prerelease=false
+          elif [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta-test\.([1-9][0-9]*)$ ]]; then
+            branch=beta
+            prerelease=true
+          else
+            echo 'Expected vX.Y.Z or vX.Y.Z-beta-test.N' >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor HEAD "origin/$branch"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
   desktop:
+    needs: release-metadata
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +77,12 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - name: Set package version from release tag
+        if: needs.release-metadata.outputs.version != ''
+        working-directory: desktop
+        env:
+          RELEASE_VERSION: ${{ needs.release-metadata.outputs.version }}
+        run: npm version --no-git-tag-version "$RELEASE_VERSION"
       - name: Install Python dependencies
         run: python -m pip install -r requirements.txt pyinstaller==6.16.0
       - name: Build bundled server
@@ -49,11 +95,11 @@ jobs:
       - name: Build Windows installer
         if: runner.os == 'Windows'
         working-directory: desktop
-        run: npm run pack:win
+        run: npm run pack:win -- --publish never
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
         working-directory: desktop
-        run: npm run pack:linux
+        run: npm run pack:linux -- --publish never
       - name: Smoke test Windows installation
         if: runner.os == 'Windows'
         shell: pwsh
@@ -114,52 +160,51 @@ jobs:
           RESEARCHOS_SMOKE_TEST=1 xvfb-run -a timeout 75 "$RUNNER_TEMP/squashfs-root/AppRun" --no-sandbox
 
   publish-installers:
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'beta')
-    needs: [desktop, linux-compatibility]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [release-metadata, desktop, linux-compatibility]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
       - uses: actions/download-artifact@v4
         with:
           pattern: ResearcherOS-*
           merge-multiple: true
           path: built-installers
-      - name: Publish verified installers to the source branch
+      - name: Publish verified installers to GitHub Releases
+        shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.release-metadata.outputs.prerelease }}
           SOURCE_SHA: ${{ github.sha }}
-          SOURCE_BRANCH: ${{ github.ref_name }}
-          BUILD_RUN_ID: ${{ github.run_id }}
+          BUILD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          # Refuse to publish an older build over newer application sources.
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          cp built-installers/*.exe built-installers/*.AppImage installers/
-          python - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-          path = Path('installers/README.md')
-          text = path.read_text()
-          source = os.environ['SOURCE_SHA'][:7]
-          branch = os.environ['SOURCE_BRANCH']
-          run = os.environ['BUILD_RUN_ID']
-          text, count = re.subn(
-              r'Установщики Windows и Linux собраны .*?\[GitHub Actions\]\(https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/\d+\)\.',
-              f'Установщики Windows и Linux собраны из коммита `{source}` ветки `{branch}` в '
-              f'[GitHub Actions](https://github.com/CognitiveAISystems/ResearcherOS/actions/runs/{run}).',
-              text,
-          )
-          assert count == 1, 'Installer provenance paragraph missing'
-          path.write_text(text)
-          PY
-          git lfs install --local
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add installers/
-          git diff --cached --quiet && exit 0
-          git commit -m "Update verified ${SOURCE_BRANCH} installers from ${SOURCE_SHA:0:7}"
-          git push origin "HEAD:$SOURCE_BRANCH"
+          # Require both packages before publishing any release.
+          test "$(find built-installers -maxdepth 1 -name '*.exe' | wc -l)" -eq 1
+          test "$(find built-installers -maxdepth 1 -name '*.AppImage' | wc -l)" -eq 1
+          (cd built-installers && sha256sum -- *.exe *.AppImage > SHA256SUMS.txt)
+          {
+            if [[ "$PRERELEASE" == true ]]; then
+              echo 'Канал beta-test: сборка для A/B-тестирования из ветки beta.'
+            else
+              echo 'Стабильный выпуск из ветки main.'
+            fi
+            echo
+            echo 'Windows: скачайте .exe. Linux x86_64: скачайте .AppImage и разрешите выполнение.'
+            echo 'Git LFS и клонирование ResearcherOS для установки не нужны.'
+            echo 'macOS пока устанавливается из исходников; готового DMG в этом выпуске нет.'
+            echo
+            echo "Source: $SOURCE_SHA"
+            echo "Build and smoke checks: $BUILD_RUN_URL"
+            echo 'Проверены установка и запуск Windows, запуск Linux на Ubuntu 22.04 и 24.04.'
+            echo 'Обновление поверх прежней установки и работа на физическом экране требуют отдельной проверки.'
+          } > release-notes.md
+          flags=(--prerelease=false)
+          if [[ "$PRERELEASE" == true ]]; then
+            flags=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" built-installers/*.exe built-installers/*.AppImage built-installers/SHA256SUMS.txt \
+            --verify-tag --title "ResearcherOS $RELEASE_TAG" --notes-file release-notes.md "${flags[@]}"
