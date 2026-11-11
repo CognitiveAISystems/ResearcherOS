@@ -51,6 +51,7 @@ class AgentChatItem(TypedDict, total=False):
     proposal: Optional[dict[str, str]]
     review_passed: bool
     cli_agent: Optional[str]
+    cli_model: Optional[str]
     conversation_id: Optional[str]
     context_suggestions: Optional[dict]
     card_links: list[dict]
@@ -110,6 +111,8 @@ def _normalize(item: dict) -> AgentChatItem:
     cli_agent = item.get("cli_agent") or None
     if cli_agent:
         out["cli_agent"] = str(cli_agent)
+        if item.get("cli_model"):
+            out["cli_model"] = str(item["cli_model"])
     if out["status"] == "answered" and not out.get("answer"):
         out["status"] = "pending"
         out["answered_at"] = None
@@ -150,6 +153,7 @@ def enqueue_question(
     card_id: Optional[str] = None,
     report_markdown: str = "",
     cli_agent: Optional[str] = None,
+    cli_model: Optional[str] = None,
     conversation_id: Optional[str] = None,
     git_snapshot: Optional[str] = None,
     git_notice_version: Optional[int] = None,
@@ -181,6 +185,8 @@ def enqueue_question(
     }
     if cli_agent:
         item["cli_agent"] = cli_agent
+        if cli_model:
+            item["cli_model"] = cli_model
     items.append(item)
     items = _prune_project(items, project_id)
     _save(items)

@@ -371,7 +371,7 @@ def _run_local_agent(
                               on_event=stream.get("on_event"), **extra), cli_agent
     if cli_agent and cli_agent != "cursor":
         return run_agent(prompt, cwd=workdir, backend=cli_agent, timeout=timeout, allow_edits=force,
-                         **stream, **extra,
+                         **({"model": model} if model else {}), **stream, **extra,
                          **({"externally_sandboxed": True} if externally_sandboxed else {}))
     if cli_agent == "cursor":
         fallback = False
@@ -558,8 +558,11 @@ def _process_item(item_id: str) -> bool:
         prompt += research.delegation_prompt(run_id, parent_id)
         local_kwargs = {"mode": None, "force": True} if allow_edits else {}
         local_kwargs['delegation'] = (run_id, parent_id)
+        model = item.get("cli_model") if chosen else None
         if chosen:
             local_kwargs["cli_agent"] = chosen
+            if model:
+                local_kwargs["model"] = model
         from koi.agent_chat.research_runtime import broker
         with broker(item_id):
             text, backend = (
@@ -569,6 +572,7 @@ def _process_item(item_id: str) -> bool:
                     cwd=_artifact_task_cwd(item_id) or _ws.agent_cwd(),
                     allow_edits=allow_edits,
                     backend=chosen,
+                    **({"model": model} if model else {}),
                     delegation=(run_id, parent_id),
                     **_stream_options(item_id),
                 )

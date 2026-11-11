@@ -3153,7 +3153,7 @@ async function sendReportInterview(event) {
     if (isResearchStart(question) && !researchScope) { setReportInterviewStatus(""); return; }
     const conversation = await cardConversations.ensure();
     if (identity !== reportIdentity()) return;
-    await KoiApi.sendAgentQuestion({ conversation_id: conversation.id, project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, research_scope: researchScope || undefined, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent("report-interview") });
+    await KoiApi.sendAgentQuestion({ conversation_id: conversation.id, project_id: reportWriteProjectId(), board_id: state.reportBoardId, card_id: state.reportCardId, research_scope: researchScope || undefined, purpose: command.purpose, question: command.question, report_markdown: document.getElementById("card-report-editor").value, cli_agent: chatCliAgent("report-interview"), cli_model: chatCliModel("report-interview") });
     if (identity !== reportIdentity()) return;
     input.value = command.purpose === "grill_me" ? "/grill-me " : "";
     input.setSelectionRange(input.value.length, input.value.length);
@@ -8512,9 +8512,217 @@ function initVoiceInput() {
 
 const CLI_AGENT_KEY = "koi-chat-cli-agent";
 
+const CLI_MODEL_KEY = "koi-chat-cli-model:";
+const cliModelLists = new Map();
+const cliModelLabels = new Map();
+let cliMenu = null;
+
 function chatCliAgent(panel = "agent-chat") {
   const value = document.querySelector(`#${panel}-form [data-cli-agent]:not(:disabled)`)?.value || "";
   return value || undefined;
+}
+
+function chatCliModel(panel = "agent-chat") {
+  const select = document.querySelector(`#${panel}-form [data-cli-agent]:not(:disabled)`);
+  return (select?.value && select.dataset.model) || undefined;
+}
+
+function savedCliModel(agent) {
+  try { return localStorage.getItem(CLI_MODEL_KEY + agent) || ""; } catch { return ""; }
+}
+
+function loadCliModels(agent) {
+  if (!cliModelLists.has(agent)) {
+    cliModelLists.set(agent, KoiApi.getAgentModels(agent).then((data) => {
+      const models = Array.isArray(data?.models) ? data.models : [];
+      models.forEach((model) => cliModelLabels.set(`${agent}\n${model.id}`, model.label || model.id));
+      if (!models.length) cliModelLists.delete(agent);
+      return models;
+    }).catch(() => { cliModelLists.delete(agent); return []; }));
+  }
+  return cliModelLists.get(agent);
+}
+
+function renderCliTrigger(select) {
+  const button = select.cliTrigger;
+  if (!button) return;
+  const agent = select.selectedOptions[0];
+  const model = select.dataset.model || "";
+  const label = cliModelLabels.get(`${select.value}\n${model}`);
+  button.disabled = select.disabled;
+  button.textContent = agent ? agent.textContent + (model ? ` · ${label || model}` : "") : "Нет доступных";
+  button.title = agent ? `Агент: ${agent.textContent}. Модель: ${model || "по умолчанию"}` : "Нет доступных агентов";
+  if (model && !label) void loadCliModels(select.value).then(() => cliModelLabels.has(`${select.value}\n${model}`) && renderCliTrigger(select));
+}
+
+function applyCliChoice(select, agent, model) {
+  select.value = agent;
+  select.dataset.model = model || "";
+  renderCliTrigger(select);
+}
+
+function setCliChoice(agent, model) {
+  try {
+    localStorage.setItem(CLI_AGENT_KEY, agent);
+    if (model) localStorage.setItem(CLI_MODEL_KEY + agent, model);
+    else localStorage.removeItem(CLI_MODEL_KEY + agent);
+  } catch { /* private mode */ }
+  document.querySelectorAll("[data-cli-agent]").forEach((select) => applyCliChoice(select, agent, model));
+}
+
+function closeCliMenu(focusTrigger = false) {
+  if (!cliMenu) return;
+  const { root, select, cleanup } = cliMenu;
+  cliMenu = null;
+  cleanup();
+  root.remove();
+  select.cliTrigger.setAttribute("aria-expanded", "false");
+  if (focusTrigger) select.cliTrigger.focus();
+}
+
+function openCliMenu(select) {
+  const reopen = cliMenu?.select !== select;
+  closeCliMenu();
+  if (!reopen || select.disabled) return;
+  const trigger = select.cliTrigger;
+  const root = document.createElement("div");
+  root.className = "agent-cli-menu";
+  const agents = document.createElement("div");
+  agents.className = "agent-cli-menu__panel";
+  agents.setAttribute("role", "menu");
+  agents.setAttribute("aria-label", "Агент");
+  agents.innerHTML = [...select.options].map((option) => `<button type="button" role="menuitemradio" aria-haspopup="menu" aria-expanded="false" aria-checked="${option.value === select.value}" data-agent="${escapeHtml(option.value)}"><span>${escapeHtml(option.textContent)}</span></button>`).join("");
+  const models = document.createElement("div");
+  models.className = "agent-cli-menu__panel agent-cli-menu__models";
+  models.setAttribute("role", "menu");
+  models.hidden = true;
+  const scroller = document.createElement("div");
+  scroller.className = "agent-cli-menu__scroll";
+  models.append(scroller);
+  root.append(agents, models);
+  document.body.append(root);
+
+  const anchor = trigger.getBoundingClientRect();
+  const above = anchor.top - agents.offsetHeight - 8;
+  agents.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - agents.offsetWidth - 8))}px`;
+  agents.style.top = `${above >= 8 ? above : anchor.bottom + 8}px`;
+
+  let openItem = null;
+  let hoverTimer = 0;
+  const placeModels = () => {
+    if (!openItem || models.hidden) return;
+    const panel = agents.getBoundingClientRect();
+    const row = openItem.getBoundingClientRect();
+    let left = panel.right + 6;
+    if (left + models.offsetWidth > innerWidth - 8) left = Math.max(8, panel.left - models.offsetWidth - 6);
+    const top = Math.min(Math.max(8, row.top + row.height / 2 - models.offsetHeight / 2), innerHeight - models.offsetHeight - 8);
+    models.style.left = `${left}px`;
+    models.style.top = `${Math.max(8, top)}px`;
+  };
+  const showModels = async (item, focusSelected = false) => {
+    const agent = item.dataset.agent;
+    if (openItem !== item) {
+      openItem = item;
+      agents.querySelectorAll("[data-agent]").forEach((row) => {
+        row.classList.toggle("is-open", row === item);
+        row.setAttribute("aria-expanded", String(row === item));
+      });
+      models.hidden = false;
+      models.setAttribute("aria-label", `Модели ${item.textContent}`);
+      scroller.innerHTML = `<p class="agent-cli-menu__note">Загружаем модели…</p>`;
+      placeModels();
+      const list = await loadCliModels(agent);
+      if (cliMenu?.root !== root || openItem !== item) return;
+      const current = agent === select.value ? select.dataset.model || "" : savedCliModel(agent);
+      scroller.innerHTML = [{ id: "", label: "По умолчанию" }, ...list].map((model) => `<button type="button" role="menuitemradio" aria-checked="${model.id === current}" data-model="${escapeHtml(model.id)}" title="${escapeHtml(model.id || "Модель из настроек CLI")}"><span>${escapeHtml(model.label || model.id)}</span></button>`).join("");
+      placeModels();
+      const checked = models.querySelector('[aria-checked="true"]') || models.querySelector("[data-model]");
+      scroller.scrollTop = checked.offsetTop - scroller.clientHeight / 2 + checked.offsetHeight / 2;
+    }
+    if (focusSelected) (models.querySelector('[aria-checked="true"]') || models.querySelector("[data-model]"))?.focus();
+  };
+
+  agents.addEventListener("pointerover", (event) => {
+    const item = event.target.closest("[data-agent]");
+    if (!item || item === openItem) return;
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => void showModels(item), openItem ? 120 : 0);
+  });
+  models.addEventListener("pointerenter", () => clearTimeout(hoverTimer));
+  agents.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-agent]");
+    if (item) void showModels(item);
+  });
+  models.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-model]");
+    if (!item || !openItem) return;
+    setCliChoice(openItem.dataset.agent, item.dataset.model);
+    closeCliMenu(true);
+  });
+  root.addEventListener("keydown", (event) => {
+    const inModels = models.contains(document.activeElement);
+    const items = [...(inModels ? models : agents).querySelectorAll("button")];
+    const index = items.indexOf(document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+    } else if (!inModels && index >= 0 && ["ArrowRight", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      void showModels(items[index], true);
+    } else if (inModels && event.key === "ArrowLeft") {
+      event.preventDefault();
+      openItem?.focus();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      if (inModels) openItem?.focus();
+      else closeCliMenu(true);
+    } else if (event.key === "Tab") {
+      closeCliMenu();
+    }
+  });
+  const outside = (event) => {
+    if (!root.contains(event.target) && !trigger.contains(event.target)) closeCliMenu();
+  };
+  const dismiss = (event) => {
+    if (!root.contains(event.target)) closeCliMenu();
+  };
+  document.addEventListener("pointerdown", outside, true);
+  window.addEventListener("resize", dismiss);
+  window.addEventListener("scroll", dismiss, true);
+  cliMenu = {
+    root, select,
+    cleanup: () => {
+      clearTimeout(hoverTimer);
+      document.removeEventListener("pointerdown", outside, true);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+    },
+  };
+  trigger.setAttribute("aria-expanded", "true");
+  const current = agents.querySelector('[aria-checked="true"]') || agents.querySelector("[data-agent]");
+  current?.focus();
+  if (current) void showModels(current);
+}
+
+function initCliPickers() {
+  document.querySelectorAll("[data-cli-agent]").forEach((select) => {
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "agent-cli-select agent-cli-trigger";
+    trigger.setAttribute("aria-haspopup", "menu");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("aria-label", "Выбрать агента и модель");
+    select.hidden = true;
+    select.after(trigger);
+    select.cliTrigger = trigger;
+    trigger.addEventListener("click", () => openCliMenu(select));
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      if (!cliMenu) openCliMenu(select);
+    });
+    renderCliTrigger(select);
+  });
 }
 
 async function refreshCliAgents() {
@@ -8537,8 +8745,8 @@ async function refreshCliAgents() {
     select.innerHTML = available.length
       ? available.map((agent) => `<option value="${escapeHtml(agent.id)}">${escapeHtml(agent.label)}</option>`).join("")
       : `<option value="">Нет доступных</option>`;
-    select.value = chosen;
     select.disabled = !available.length;
+    applyCliChoice(select, chosen, chosen ? savedCliModel(chosen) : "");
     delete select.dataset.conversation;
   });
   if (mainConversations) syncConversationAgent(mainConversations, "agent-chat");
@@ -8607,6 +8815,7 @@ async function submitAgentQuestion(e) {
       method_id: method_id || undefined,
       node_id: node_id || undefined,
       cli_agent: chatCliAgent(),
+      cli_model: chatCliModel(),
     });
     if (!res?.item?.id) throw new Error("Сервер не подтвердил отправку. Попробуйте ещё раз.");
     if (cid !== mainConversations.row?.id) return;
@@ -9236,7 +9445,7 @@ function syncConversationAgent(controller, panel) {
   const select = document.querySelector(`#${panel}-form [data-cli-agent]`);
   const backend = controller.row?.backend;
   if (select && select.dataset.conversation !== controller.row?.id) {
-    if (backend && [...select.options].some(o => o.value === backend)) select.value = backend;
+    if (backend && [...select.options].some(o => o.value === backend)) applyCliChoice(select, backend, controller.row?.model);
     select.dataset.conversation = controller.row?.id || "";
   }
 }
@@ -9559,12 +9768,7 @@ function initAgentChat() {
   document.getElementById("agent-chat-log").addEventListener("click", event => void chooseAgentChatContext(event));
   attachSkillMenu(document.getElementById("agent-chat-input"), { getProjectId: agentChatProjectId, getCardId: () => mainConversations.contextScope?.card_id, getMethodId: () => mainConversations.contextScope?.board_id });
   attachSkillMenu(document.getElementById("report-interview-input"), { getProjectId: reportWriteProjectId });
-  document.querySelectorAll("[data-cli-agent]").forEach((select) => {
-    select.addEventListener("change", () => {
-      try { localStorage.setItem(CLI_AGENT_KEY, select.value); } catch { /* private mode */ }
-      document.querySelectorAll("[data-cli-agent]").forEach((other) => { other.value = select.value; });
-    });
-  });
+  initCliPickers();
   void refreshCliAgents();
   document.getElementById("btn-chat-collapse")?.addEventListener("click", () => {
     document.getElementById("workspace").classList.remove("is-chat-list-hidden");

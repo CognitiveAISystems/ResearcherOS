@@ -210,6 +210,7 @@ class AgentChatBody(BaseModel):
     card_id: Optional[str] = None
     report_markdown: str = ""
     cli_agent: Optional[str] = None
+    cli_model: Optional[str] = None
     conversation_id: Optional[str] = None
     git_snapshot: Optional[str] = None
 

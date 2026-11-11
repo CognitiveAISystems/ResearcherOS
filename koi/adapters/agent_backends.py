@@ -107,10 +107,14 @@ def _claude_ready() -> bool:
     return _claude_bin() is not None
 
 
-def _cursor_cli_ready() -> bool:
+def _cursor_cli_bin():
     from koi.literature.cursor_agent_terminal import find_agent_bin
 
-    return find_agent_bin() is not None
+    return find_agent_bin()
+
+
+def _cursor_cli_ready() -> bool:
+    return _cursor_cli_bin() is not None
 
 
 def _cursor_available() -> bool:
@@ -148,6 +152,7 @@ def run_codex_exec(
     on_started=None,
     mcp_args=(),
     mcp_env=None,
+    model: str | None = None,
 ) -> str | None:
     """Non-interactive вызов локального Codex CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -172,7 +177,7 @@ def run_codex_exec(
         str(output_path),
         "-",
     ]
-    model = os.environ.get("KOI_CODEX_MODEL", "").strip()
+    model = model or os.environ.get("KOI_CODEX_MODEL", "").strip()
     if model:
         cmd[2:2] = ["-m", model]
     # Research tasks need APIs and local preview servers inside the workspace.
@@ -220,6 +225,7 @@ def run_openrouter(
     cwd: Path | str | None = None,
     timeout: int = DEFAULT_TIMEOUT_S,
     allow_edits: bool = False,
+    model: str | None = None,
 ) -> str | None:
     """Вызов OpenRouter Chat Completions API; возвращает финальный текст или None."""
     _resolve_cwd(cwd)
@@ -228,7 +234,7 @@ def run_openrouter(
         return None
 
     payload = {
-        "model": os.environ.get("KOI_OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL).strip() or DEFAULT_OPENROUTER_MODEL,
+        "model": model or os.environ.get("KOI_OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL).strip() or DEFAULT_OPENROUTER_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -295,6 +301,7 @@ def run_claude_code(
     on_started=None,
     mcp_args=(),
     mcp_env=None,
+    model: str | None = None,
 ) -> str | None:
     """Headless-вызов Claude Code; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -302,7 +309,7 @@ def run_claude_code(
     if not bin_path:
         return None
     cmd = [bin_path, "-p", "--output-format", "text"]
-    model = os.environ.get("KOI_CLAUDE_MODEL", "").strip()
+    model = model or os.environ.get("KOI_CLAUDE_MODEL", "").strip()
     if model:
         cmd += ["--model", model]
     if allow_edits:
@@ -364,6 +371,7 @@ def run_cursor_sdk(
     on_event=None,
     is_cancelled=None,
     on_started=None,
+    model: str | None = None,
 ) -> str | None:
     """Вызов Cursor SDK; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -379,7 +387,7 @@ def run_cursor_sdk(
                 on_event(event)
             if event.get('type') == 'result':
                 answer = str(event.get('result') or '').strip()
-        command = _cursor_print_command(binary, mode=None if allow_edits else 'ask', force=allow_edits)
+        command = _cursor_print_command(binary, mode=None if allow_edits else 'ask', force=allow_edits, model=model)
         command += list(mcp_args)
         code = run_json(command, prompt, cwd=cwd, timeout=timeout, on_event=receive,
                         is_cancelled=is_cancelled, on_started=on_started, env=mcp_env)
@@ -396,7 +404,7 @@ def run_cursor_sdk(
             prompt,
             AgentOptions(
                 api_key=api_key,
-                model=os.environ.get("KOI_AGENT_CHAT_MODEL", "composer-2.5"),
+                model=model or os.environ.get("KOI_AGENT_CHAT_MODEL", "composer-2.5"),
                 local=LocalAgentOptions(cwd=str(cwd)),
             ),
         )
@@ -421,6 +429,7 @@ def run_opencode(
     on_started=None,
     mcp_args=(),
     mcp_env=None,
+    model: str | None = None,
 ) -> str | None:
     """Non-interactive вызов установленного OpenCode CLI; возвращает финальный текст или None."""
     cwd = _resolve_cwd(cwd)
@@ -428,7 +437,7 @@ def run_opencode(
     if not bin_path:
         return None
     cmd = [bin_path, "--standalone", "run"]
-    model = os.environ.get("KOI_OPENCODE_MODEL", "").strip()
+    model = model or os.environ.get("KOI_OPENCODE_MODEL", "").strip()
     if model:
         cmd += ["--model", model]
     cmd += ["--auto"] if allow_edits else ["--agent", DEFAULT_OPENCODE_READONLY_AGENT]
@@ -520,6 +529,53 @@ def cli_agents() -> list[dict]:
     ]
 
 
+_CLAUDE_MODELS = (("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"))
+# ponytail: список моделей кэшируется на время жизни процесса; новые модели видны после перезапуска.
+_MODEL_CACHE: dict[str, list[dict]] = {}
+
+
+def _list_command(cmd: list[str]) -> str:
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return proc.stdout if proc.returncode == 0 else ""
+
+
+def _probe_models(name: str) -> list[dict]:
+    if name == "claude":
+        return [{"id": slug, "label": label} for slug, label in _CLAUDE_MODELS] if _claude_bin() else []
+    if name == "codex" and (binary := _codex_bin()):
+        try:
+            rows = json.loads(_list_command([binary, "debug", "models"]) or "{}").get("models") or []
+        except (json.JSONDecodeError, AttributeError):
+            return []
+        return [{"id": row["slug"], "label": row.get("display_name") or row["slug"]}
+                for row in rows if isinstance(row, dict) and row.get("slug") and row.get("visibility", "list") == "list"]
+    if name == "cursor":
+        binary = _cursor_cli_bin()
+        out = []
+        for line in _list_command([str(binary), "models"]).splitlines() if binary else []:
+            slug, sep, label = line.strip().partition(" - ")
+            if sep and slug and " " not in slug:
+                out.append({"id": slug, "label": label.split(" (")[0].strip() or slug})
+        return out
+    if name == "opencode" and (binary := _opencode_bin()):
+        return [{"id": line.strip(), "label": line.strip()}
+                for line in _list_command([binary, "models"]).splitlines() if "/" in line and " " not in line.strip()]
+    return []
+
+
+def cli_models(name: str) -> list[dict]:
+    """Модели, которые CLI сам сообщает для этой учётной записи."""
+    if name not in _MODEL_CACHE:
+        models = _probe_models(name)
+        if not models:
+            return []
+        _MODEL_CACHE[name] = models
+    return _MODEL_CACHE[name]
+
+
 def acp_agents() -> list[dict]:
     """Агенты по протоколу ACP: видны только когда есть SDK и их программа."""
     if importlib.util.find_spec("acp") is None:
@@ -582,6 +638,7 @@ def run_agent(
     is_cancelled=None,
     on_started=None,
     delegation=None,
+    model: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Запустить агента первым доступным бэкендом.
 
@@ -600,6 +657,8 @@ def run_agent(
         if runner is None:
             continue
         extra: dict[str, object] = {"externally_sandboxed": True} if name == "codex" and externally_sandboxed else {}
+        if model:
+            extra["model"] = model
         if name in STREAMING_BACKENDS or (name == 'cursor' and delegation):
             if on_started is not None:
                 extra["on_started"] = on_started
