@@ -360,6 +360,87 @@ def test_restart_interrupts_cli_turn_and_keeps_history(state, monkeypatch, progr
     assert not chats.find(chat["id"])["pending"]
 
 
+def test_startup_interrupts_item_without_conversation_id(state, monkeypatch):
+    from api import main
+    from koi.adapters import project_discovery_watch, settings_store
+    from koi.projects import done_research_auto
+    from koi.agent_chat import setup_pipeline, git_changes
+    monkeypatch.setattr(git_changes, "start", lambda: None)
+    monkeypatch.setattr(settings_store, "load_env_file", lambda: None)
+    monkeypatch.setattr(project_discovery_watch, "start_project_discovery_watch", lambda: None)
+    monkeypatch.setattr(done_research_auto, "kick_recent", lambda: None)
+    monkeypatch.setattr(setup_pipeline, "resume_pending", lambda: None)
+    item = queue.enqueue_question("a", "Сирота")
+    queue.mark_processing(item["id"])
+    main._startup()
+    assert queue.find_item(item["id"])["status"] == "answered"
+    assert "Запуск прерван" in queue.find_item(item["id"])["answer"]
+
+
+def test_shutdown_interrupts_open_turns(state, monkeypatch):
+    from api import main
+    from koi.adapters import project_discovery_watch
+    from koi.agent_chat import git_changes
+    from koi.paper.collaboration import session as paper_session
+    monkeypatch.setattr(project_discovery_watch, "stop_project_discovery_watch", lambda: None)
+    monkeypatch.setattr(git_changes, "stop", lambda: None)
+    monkeypatch.setattr(paper_session, "shutdown_all_sessions", lambda: None)
+    chat = chats.create()
+    pending = queue.enqueue_question(None, "Продолжи", conversation_id=chat["id"])
+    queue.mark_processing(pending["id"])
+    main._shutdown()
+    assert queue.find_item(pending["id"])["status"] == "answered"
+    assert "Запуск прерван" in queue.find_item(pending["id"])["answer"]
+    assert not chats.find(chat["id"])["pending"]
+
+
+def test_cancel_dead_processing_releases_chat(state, monkeypatch):
+    from api.routers import agents
+    from koi.agent_chat import interrupt
+    monkeypatch.setattr(agents, "load_project", lambda *a, **kw: SimpleNamespace(boards=[]))
+    chat = chats.create("a")
+    item = queue.enqueue_question("a", "wait", conversation_id=chat["id"])
+    queue.mark_processing(item["id"])
+    monkeypatch.setattr(interrupt, "turn_alive", lambda _item: False)
+    assert agents.cancel_conversation(chat["id"])["ok"]
+    assert queue.find_item(item["id"])["status"] == "answered"
+    assert queue.find_item(item["id"])["answer"] == "Остановлено пользователем."
+    assert not chats.find(chat["id"])["pending"]
+    assert agents.get_conversation(chat["id"])["live"] is None
+
+
+def test_get_conversation_reclaims_dead_processing(state, monkeypatch):
+    from api.routers import agents
+    from koi.agent_chat import interrupt, live
+    monkeypatch.setattr(agents, "load_project", lambda *a, **kw: SimpleNamespace(boards=[]))
+    chat = chats.create("a")
+    item = queue.enqueue_question("a", "wait", conversation_id=chat["id"])
+    queue.mark_processing(item["id"])
+    live.publish(item["id"], "Уже начал.")
+    monkeypatch.setattr(interrupt, "turn_alive", lambda _item: False)
+    detail = agents.get_conversation(chat["id"])
+    answered = queue.find_item(item["id"])
+    assert answered["status"] == "answered"
+    assert answered["answer"].startswith("Уже начал.")
+    assert "Запуск прерван" in answered["answer"]
+    assert detail["live"] is None
+    assert not chats.find(chat["id"])["pending"]
+
+
+def test_live_for_hides_dead_processing(state, monkeypatch):
+    from koi.agent_chat import interrupt, live
+    chat = chats.create("a")
+    item = queue.enqueue_question("a", "wait", conversation_id=chat["id"])
+    queue.mark_processing(item["id"])
+    live.publish(item["id"], "текст")
+    assert interrupt.live_for(queue.find_item(item["id"]))["text"] == "текст"
+    monkeypatch.setattr(interrupt, "turn_alive", lambda _item: False)
+    assert interrupt.live_for(queue.find_item(item["id"])) is None
+    pending = queue.enqueue_question("a", "ещё", conversation_id=chat["id"])
+    # A waiting turn still exposes Stop via live snapshot.
+    assert interrupt.live_for(queue.find_item(pending["id"]))["item_id"] == pending["id"]
+
+
 def test_method_scope_includes_card_chats_but_not_other_methods(state, monkeypatch):
     from api.routers import agents
     board = SimpleNamespace(id="method", cards=[SimpleNamespace(id="card")])

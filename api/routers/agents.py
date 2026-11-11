@@ -120,10 +120,12 @@ def get_conversation(cid: str):
     from koi.agent_chat import research
     from koi.agent_chat import acp_client
     from koi.agent_chat import approvals
+    from koi.agent_chat.interrupt import live_for, reclaim_dead_turns
+    reclaim_dead_turns(conversation_id=cid)
     row = _conversation(cid)
     items = conversations.messages(cid)
     active = next((i for i in items if i["status"] != "answered"), None)
-    current_live = acp_client.snapshot(cid) or (live.snapshot(active) if active else None)
+    current_live = acp_client.snapshot(cid) or (live_for(active) if active else None)
     consent = approvals.snapshot(cid) if active else None
     if consent:
         current_live = {**(current_live or {}), **consent}
@@ -250,11 +252,13 @@ def cancel_conversation(cid: str):
 
 @_locked
 def _cancel_turn(item):
+    from koi.agent_chat.interrupt import turn_alive
     item = find_item(item["id"])
     if not item or item["status"] == "answered":
         return False
     live.request_cancel(item["id"])
-    if item["status"] == "pending":
+    # Pending always; processing only when the runner/owner is already gone.
+    if item["status"] == "pending" or not turn_alive(item):
         submit_answer(item["id"], "Остановлено пользователем.", answer_kind="warning")
     return True
 
@@ -415,12 +419,14 @@ def get_agent_chat_activity(project_id: str, board_id: str | None = None, card_i
 
 @router.get("/agent-chat")
 def get_agent_chat(project_id: str, board_id: str | None = None, card_id: str | None = None) -> dict:
+    from koi.agent_chat.interrupt import live_for, reclaim_dead_turns
     if load_project(project_id, sync_reports=False) is None:
         raise HTTPException(404, "Project not found")
+    reclaim_dead_turns()
     items = list_for_project(project_id, limit=10000, board_id=board_id, card_id=card_id)
     if card_id is None:
         items = [i for i in items if not i.get("card_id")][:30]
-    return {"items": [{**i, "live": live.snapshot(i)} for i in items]}
+    return {"items": [{**i, "live": live_for(i)} for i in items]}
 
 
 @router.patch("/agent-chat/{item_id}")

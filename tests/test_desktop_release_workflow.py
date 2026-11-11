@@ -101,6 +101,7 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
                 self.assertIn('https://example.org/build/1', notes)
                 self.assertIn('Claude Code доступен в чате и в окне «Новое дерево»', notes)
                 self.assertIn('можно выбрать не только агента, но и модель', notes)
+                self.assertIn('чат больше не зависает на «Агент отвечает…»', notes)
                 assets = self.root / 'built-installers'
                 for line in (assets / 'SHA256SUMS.txt').read_text().splitlines():
                     digest, filename = line.split('  ', 1)
