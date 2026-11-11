@@ -40,7 +40,7 @@ from koi.agent_chat.worker import (
     stop_agent_worker,
     worker_running,
 )
-from koi.adapters.agent_backends import backend_status, cli_agents
+from koi.adapters.agent_backends import backend_status, cli_agents, cli_models
 from koi.adapters.repository import load_project
 from koi.adapters.settings_store import (
     AGENT_CHAT_MODES,
@@ -218,7 +218,7 @@ def choose_conversation_context(cid: str, body: ConversationContextChoiceBody, b
             try:
                 post_agent_chat(AgentChatBody(
                     **scope.model_dump(), conversation_id=cid, question=item["question"],
-                    purpose=item.get("purpose", "agent"), cli_agent=row.get("backend"),
+                    purpose=item.get("purpose", "agent"), cli_agent=row.get("backend"), cli_model=row.get("model"),
                     method_id=method_id, node_id=method_id,
                 ), background_tasks)
             except Exception:
@@ -311,6 +311,13 @@ def get_agent_backends():
     return backend_status()
 
 
+@router.get("/agent/backends/{agent_id}/models")
+def get_agent_models(agent_id: str):
+    if not any(row["id"] == agent_id for row in cli_agents()):
+        raise HTTPException(404, "Агент не найден")
+    return {"models": cli_models(agent_id)}
+
+
 @router.post("/agent-chat")
 @_locked
 def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> dict:
@@ -326,12 +333,18 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
     if cid and any(i["status"] != "answered" for i in conversations.messages(cid)):
         raise HTTPException(409, "Дождитесь ответа в этом чате")
     cli_agent = getattr(body, "cli_agent", None) or (conversation or {}).get("backend") or None
+    cli_model = (getattr(body, "cli_model", None) if getattr(body, "cli_agent", None)
+                 else (conversation or {}).get("model")) or None
     git_chat = (conversation or {}).get("kind") == "git_sync"
     if cli_agent and not git_chat:
         row = next((agent for agent in cli_agents() if agent["id"] == cli_agent), None)
         if row is None or not row["available"]:
             label = row["label"] if row else cli_agent
             raise HTTPException(400, f"{label} сейчас недоступен. Проверьте, что CLI установлен.")
+        if cli_model and not any(m["id"] == cli_model for m in cli_models(cli_agent)):
+            raise HTTPException(400, f"Модель {cli_model} недоступна для {row['label']}.")
+    else:
+        cli_model = None
     if getattr(body, "card_id", None):
         project = load_project(body.project_id, sync_reports=False)
         board = next((b for b in project.boards if b.id == body.board_id), None)
@@ -352,6 +365,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
             card_id=getattr(body, "card_id", None),
             report_markdown=getattr(body, "report_markdown", ""),
             cli_agent=cli_agent,
+            cli_model=cli_model,
             **({"conversation_id": cid} if cid else {}),
             **({"git_snapshot": getattr(body, "git_snapshot", None)} if git_chat else {}),
         )
@@ -359,7 +373,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
         raise HTTPException(400, str(e)) from e
 
     if cid:
-        conversations.update(cid, backend=cli_agent, **({"title": body.question[:80]} if conversation["title"] == "Новый чат" else {}))
+        conversations.update(cid, backend=cli_agent, model=cli_model, **({"title": body.question[:80]} if conversation["title"] == "Новый чат" else {}))
     answered = False
     item = find_item(item["id"]) or item
 

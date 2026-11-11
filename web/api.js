@@ -607,6 +607,7 @@ export const KoiApi = {
   sendAgentQuestion: (body) =>
     api("/agent-chat", { method: "POST", body: JSON.stringify(body) }),
   getAgentBackends: () => api("/agent/backends"),
+  getAgentModels: (agentId) => api(`/agent/backends/${encodeURIComponent(agentId)}/models`),
   listConversations: (scope = {}) => api(`/agent-conversations?${new URLSearchParams(Object.entries(scope).filter(([, v]) => v != null))}`),
   createConversation: body => api("/agent-conversations", { method: "POST", body: JSON.stringify(body) }),
   moveConversation: (id, body) => api(`/agent-conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
