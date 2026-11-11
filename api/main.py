@@ -47,16 +47,10 @@ for router in (
 def _startup() -> None:
     from koi.adapters.project_discovery_watch import start_project_discovery_watch
     from koi.adapters.settings_store import load_env_file
+    from koi.agent_chat.interrupt import interrupt_open_turns
 
     load_env_file()
-    from koi.adapters.agent_chat_queue import _load, submit_answer
-    from koi.agent_chat import live, research
-    for item in _load():
-        if item.get("conversation_id") and item.get("status") in ("pending", "processing"):
-            if research.owns_live_turn(item["id"]):
-                continue
-            text = (live.text(item["id"]) + "\n\nЗапуск прерван перезапуском приложения. Продолжите работу новым сообщением.").strip()
-            submit_answer(item["id"], text, answer_kind="warning")
+    interrupt_open_turns()
     start_project_discovery_watch()
     from koi.agent_chat.git_changes import start as start_git_changes
 
@@ -71,6 +65,12 @@ def _startup() -> None:
 
 @app.on_event("shutdown")
 def _shutdown() -> None:
+    from koi.agent_chat.interrupt import interrupt_open_turns
+
+    try:
+        interrupt_open_turns()
+    except Exception:
+        pass
     from koi.adapters.project_discovery_watch import stop_project_discovery_watch
 
     stop_project_discovery_watch()

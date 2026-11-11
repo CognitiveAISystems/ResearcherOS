@@ -3276,11 +3276,12 @@ function renderReportInterview() {
     const answerBody = item.purpose === "grill_me" || item.purpose === "report_grill"
       ? formatReportGrillAnswer(text)
       : formatAgentChatReply(text);
+    const answering = Boolean(item.live) || item.streaming || item.acp_active;
     const answerHtml = item.status === "answered" || item.live?.text
       ? `<div class="agent-chat-reply${item.answer_kind === "warning" ? " agent-chat-reply--warning" : ""}">${answerBody}</div>`
       : stuck
         ? `<div class="agent-chat-reply agent-chat-reply--warning">Агент не ответил. Консоль закрыта или агент остановился. Напишите сообщение ещё раз.</div>`
-        : (isProcessing ? agentChatTypingHtml() : `<div class="agent-chat-reply agent-chat-reply--pending" role="status">${escapeHtml(agentChatPendingLabel(item))}</div>`);
+        : (isProcessing && answering ? agentChatTypingHtml() : `<div class="agent-chat-reply agent-chat-reply--pending" role="status">${escapeHtml(agentChatPendingLabel(item))}</div>`);
     article.innerHTML =
       `<div class="agent-chat-q-row">` +
       `<p class="agent-chat-q">${escapeHtml(item.question)}</p>` +
@@ -8047,12 +8048,13 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       const status = item.status || "pending";
       const pending = status !== "answered";
       const isProcessing = status === "processing";
+      const answering = Boolean(item.live) || item.streaming || item.acp_active;
       const isWarning = item.answer_kind === "warning";
       const pendingLabel = agentChatPendingLabel(item);
       let answerHtml;
       if (item.live?.text) {
         answerHtml = `<div class="agent-chat-reply">${formatAgentChatReply(item.live.text)}</div>`;
-      } else if (isProcessing) {
+      } else if (isProcessing && answering) {
         answerHtml = agentChatTypingHtml();
       } else if (pending) {
         answerHtml =
