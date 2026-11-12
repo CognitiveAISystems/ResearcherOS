@@ -1,0 +1,4 @@
+interface:
+  display_name: "Comet ML Report"
+  short_description: "Выгружает метрики Comet и строит графики экспериментов"
+  default_prompt: "Используй $koi-comet-report, чтобы выгрузить метрики указанных экспериментов Comet ML и собрать проверенные графики для отчёта."
