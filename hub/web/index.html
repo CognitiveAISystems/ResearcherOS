@@ -85,7 +85,39 @@
       </form>
     </div>
   </div>
+  <div id="hub-project-edit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="hub-project-edit-title">
+    <div class="modal-backdrop" data-close="hub-project-edit-modal"></div>
+    <div class="modal-panel modal-panel--narrow">
+      <button type="button" class="modal-close" data-action="close-project-edit-modal" aria-label="Закрыть">×</button>
+      <p class="modal-type">Мои проекты</p>
+      <h2 id="hub-project-edit-title">Настройки проекта</h2>
+      <form id="hub-project-edit-form" class="form">
+        <label>
+          Репозиторий
+          <input id="hub-project-edit-repo" type="text" readonly />
+        </label>
+        <label>
+          Ветка
+          <input id="hub-project-edit-branch" type="text" required />
+        </label>
+        <p id="hub-project-edit-branch-hint" class="modal-desc hidden">Hub начнёт читать существующую ветку. Ветки Git не создаются и не удаляются.</p>
+        <label>
+          Видимость
+          <select id="hub-project-edit-visibility">
+            <option value="public">Публичный</option>
+            <option value="network">Для сети подписчиков</option>
+            <option value="unlisted">По секретной ссылке</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+          <button type="button" class="btn" data-action="close-project-edit-modal">Отмена</button>
+        </div>
+        <p id="hub-project-edit-status" class="hub-status" aria-live="polite"></p>
+      </form>
+    </div>
+  </div>
   <script src="/static/hub-shell.js?v=21"></script>
-  <script src="/static/hub.js?v=21"></script>
+  <script src="/static/hub.js?v=22"></script>
 </body>
 </html>
