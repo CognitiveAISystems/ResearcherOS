@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+
+import certifi
 
 from koi.literature.library import _normalize_spaces, infer_year_from_arxiv_url
 
@@ -47,7 +50,9 @@ def _request_json(
         method="GET",
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        context = ssl.create_default_context()
+        context.load_verify_locations(cafile=certifi.where())
+        with urllib.request.urlopen(request, timeout=30, context=context) as response:
             body = response.read().decode("utf-8")
             headers = {k.lower(): v for k, v in response.headers.items()}
             return json.loads(body) if body else None, headers

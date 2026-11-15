@@ -99,8 +99,20 @@ def _openrouter_ready() -> bool:
     return bool(_openrouter_api_key())
 
 
+def _user_cli_bin(name: str, variable: str, *local_dirs: str) -> str | None:
+    configured = os.environ.get(variable, name)
+    found = shutil.which(configured)
+    if found or configured != name:
+        return found
+    for directory in local_dirs:
+        candidate = Path.home() / directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
 def _claude_bin() -> str | None:
-    return shutil.which(os.environ.get("KOI_CLAUDE_BIN", "claude"))
+    return _user_cli_bin("claude", "KOI_CLAUDE_BIN", ".local/bin")
 
 
 def _claude_ready() -> bool:
@@ -123,7 +135,7 @@ def _cursor_available() -> bool:
 
 
 def _opencode_bin() -> str | None:
-    return shutil.which(os.environ.get("KOI_OPENCODE_BIN", "opencode"))
+    return _user_cli_bin("opencode", "KOI_OPENCODE_BIN", ".opencode/bin", ".local/bin")
 
 
 def _opencode_ready() -> bool:
@@ -524,7 +536,7 @@ def backend_order() -> list[str]:
 def cli_agents() -> list[dict]:
     """Какие CLI реально есть на этой машине."""
     return [
-        {"id": name, "label": label, "available": _ready(name)}
+        {"id": name, "label": label, "available": _cursor_cli_ready() if name == "cursor" else _ready(name)}
         for name, label in CLI_AGENTS
     ]
 

@@ -73,6 +73,10 @@ def test_description_tree_brief_and_method_question(theme, source, failure, monk
             page = browser.new_page(viewport={'width': 1440, 'height': 1000})
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
+            page.route('**/agent/backends', lambda route: route.fulfill(json={'cli': [
+                {'id': 'codex', 'label': 'Codex', 'available': True},
+                {'id': 'cursor', 'label': 'Cursor', 'available': True},
+            ]}))
             page.route('**/api/desktop/onboarding/interview/**', route_api)
             page.route(f'http://127.0.0.1:{server.server_port}/', lambda route: route.fulfill(content_type='text/html', body='<html><head><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/desktop-onboarding.css"><link rel="stylesheet" href="/onboarding-interview.css"></head><body></body></html>'))
             page.goto(f'http://127.0.0.1:{server.server_port}/')

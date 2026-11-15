@@ -19,7 +19,7 @@ def find_agent_bin() -> Path | None:
     if found:
         return Path(found)
     fallback = Path.home() / ".local" / "bin" / "agent"
-    return fallback if fallback.is_file() else None
+    return fallback if fallback.is_file() and os.access(fallback, os.X_OK) else None
 
 
 def agent_terminal_shell(prompt_path: Path, cwd: Path, agent_bin: Path) -> str:

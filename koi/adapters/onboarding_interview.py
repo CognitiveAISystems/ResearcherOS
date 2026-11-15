@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import yaml
 
-from koi.adapters.agent_backends import run_agent
+from koi.adapters.agent_backends import CLI_AGENTS, run_agent
 from koi.adapters.desktop_onboarding import connect_git_project, inspect_git_project, new_tree_name
 from koi.adapters.desktop_workspace import application_support_dir
 from koi.adapters.project_mount import rescan_projects
@@ -146,8 +146,8 @@ def _cursor_cli_text(prompt: str, repo: Path) -> str | None:
     return text or None
 
 
-INTERVIEW_AGENTS = {"cursor": "Cursor", "codex": "Codex", "claude": "Claude"}
-AGENT_CHOICE_ERROR = "Выберите Cursor, Codex или Claude."
+INTERVIEW_AGENTS = dict(CLI_AGENTS)
+AGENT_CHOICE_ERROR = "Выберите агента: " + ", ".join(INTERVIEW_AGENTS.values()) + "."
 
 
 def _ask_agent(prompt: str, repo: Path, *, cli_agent: str = "cursor") -> dict[str, Any]:
