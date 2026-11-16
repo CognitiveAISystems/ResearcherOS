@@ -90,15 +90,44 @@ def diagnose(self_test=False):
             "passed": all(row["matches_expectation"] for row in rows), "cases": rows}
 
 
+def diagnose_real_cli(binary):
+    """No credentials: explicitly request the free model shown in the user's example."""
+    binary = str(binary.resolve())
+    version = subprocess.run([binary, '--version'], capture_output=True, encoding='utf-8', errors='replace', timeout=20)
+    flags = sorted(agent_backends._opencode_run_flags(binary))
+    rows = []
+    with tempfile.TemporaryDirectory(prefix='researcheros-real-opencode-') as directory:
+        root = Path(directory)
+        for size in (500, 28500):
+            prompt = 'Reply with just OK. The following whitespace is padding.\n' + ' ' * size
+            # The old onboarding path used plain output and unconditionally passed --standalone.
+            command = [binary, '--standalone', 'run', '--model', 'opencode/big-pickle', '--agent', 'plan', prompt]
+            try:
+                proc = subprocess.run(command, cwd=root, capture_output=True, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL, timeout=90)
+                rows.append({'path': 'old-onboarding', 'size': len(prompt), 'exit_code': proc.returncode,
+                             'stdout_tail': proc.stdout[-1200:], 'stderr_tail': proc.stderr[-1200:]})
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                rows.append({'path': 'old-onboarding', 'size': len(prompt), 'error': type(exc).__name__, 'winerror': getattr(exc, 'winerror', None)})
+            try:
+                with patch.object(agent_backends, '_opencode_bin', return_value=binary), patch.dict(os.environ, {'KOI_OPENCODE_ARGS': '', 'KOI_OPENCODE_MODEL': ''}):
+                    answer = agent_backends.run_opencode(prompt, cwd=root, model='opencode/big-pickle', timeout=90)
+                rows.append({'path': 'fixed-adapter', 'size': len(prompt), 'answer': answer})
+            except agent_backends.AgentBackendError as exc:
+                rows.append({'path': 'fixed-adapter', 'size': len(prompt), 'provider_error': str(exc)[:1200]})
+    return {'platform': platform.platform(), 'windows_executed': sys.platform == 'win32', 'version': version.stdout.strip(),
+            'supported_optional_flags': flags, 'scope': 'Real installed OpenCode, explicit opencode/big-pickle, no account credentials supplied', 'cases': rows}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--real-opencode", type=Path)
     args = parser.parse_args()
-    result = diagnose(args.self_test)
+    result = diagnose_real_cli(args.real_opencode) if args.real_opencode else diagnose(args.self_test)
     output = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(output + "\n", encoding="utf-8")
     print(output)
-    raise SystemExit(0 if result["passed"] else 1)
+    raise SystemExit(0 if result.get("passed", True) else 1)
