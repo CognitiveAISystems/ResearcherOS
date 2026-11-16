@@ -1,0 +1,32 @@
+name: Diagnose OpenCode Windows command transport
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/opencode-windows-diagnostic.yml
+      - scripts/diagnose-opencode-windows.py
+      - koi/adapters/agent_backends.py
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compare arguments, cmd wrapper, file and fixed adapter
+        shell: pwsh
+        run: python scripts/diagnose-opencode-windows.py --output "$env:RUNNER_TEMP/opencode-windows-result.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opencode-windows-diagnostic
+          path: ${{ runner.temp }}/opencode-windows-result.json
+          if-no-files-found: error
