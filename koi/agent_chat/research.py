@@ -226,6 +226,19 @@ def finish_coordinator(item_id, status, message):
 def _process_start(pid):
     import subprocess
     import sys
+    if sys.platform.startswith('linux'):
+        # A sandboxed agent can read procfs even when executing ps is denied.
+        # Boot id plus the kernel start tick distinguishes a live process from
+        # a later process that reused the same pid.
+        try:
+            with open(f'/proc/{pid}/stat', encoding='ascii') as stream:
+                fields = stream.read().rpartition(')')[2].split()
+            with open('/proc/sys/kernel/random/boot_id', encoding='ascii') as stream:
+                boot_id = stream.read().strip()
+            if boot_id and len(fields) > 19:
+                return f'linux:{boot_id}:{fields[19]}'
+        except (OSError, ValueError):
+            pass
     if sys.platform == 'darwin':
         # A sandboxed process can inspect itself, while spawning ps to inspect
         # its parent is denied. Read the same kernel birth time directly.
@@ -378,14 +391,18 @@ def delegation_prompt(run_id, agent_id):
     from pathlib import Path
     from koi.adapters.agent_backends import cli_agents
     return ('\n\nПодагенты ResearcherOS: для независимого критика или другой подзадачи '
-            'используй MCP-инструмент researcheros.spawn_agents, если он доступен. '
+            'используй MCP-инструмент mcp__researcheros__spawn_agents, если он доступен. '
+            'Точные имена: mcp__researcheros__spawn_agents, mcp__researcheros__list_agents, '
+            'mcp__researcheros__request_approval. В Codex с deferred tools сначала найди '
+            'этот namespace через доступный механизм поиска инструментов; не вызывай '
+            'list_mcp_resources вместо spawn_agents. '
             'Иначе вызови tool_commands.dispatch из engine_root с JSON на stdin. '
             'Это общий сервис ResearcherOS; не полагайся на встроенный сервис подагентов провайдера. '
             'Вложенные вызовы разрешены. Указывай parent_id из контекста. '
             'Для критика указывай readonly=true; не выдавай самопроверку за независимое ревью. '
             'Все участники, их статусы, журнал и результат видны в исходном чате. '
             'Если нужно явное согласие пользователя, в том числе после третьего FAIL '
-            'koi-prose-style, вызови researcheros.request_approval с вопросом в title '
+            'koi-prose-style, вызови mcp__researcheros__request_approval с вопросом в title '
             'и конкретными правками и замечаниями в details. Вызов ждёт ответа пользователя. '
             'Один текстовый вопрос не создаёт запрос согласования. '
             'Продолжай согласуемое действие только при approved=true; отказ, отмена '

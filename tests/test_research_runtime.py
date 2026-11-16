@@ -61,22 +61,26 @@ def test_cancelled_parent_prevents_launch(state):
     assert research.participants('chat-a')==[]
 
 
-def test_sandboxed_dispatch_requires_a_host(state, monkeypatch):
+def test_sandboxed_dispatch_without_host_falls_back_to_local(state, monkeypatch):
     run, tasks = state
     monkeypatch.setenv('CODEX_SANDBOX','seatbelt')
-    with pytest.raises(RuntimeError, match='host launcher'):
-        research_runtime.dispatch(run,tasks)
+    results = research_runtime.dispatch(run,tasks)
+    assert [row['status'] for row in results] == ['completed', 'completed']
 
 
 def test_sandboxed_client_dispatches_via_host_process(state):
     import json, subprocess
     run, tasks = state
     client = """
-import json,sys,os
+import json,sys,os,subprocess
 from pathlib import Path
 from koi.agent_chat import research,research_runtime
 research.PATH=Path(sys.argv[1])
 os.environ['CODEX_SANDBOX']='seatbelt'
+def deny_process_listing(*args,**kwargs):
+    raise PermissionError('Process listing is denied in the agent sandbox')
+subprocess.check_output=deny_process_listing
+research._process_start=lambda pid: ''
 request=json.load(sys.stdin)
 result=research_runtime.dispatch(request['run_id'],request['tasks'],timeout=10)
 print(json.dumps(result))
@@ -89,6 +93,16 @@ print(json.dumps(result))
     with research._db() as db:
         assert db.execute('SELECT count(*) FROM brokers').fetchone()[0]==0
         assert db.execute('SELECT status FROM dispatches').fetchone()[0]=='completed'
+
+
+def test_stale_broker_is_replaced_by_a_live_host(state):
+    run, tasks = state
+    with research._db() as db:
+        db.execute('INSERT OR REPLACE INTO brokers VALUES (?,?,?)', (run, 99999999, 'stale'))
+    with research_runtime.broker('aq-123'):
+        with research._db() as db:
+            host = db.execute('SELECT * FROM brokers WHERE run_id=?', (run,)).fetchone()
+        assert host['pid'] != 99999999
 
 
 def test_cancel_stops_actual_executor_groups_without_stopping_host(state):
