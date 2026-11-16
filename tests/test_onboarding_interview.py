@@ -308,6 +308,37 @@ def test_api_passes_claude_to_interview(repo, tmp_path, monkeypatch):
     assert calls == [{'cli_agent': 'claude'}]
 
 
+def test_selected_model_reaches_opencode(tmp_path, monkeypatch):
+    calls = []
+    def run(prompt, **kwargs):
+        calls.append(kwargs)
+        return '{"ok": true}', 'opencode'
+    monkeypatch.setattr(interview, 'run_agent', run)
+    assert interview._ask_agent('prompt', tmp_path, cli_agent='opencode', cli_model='opencode/big-pickle') == {'ok': True}
+    assert calls[0]['model'] == 'opencode/big-pickle'
+
+
+def test_api_provider_error_preserves_draft_and_can_retry_with_model(repo, tmp_path, monkeypatch):
+    from koi.adapters.agent_backends import AgentBackendError
+    calls = []
+    def run(prompt, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get('model') != 'opencode/big-pickle':
+            raise AgentBackendError('OpenCode: Model unavailable')
+        return json.dumps(reply()), 'opencode'
+    monkeypatch.setattr(interview, 'run_agent', run)
+    with TestClient(app) as client:
+        before = start(client, repo, tmp_path / 'research')
+        failed = client.post('/desktop/onboarding/interview/reply', json={'repo_path': str(repo), 'answer': 'Описание', 'cli_agent': 'opencode'})
+        assert failed.status_code == 400
+        assert 'Model unavailable' in failed.json()['detail']
+        resumed = start(client, repo, tmp_path / 'research')
+        assert resumed['messages'] == before['messages']
+        result = answer(client, repo, 'Описание', cli_agent='opencode', cli_model='opencode/big-pickle')
+    assert result['nodes']
+    assert calls[-1]['model'] == 'opencode/big-pickle'
+
+
 def test_cursor_failure_is_recoverable_without_silent_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(interview, '_cursor_cli_text', lambda *_: None)
     monkeypatch.setattr(interview, 'run_agent', lambda *_args, **_kwargs: pytest.fail('No fallback is allowed'))

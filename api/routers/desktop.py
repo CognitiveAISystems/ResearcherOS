@@ -59,6 +59,7 @@ class DesktopInterviewReplyBody(BaseModel):
     phase: str | None = None
     session_id: str | None = None
     cli_agent: str | None = None
+    cli_model: str | None = Field(default=None, max_length=300)
     node: dict | None = None
 
 
@@ -173,7 +174,7 @@ def post_start_interview(body: TreeInterviewStartBody) -> dict:
 @router.post("/desktop/onboarding/interview/reply")
 def post_interview_reply(body: DesktopInterviewReplyBody) -> dict:
     try:
-        return reply_interview(body.repo_path, body.answer, body.decision, branch=body.branch, phase=body.phase, session_id=body.session_id, cli_agent=body.cli_agent, node_payload=body.node)
+        return reply_interview(body.repo_path, body.answer, body.decision, branch=body.branch, phase=body.phase, session_id=body.session_id, cli_agent=body.cli_agent, cli_model=body.cli_model, node_payload=body.node)
     except (ValueError, InterviewError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
 
