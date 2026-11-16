@@ -93,6 +93,26 @@ def test_sandboxed_tool_without_host_fails_before_writing(context, monkeypatch):
         research_tools.request(run, 'view', {})
 
 
+def test_sandboxed_tool_uses_live_host_when_pid_is_invisible(context, monkeypatch):
+    from koi.agent_chat import research_runtime
+    run, project = context
+    marker = project.nodes[1].title
+    monkeypatch.setenv('CODEX_SANDBOX', 'seatbelt')
+    monkeypatch.setattr(research, '_process_start', lambda pid: '')
+
+    class Result:
+        def model_dump(self, **_):
+            return {'saved': marker}
+
+    def update_node(*args, **kwargs):
+        return Result()
+
+    monkeypatch.setattr(research_tools.commands, 'update_node', update_node)
+    with research_runtime.broker('aq-123'):
+        result = research_tools.request(run, 'update_node', {'node_id': 'method', 'title': 'Visible host'})
+    assert result == {'saved': marker}
+
+
 def test_unknown_run_and_operations_fail(context):
     run, project = context
     with pytest.raises(KeyError):
