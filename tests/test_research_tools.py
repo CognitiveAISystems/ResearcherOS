@@ -44,6 +44,7 @@ from pathlib import Path
 from koi.agent_chat import research,research_tools
 research.PATH=Path(sys.argv[1])
 os.environ['CODEX_SANDBOX']='seatbelt'
+research._process_start=lambda pid: ''
 if os.environ.get('RESEARCHOS_TEST_SEATBELT'):
     try:
         Path(sys.argv[5]).write_text('Forbidden direct write')
@@ -91,6 +92,33 @@ def test_sandboxed_tool_without_host_fails_before_writing(context, monkeypatch):
     monkeypatch.setattr(research_tools, 'perform', lambda *a: pytest.fail('Direct write attempted'))
     with pytest.raises(RuntimeError, match='host is unavailable'):
         research_tools.request(run, 'view', {})
+
+
+@pytest.mark.parametrize('holds_registry_lock', [False, True])
+def test_host_probe_survives_busy_project_worker(context, monkeypatch, holds_registry_lock):
+    import json
+    import threading
+    import time
+    from koi.agent_chat import research_runtime
+    run, project = context
+    busy = threading.Event()
+
+    def slow_operation(*args, **kwargs):
+        busy.set()
+        time.sleep(2)
+        return project if holds_registry_lock else {}
+
+    if holds_registry_lock:
+        monkeypatch.setattr(research_tools.repository, 'load_project', slow_operation)
+    else:
+        monkeypatch.setattr(research_tools, 'perform', slow_operation)
+    with research_runtime.broker('aq-123'):
+        with research._db() as db:
+            db.execute('INSERT INTO tool_requests VALUES (?,?,?,?,?)',
+                       ('slow', run, json.dumps({'operation': 'view', 'args': {}}), 'pending', ''))
+        if not holds_registry_lock:
+            assert busy.wait(timeout=3)
+        assert research_tools._host_probe(run)
 
 
 def test_unknown_run_and_operations_fail(context):

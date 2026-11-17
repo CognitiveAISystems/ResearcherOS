@@ -74,6 +74,16 @@ def test_normal_chat_nested_readonly_mcp_and_visibility(chat, max_parallel):
     assert research.continuation_run({**item, 'question': 'Продолжи'}) is None
 
 
+def test_codex_prompt_names_exact_deferred_mcp_tools(chat):
+    _, (run, parent), _ = chat
+    prompt = research.delegation_prompt(run, parent)
+    assert 'mcp__researcheros__spawn_agents' in prompt
+    assert 'mcp__researcheros__list_agents' in prompt
+    assert 'mcp__researcheros__request_approval' in prompt
+    assert 'deferred tools' in prompt
+    assert 'list_mcp_resources вместо spawn_agents' in prompt
+
+
 def test_parallel_dispatches_share_the_run_concurrency_limit(chat, monkeypatch):
     import threading
     import time
