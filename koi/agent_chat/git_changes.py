@@ -42,7 +42,7 @@ ACTIONS = {
 }
 CONFLICT_ACTIONS = {"Объединить с локальными вариантами": "merge_ours",
                     "Объединить с входящими вариантами": "merge_theirs"}
-NOTICE_VERSION = 3
+NOTICE_VERSION = 5
 HELP = "Сохранить и отправить изменения? Напишите в чат, если нужно."
 REVIEW_FAILED = "Агент не смог разобрать изменения. Напишите «проверь изменения», чтобы повторить."
 POLICY = """Ты агент ResearcherOS в чате изменений исследования. Работай только с
@@ -131,7 +131,7 @@ def snapshot(mount):
     ref = sync._run_git(cwd, "rev-parse", "--verify", f"refs/remotes/origin/{mount.git_sync_branch}")
     remote = ref.stdout.strip() if ref.returncode == 0 else None
     ahead, behind = sync._ahead_behind(cwd, head, remote)
-    digest = hashlib.sha256(json.dumps([head, remote, branch, safe_status], ensure_ascii=False).encode())
+    digest = hashlib.sha256(json.dumps([NOTICE_VERSION, head, remote, branch, safe_status], ensure_ascii=False).encode())
     for name in files:
         path = cwd / name
         digest.update(name.encode())
@@ -151,6 +151,20 @@ def snapshot(mount):
             "remote": remote, "ahead": ahead, "behind": behind,
             "branch": branch, "merging": merging, "dirty": bool(status.stdout)}
     state["facts"] = _facts(mount, state)
+    from .git_selection import units
+    local = units(mount, files, head, None, state["facts"]["outgoing"]["cards"])
+    common = state["facts"]["base"]
+    incoming = units(mount, _names_between(cwd, common, remote, root), common, remote,
+                     state["facts"]["incoming"].get("cards", {})) if behind else []
+    marker = "refs/researchos/card-sync/" + mount.git_sync_branch
+    approved = (remote and (not ahead or
+        (sync._run_git(cwd, "rev-parse", "--verify", marker).stdout.strip() == head and
+         sync._run_git(cwd, "rev-parse", "--verify", marker + "-base").stdout.strip() == remote)))
+    commits = _git(cwd, "log", "--format=%s", f"{remote}..{head}").splitlines() if approved and ahead else []
+    state["panel"] = dict(version=5, outgoing=local, incoming=incoming, commits=commits, behind=behind,
+                          history_blocked=not approved,
+                          authors=state["facts"]["authors"], dirty=state["dirty"], merging=merging,
+                          wrong_branch=branch != mount.git_sync_branch)
     return state
 
 
@@ -237,7 +251,7 @@ def _facts(mount, state):
         result = sync._run_git(cwd, "log", "--format=%an", f"{state['head']}..{state['remote']}")
         authors = list(dict.fromkeys(name.strip() for name in result.stdout.splitlines() if name.strip()))
     fraction = _paper_fraction(cwd, base, state["head"], outgoing_names)
-    return {"outgoing": outgoing, "incoming": incoming, "authors": authors,
+    return {"base": base, "outgoing": outgoing, "incoming": incoming, "authors": authors,
             "paper_fraction": fraction, "offer": bool(outgoing["done"] or fraction > .2 + 1e-9)}
 
 
@@ -294,23 +308,13 @@ def _bullets(facts, done_events=None):
 
 
 def _summary(state, done_events=None):
-    facts = state["facts"]
+    panel = state["panel"]
     lines = []
-    if state["behind"]:
-        authors = ", ".join(facts["authors"][:3]) or "коллеги"
-        lines.append(f"Новый коммит от {authors}." if state["behind"] == 1 else f"Новые коммиты от {authors}.")
-        lines.extend(_bullets(facts["incoming"]))
-    if state["files"] or state["ahead"]:
-        if lines:
-            lines.append("")
-        lines.append("Изменения в исследовании." if state["files"] else "Изменения готовы к отправке.")
-        cards = facts["outgoing"]["cards"]
-        done = {key: title for key, title in (done_events or {}).items() if cards.get(key, {}).get("column") == "done"}
-        lines.extend(_bullets(facts["outgoing"], done))
-        if _offer(state, done):
-            lines.append("")
-            lines.append(HELP)
-    return "\n".join(lines) or "Новых изменений нет."
+    for direction, title in (("incoming", "Входящие изменения"), ("outgoing", "Изменения карточек")):
+        if panel[direction]:
+            lines.append(title + (": " + ", ".join(panel["authors"]) if direction == "incoming" else ""))
+            lines.extend(f'- {row["label"]}. {row["title"]}. {row["detail"]}' for row in panel[direction])
+    return "\n".join(lines) or "Новых изменений карточек нет."
 
 
 def _chat(mount):
@@ -322,22 +326,20 @@ def _chat(mount):
 @queue._locked
 def notify(mount, state, *, force=False, done_events=None):
     """Persist the event before waking an agent. Never change research files."""
+    conversations.ensure_git_chats([mount.project_id])
     chat = _chat(mount)
     if chat and (chat.get("git_seen") == state["token"] and chat.get("git_digest_version") == NOTICE_VERSION and not force or chat.get("pending")):
         return None
-    if not (state["files"] or state["ahead"] or state["behind"] or state["merging"]):
+    if not (state["panel"]["outgoing"] or state["panel"]["commits"] or state["behind"] or state["merging"]):
         if chat:
-            conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"], git_actions=[],
+            conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"], git_panel=state["panel"], git_actions=[],
                                  git_proposal=None, git_digest_version=NOTICE_VERSION)
         return None
-    if not chat:
-        chat = conversations.create(mount.project_id, title="Изменения исследования")
-        conversations.update(chat["id"], kind="git_sync")
     item = queue.enqueue_question(mount.project_id,
         "Проверь и поясни изменения исследования.", purpose="git_notice",
         conversation_id=chat["id"], git_snapshot=state["token"],
         git_notice_version=NOTICE_VERSION)
-    conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"], git_conflicts=None,
+    conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"], git_panel=state["panel"], git_conflicts=None,
                          git_actions=[], git_summary=_summary(state, done_events),
                          git_done_events=done_events or {}, git_digest_version=NOTICE_VERSION,
                          git_proposal=None)
@@ -350,31 +352,10 @@ def _execute(mount, state, action):
         return "Операция остановлена: открыта другая ветка. Подключите исследовательскую ветку в отдельном рабочем каталоге."
     if state["merging"]:
         return "В дереве есть незавершённое слияние. Сначала выберите содержимое конфликтующих файлов и завершите его."
-    if action == "commit_push":
-        if state["files"]:
-            _execute(mount, state, "commit")
-        try:
-            result = _execute(mount, snapshot(mount), "push")
-        except RuntimeError:
-            return "Коммит сохранён, но отправка не удалась. Проверьте подключение и входящие изменения."
-        return "Изменения сохранены и отправлены." if result == "Коммиты отправлены в Git." else result
-    if action == "commit":
-        if not state["files"]:
-            return "Нет изменений для коммита."
-        # --only keeps unrelated staged files out of this commit.
-        _git(cwd, "add", "-A", "--", *state["files"])
-        _git(cwd, "commit", "--only", "-m", f"research({mount.project_id}): save research changes", "--", *state["files"])
-        return "Сохранён коммит."
-    if action == "push":
-        if state["dirty"]:
-            return ("Сначала сохраните изменения коммитом. Отправка не выполнялась." if state["files"] else
-                    "Есть локальные изменения, не показанные в сводке. Проверьте их перед слиянием или отправкой.")
-        if state["remote"] and not state["ahead"]:
-            return "Нет неотправленных коммитов."
-        _git(cwd, "push", "origin", f"HEAD:refs/heads/{mount.git_sync_branch}")
-        from koi.adapters.project_sync_queue import dequeue_push
-        dequeue_push(mount.project_id)
-        return "Коммиты отправлены в Git."
+    if action in ("commit", "commit_push", "push"):
+        from .git_selection import send
+        selected = [r["id"] for r in state["panel"]["outgoing"]] if action != "push" else []
+        return send(mount, state, selected, commit_only=action == "commit")
     if state["dirty"]:
         return ("Сначала сохраните изменения коммитом. Слияние не выполнялось." if state["files"] else
                 "Есть локальные изменения, не показанные в сводке. Проверьте их перед слиянием или отправкой.")
@@ -448,11 +429,13 @@ def process(item):
                 raise RuntimeError("Дерево больше не подключено к рабочему пространству.")
             chat = conversations.find(item["conversation_id"])
             action = action_for(item["question"]) if item["purpose"] == "git_chat" else None
+            if item.get("git_selection") is not None:
+                action = "selected_push"
             if not action and item["purpose"] == "git_chat" and item["question"].strip().lower().rstrip(".!?") in {"да", "давай", "да, давай", "согласна", "согласен"}:
                 action = chat.get("git_proposal")
-            if action in ("review", "merge", "push", "commit_push", *CONFLICT_ACTIONS.values()):
+            if action in ("review", "merge", "push", "commit_push", "selected_push", *CONFLICT_ACTIONS.values()):
                 fetched = sync._fetch_branch(mount.repo_root, mount.git_sync_branch)
-                if fetched.returncode and action not in ("push", "commit_push"):
+                if fetched.returncode and action not in ("push", "commit_push", "selected_push"):
                     raise RuntimeError("Не удалось получить актуальную ветку из Git. Проверьте подключение и повторите поручение.")
             state = snapshot(mount)
             done_events = chat.get("git_done_events") or {}
@@ -464,7 +447,11 @@ def process(item):
                     answer = "Сначала выберите «Объединить изменения». Если возникнут конфликты, появятся варианты их разрешения."
                 else:
                     try:
-                        answer = _execute(mount, state, action)
+                        if action == "selected_push":
+                            from .git_selection import send
+                            answer = send(mount, state, item["git_selection"])
+                        else:
+                            answer = _execute(mount, state, action)
                     except MergeConflict as exc:
                         conflict_token = state["token"]
                         answer = str(exc)
@@ -474,8 +461,8 @@ def process(item):
                 if conflict_token != state["token"]:
                     conflict_token = None
                 conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"],
-                    git_summary=_summary(state, done_events), git_conflicts=conflict_token, git_done_events=done_events,
-                    git_actions=[],
+                    git_panel=state["panel"], git_summary=_summary(state, done_events), git_conflicts=conflict_token, git_done_events=done_events,
+                    git_actions=[], git_retry=(answer == "Коммит сохранён. Отправка не удалась."),
                     git_proposal=None)
                 queue.submit_answer(item["id"], answer)
                 if "Появились новые правки" in answer:
@@ -483,14 +470,14 @@ def process(item):
                     request_check(mount.project_id, done_events)
                 return True
             summary = _summary(state, done_events)
-            conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"], git_summary=summary,
+            conversations.update(chat["id"], git_seen=state["token"], git_snapshot=state["token"], git_panel=state["panel"], git_summary=summary,
                                  git_proposal=None)
-            details = _diff(mount, state)
-            can_offer = _offer(state, done_events)
+            details = _diff(mount, state) if action == "diff" else summary
+            can_offer = bool(state["panel"]["outgoing"]) and not state["panel"]["history_blocked"]
             proposal = None
-            if state["behind"] and not state["dirty"]:
+            if state["behind"] and not state["dirty"] and not state["ahead"]:
                 proposal = "merge"
-            elif can_offer:
+            elif can_offer and not state["behind"] and len(state["panel"]["outgoing"]) <= 1:
                 proposal = "commit_push" if state["files"] else "push"
         if item["purpose"] == "git_notice" or action == "review":
             prompt = POLICY + "\n" + NOTICE_POLICY + "\n\n" + json.dumps({
@@ -499,10 +486,6 @@ def process(item):
             if not answer:
                 raise RuntimeError(REVIEW_FAILED)
             if proposal:
-                invitation = {"commit_push": HELP,
-                              "push": "Отправить сохранённые изменения? Напишите в чат, если нужно.",
-                              "merge": "Объединить входящие изменения? Напишите в чат, если нужно."}[proposal]
-                answer += "\n\n" + invitation
                 conversations.update(chat["id"], git_proposal=proposal)
         elif action == "diff":
             answer = summary + "\n\n```diff\n" + details + "\n```"

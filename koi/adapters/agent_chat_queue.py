@@ -55,6 +55,7 @@ class AgentChatItem(TypedDict, total=False):
     conversation_id: Optional[str]
     context_suggestions: Optional[dict]
     card_links: list[dict]
+    git_selection: Optional[list[str]]
     git_snapshot: Optional[str]
     git_notice_version: Optional[int]
 
@@ -105,6 +106,7 @@ def _normalize(item: dict) -> AgentChatItem:
         "conversation_id": item.get("conversation_id"),
         "context_suggestions": item.get("context_suggestions"),
         "card_links": item.get("card_links", []),
+        "git_selection": item.get("git_selection"),
         "git_snapshot": item.get("git_snapshot"),
         "git_notice_version": item.get("git_notice_version"),
     }
@@ -155,6 +157,7 @@ def enqueue_question(
     cli_agent: Optional[str] = None,
     cli_model: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    git_selection: Optional[list[str]] = None,
     git_snapshot: Optional[str] = None,
     git_notice_version: Optional[int] = None,
 ) -> AgentChatItem:
@@ -166,6 +169,7 @@ def enqueue_question(
         "id": f"aq-{uuid4().hex[:10]}",
         "project_id": project_id,
         "conversation_id": conversation_id,
+        "git_selection": git_selection,
         "git_snapshot": git_snapshot,
         "git_notice_version": git_notice_version,
         "question": text,

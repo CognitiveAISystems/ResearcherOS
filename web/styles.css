@@ -18782,3 +18782,24 @@ button.kb-doc {
 
 .report-table-scroll { max-width: 100%; max-height: min(65vh, 640px); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .modal-panel--report .report-table-grid textarea { field-sizing: content; height: auto; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.git-request {
+  margin: 12px 0;
+  padding: 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border, #d9d5e4);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.git-request h3 { font-size: 1rem; margin: 0 0 8px; }
+.git-request p, .git-request small { font-size: .875rem; color: var(--muted, #666174); }
+.git-request ul { padding: 0; list-style: none; }
+.git-request li { display: flex; align-items: baseline; gap: 8px; margin-block: 8px; }
+.git-request small { display: block; }
+.git-request input { accent-color: var(--purple); }
+.git-request a { color: var(--purple); }
+
+.git-selection-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 12px; }
+
+.git-sync-progress { display: grid; gap: 10px; }
+.git-sync-progress progress { width: 100%; height: 6px; accent-color: var(--purple); }

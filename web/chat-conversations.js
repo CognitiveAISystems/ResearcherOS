@@ -310,6 +310,7 @@ export class ChatConversations {
       this.row = this.rows.find(r => r.id === this.row.id) || this.row;
       const detail = await this.api.getConversation(this.row.id);
       if (epoch !== this.epoch || scopeKey !== JSON.stringify(this.scope()) || detail.conversation.id !== this.row?.id || !this.acceptsScope(detail.conversation)) return null;
+      this.row = detail.conversation;
       this.renderParticipants(detail.participants || []);
       this.render(detail.live);
       return detail;
@@ -581,11 +582,11 @@ export class ChatConversations {
         const name = document.createElement("span"); name.textContent = pid ? ((this.projects || []).find(p => p.id === pid)?.title || this.projectName(pid)) : "Без проекта";
         summary.append(icon("folder"), name); group.append(summary);
         const items = document.createElement("div"); items.className = "conversation-group-items";
-        for (const row of rows) items.append(this.entry(row));
+        for (const row of rows.sort((a, b) => Number(b.kind === "git_sync") - Number(a.kind === "git_sync"))) items.append(this.entry(row));
         group.append(items); this.sidebar.append(group);
       }
     } else {
-      for (const row of this.rows) this.sidebar.append(this.entry(row));
+      for (const row of [...this.rows].sort((a, b) => Number(b.kind === "git_sync") - Number(a.kind === "git_sync"))) this.sidebar.append(this.entry(row));
     }
     if (!this.rows.length) {
       const empty = document.createElement("p"); empty.className = "conversation-list-empty";
@@ -712,7 +713,7 @@ export class ChatConversations {
     }
     button.append(icon(row.card_id ? "card" : "chat"), text);
     const dot = document.createElement('span'); dot.className = 'chat-status-dot'; dot.setAttribute('aria-hidden', 'true'); button.append(dot);
-    if (!this.api.deleteConversation) return button;
+    if (!this.api.deleteConversation || row.kind === "git_sync") return button;
     const wrapper = document.createElement('div'); wrapper.className = 'conversation-entry-row';
     const quick = document.documentElement.dataset.appVariant === 'quick';
     const trigger = quick ? button : document.createElement('button');

@@ -363,7 +363,7 @@ export class ResearchChatNavigation {
     const group = this.groups().find(g => g.id === this.groupId);
     if (this.addButton) this.addButton.hidden = !group || Boolean(this.query.trim());
     const rows = this.visibleRows(controller.rows).filter(r => conversationDisplayTitle(r.title).toLocaleLowerCase().includes(this.query.toLocaleLowerCase()));
-    rows.sort((a, b) => (Date.parse(b.updated_at || b.created_at) || 0) - (Date.parse(a.updated_at || a.created_at) || 0));
+    rows.sort((a, b) => Number(b.kind === "git_sync") - Number(a.kind === "git_sync") || (Date.parse(b.updated_at || b.created_at) || 0) - (Date.parse(a.updated_at || a.created_at) || 0));
     const entries = this.host.querySelector('.research-chat-entries');
     const signature = JSON.stringify([group, this.tree?.id, controller.contextScope, rows, controller.row?.id, this.query, new Date().toDateString()]);
     if (signature === this.entriesSignature) return;
