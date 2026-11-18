@@ -2404,6 +2404,14 @@ body.hub-readonly .project-list__pull {
 }
 
 /* —— Floating workspace dock (Figma-style) —— */
+/* Floating widgets share the workspace layer so they cannot cover its dock. */
+#koi-widgets-root {
+  position: absolute;
+  z-index: 12;
+  width: 0;
+  height: 0;
+}
+
 .workspace-dock {
   position: absolute;
   bottom: 0.85rem;
