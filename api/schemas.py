@@ -212,6 +212,7 @@ class AgentChatBody(BaseModel):
     cli_agent: Optional[str] = None
     cli_model: Optional[str] = None
     conversation_id: Optional[str] = None
+    git_selection: Optional[list[str]] = None
     git_snapshot: Optional[str] = None
 
 
@@ -247,7 +248,7 @@ class CursorApiKeyBody(BaseModel):
 
 
 class AgentChatSettingsBody(BaseModel):
-    ui_variant: Optional[Literal["chats", "quick", "light"]] = None
+    ui_variant: Optional[Literal["quick"]] = None
     chat_panel_width: Optional[int] = Field(default=None, ge=280, le=10000)
     chat_list_main_width: Optional[int] = Field(default=None, ge=160, le=440)
     chat_list_card_width: Optional[int] = Field(default=None, ge=160, le=440)

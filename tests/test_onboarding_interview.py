@@ -268,15 +268,16 @@ def test_selected_codex_does_not_try_other_backends(tmp_path, monkeypatch):
     assert calls[0]['backend'] == 'codex' and calls[0]['timeout'] == 120
 
 
-def test_selected_claude_runs_headless_read_only_and_skips_other_backends(tmp_path, monkeypatch):
+@pytest.mark.parametrize('agent', ['claude', 'codex', 'opencode'])
+def test_selected_claude_runs_headless_read_only_and_skips_other_backends(tmp_path, monkeypatch, agent):
     calls = []
     monkeypatch.setattr(interview, '_cursor_cli_text', lambda *_: pytest.fail('Cursor must not run'))
     def run(prompt, **kwargs):
         calls.append(kwargs)
         return '{"ok":true}', 'Claude'
     monkeypatch.setattr(interview, 'run_agent', run)
-    assert interview._ask_agent('prompt', tmp_path, cli_agent='claude') == {'ok': True}
-    assert calls[0]['backend'] == 'claude' and calls[0]['allow_edits'] is False and calls[0]['timeout'] == 120
+    assert interview._ask_agent('prompt', tmp_path, cli_agent=agent) == {'ok': True}
+    assert calls[0]['backend'] == agent and calls[0]['allow_edits'] is False and calls[0]['timeout'] == 120
 
 
 def test_claude_failure_names_claude_and_does_not_fall_back(tmp_path, monkeypatch):
@@ -286,7 +287,7 @@ def test_claude_failure_names_claude_and_does_not_fall_back(tmp_path, monkeypatc
         interview._ask_agent('prompt', tmp_path, cli_agent='claude')
 
 
-@pytest.mark.parametrize('agent', ['opencode', 'gemini', ''])
+@pytest.mark.parametrize('agent', ['gemini', ''])
 def test_agent_outside_the_interview_list_is_rejected(tmp_path, monkeypatch, agent):
     monkeypatch.setattr(interview, 'run_agent', lambda *_args, **_kwargs: pytest.fail('Unknown agents must not run'))
     with pytest.raises(interview.InterviewError, match='Claude'):
@@ -305,6 +306,37 @@ def test_api_passes_claude_to_interview(repo, tmp_path, monkeypatch):
         start(client, repo, tmp_path / 'research')
         answer(client, repo, 'Описание и выбранный метод', cli_agent='claude')
     assert calls == [{'cli_agent': 'claude'}]
+
+
+def test_selected_model_reaches_opencode(tmp_path, monkeypatch):
+    calls = []
+    def run(prompt, **kwargs):
+        calls.append(kwargs)
+        return '{"ok": true}', 'opencode'
+    monkeypatch.setattr(interview, 'run_agent', run)
+    assert interview._ask_agent('prompt', tmp_path, cli_agent='opencode', cli_model='opencode/big-pickle') == {'ok': True}
+    assert calls[0]['model'] == 'opencode/big-pickle'
+
+
+def test_api_provider_error_preserves_draft_and_can_retry_with_model(repo, tmp_path, monkeypatch):
+    from koi.adapters.agent_backends import AgentBackendError
+    calls = []
+    def run(prompt, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get('model') != 'opencode/big-pickle':
+            raise AgentBackendError('OpenCode: Model unavailable')
+        return json.dumps(reply()), 'opencode'
+    monkeypatch.setattr(interview, 'run_agent', run)
+    with TestClient(app) as client:
+        before = start(client, repo, tmp_path / 'research')
+        failed = client.post('/desktop/onboarding/interview/reply', json={'repo_path': str(repo), 'answer': 'Описание', 'cli_agent': 'opencode'})
+        assert failed.status_code == 400
+        assert 'Model unavailable' in failed.json()['detail']
+        resumed = start(client, repo, tmp_path / 'research')
+        assert resumed['messages'] == before['messages']
+        result = answer(client, repo, 'Описание', cli_agent='opencode', cli_model='opencode/big-pickle')
+    assert result['nodes']
+    assert calls[-1]['model'] == 'opencode/big-pickle'
 
 
 def test_cursor_failure_is_recoverable_without_silent_fallback(tmp_path, monkeypatch):

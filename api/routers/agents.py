@@ -80,6 +80,10 @@ def get_conversations(project_id: str | None = None, board_id: str | None = None
         raise HTTPException(400, "Project required")
     if project_id:
         _check_scope(project_id, board_id, card_id)
+    if not board_id and not card_id:
+        from koi.adapters.project_mount import list_mounts
+        conversations.ensure_git_chats(m.project_id for m in list_mounts()
+                                       if not project_id or m.project_id == project_id)
     return {"items": [row for row in conversations.list_conversations(project_id, board_id, card_id)
                       if row.get("kind") not in ("literature", "morphology", "morphology_explain")]}
 
@@ -123,6 +127,19 @@ def get_conversation(cid: str):
     from koi.agent_chat.interrupt import live_for, reclaim_dead_turns
     reclaim_dead_turns(conversation_id=cid)
     row = _conversation(cid)
+    if row.get("kind") == "git_sync" and (row.get("git_panel") or {}).get("version") != 5:
+        from koi.agent_chat import git_changes
+        mount = git_changes.get_mount(row["project_id"])
+        if mount and mount.git_sync_branch:
+            try:
+                with git_changes.LOCK:
+                    state = git_changes.snapshot(mount)
+                    row.update(git_snapshot=state["token"], git_panel=state["panel"])
+                    conversations.update(cid, git_snapshot=state["token"], git_panel=state["panel"])
+            except (RuntimeError, OSError, ValueError):
+                row["git_error"] = "Не удалось проверить состояние Git."
+        else:
+            row["git_error"] = "Для дерева не настроена синхронизация Git."
     items = conversations.messages(cid)
     active = next((i for i in items if i["status"] != "answered"), None)
     current_live = acp_client.snapshot(cid) or (live_for(active) if active else None)
@@ -145,6 +162,8 @@ def get_research_participant(cid: str, agent_id: str):
 
 @router.delete("/agent-conversations/{cid}")
 def delete_conversation(cid: str):
+    if (conversations.find(cid) or {}).get("kind") == "git_sync":
+        raise HTTPException(409, "Чат синхронизации закреплён за деревом.")
     try:
         item_ids = conversations.delete(cid)
     except KeyError:
@@ -371,7 +390,7 @@ def post_agent_chat(body: AgentChatBody, background_tasks: BackgroundTasks) -> d
             cli_agent=cli_agent,
             cli_model=cli_model,
             **({"conversation_id": cid} if cid else {}),
-            **({"git_snapshot": getattr(body, "git_snapshot", None)} if git_chat else {}),
+            **({"git_snapshot": getattr(body, "git_snapshot", None), "git_selection": getattr(body, "git_selection", None)} if git_chat else {}),
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

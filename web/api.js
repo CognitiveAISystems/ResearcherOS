@@ -1,3 +1,5 @@
+import { installedAgentStatus } from "./cli-install-dialog.js";
+
 /** API base URL: same port via /api proxy (koi_web_proxy.py), else direct :8010. */
 export function apiBase() {
   if (typeof window !== "undefined" && window.__KOI_API_BASE__) {
@@ -606,7 +608,7 @@ export const KoiApi = {
     ),
   sendAgentQuestion: (body) =>
     api("/agent-chat", { method: "POST", body: JSON.stringify(body) }),
-  getAgentBackends: () => api("/agent/backends"),
+  getAgentBackends: () => installedAgentStatus(() => api("/agent/backends")),
   getAgentModels: (agentId) => api(`/agent/backends/${encodeURIComponent(agentId)}/models`),
   listConversations: (scope = {}) => api(`/agent-conversations?${new URLSearchParams(Object.entries(scope).filter(([, v]) => v != null))}`),
   createConversation: body => api("/agent-conversations", { method: "POST", body: JSON.stringify(body) }),

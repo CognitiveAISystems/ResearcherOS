@@ -114,7 +114,7 @@ def test_no_automatic_git_scan_for_ordinary_edits_before_local_18(tree, monkeypa
 
 def test_local_18_check_catches_up_after_closed_app_and_runs_once(tree, monkeypatch):
     mount, _ = tree
-    (mount.koi_root / "project.md").write_text("Edited setup\n")
+    (mount.koi_root / "project.md").write_text(card_document("running"))
     calls = []
     monkeypatch.setattr(changes.sync, "_fetch_branch", lambda *_a: calls.append(True))
     local = timezone(timedelta(hours=9))
@@ -131,7 +131,7 @@ def test_local_18_check_catches_up_after_closed_app_and_runs_once(tree, monkeypa
 def test_missed_evening_check_catches_up_on_next_morning_launch(tree, monkeypatch):
     mount, _ = tree
     changes._save_schedule({"last_daily": "2026-10-25"})
-    (mount.koi_root / "project.md").write_text("Edited while app was closed\n")
+    (mount.koi_root / "project.md").write_text(card_document("running"))
     calls = []
     monkeypatch.setattr(changes.sync, "_fetch_branch", lambda *_a: calls.append(True))
     items = changes.scan_once(now=datetime(2026, 10, 27, 9))
@@ -267,7 +267,7 @@ def test_notice_is_reviewed_by_agent_before_any_offer(tree, monkeypatch):
     answer = conversations.messages(chat["id"])[0]["answer"]
     assert calls and answer.startswith("Завершена проверка сокращения памяти.")
     assert chat["git_proposal"] == "commit_push"
-    assert "Напишите в чат" in answer
+    assert chat["git_panel"]["outgoing"][0]["card"] == "b/c-memory"
 
 
 def test_automatic_notice_uses_available_reviewer_without_changing_human_chat_preference(tree):
@@ -544,3 +544,78 @@ def test_session_hook_does_not_add_a_git_check(monkeypatch, capsys):
     reply = json.loads(capsys.readouterr().out)
     assert calls == []
     assert reply == {}
+
+
+def test_selected_question_in_shared_file(tree):
+    import json
+    mount, remote = tree
+    seed_card(mount)
+    path = mount.koi_root / "project.md"
+    path.write_text(path.read_text() + "| Another <!-- id:c-other --> | | |\n")
+    git(mount.repo_root, "add", ".")
+    git(mount.repo_root, "commit", "-m", "second card")
+    git(mount.repo_root, "push")
+    path = mount.koi_root / "research.json"
+    data = {"questions": [{"id": "q1", "card_id": "c-memory", "answer": "one"},
+                          {"id": "q2", "card_id": "c-other", "answer": "two"}]}
+    path.write_text(json.dumps(data))
+    chat = notice(mount)
+    rows = chat["git_panel"]["outgoing"]
+    assert {row["card"] for row in rows} == {"b/c-memory", "b/c-other"}
+    item = queue.enqueue_question("demo", "Отправить выбранное", purpose="git_chat",
+                                  conversation_id=chat["id"], git_snapshot=chat["git_snapshot"],
+                                  git_selection=["b/c-memory"])
+    changes.process(item)
+    assert "Отправлено в Git" in queue.find_item(item["id"])["answer"]
+    sent = json.loads(git(remote, "show", "koi/research:koi-structure/research.json"))
+    assert sent["questions"] == data["questions"][:1]
+    assert json.loads(path.read_text()) == data
+    assert [r["card"] for r in conversations.find(chat["id"])["git_panel"]["outgoing"]] == ["b/c-other"]
+
+
+def test_chat_sends_only_selected_card_content(tree):
+    import json
+    mount, remote = tree
+    seed_card(mount)
+    root = mount.koi_root
+    project = root / "project.md"
+    project.write_text(card_document("done").replace("Memory check", "Unselected method edit") +
+                       "| Another <!-- id:c-other --> | | |\n")
+    (root / "reports").mkdir(exist_ok=True)
+    (root / "reports/diagnostics.json").write_text('{"status": 42}')
+    (root / "research.json").write_text(json.dumps({"local_only": "private", "questions": [
+        {"id": "q", "card_id": "c-memory", "narrative": "Результат проверки памяти."}]}))
+    chat = notice(mount)
+    rows = chat["git_panel"]["outgoing"]
+    assert {r["id"] for r in rows} == {"b/c-other", "b/c-memory"}
+    assert next(r for r in rows if r["id"] == "b/c-memory")["detail"] == "Результат проверки памяти."
+    item = queue.enqueue_question("demo", "Отправить выбранное", purpose="git_chat",
+                                  conversation_id=chat["id"], git_snapshot=chat["git_snapshot"],
+                                  git_selection=["b/c-memory"])
+    changes.process(item)
+    assert "Отправлено в Git" in queue.find_item(item["id"])["answer"]
+    ref = "koi/research:koi-structure/"
+    assert "diagnostics" not in git(remote, "ls-tree", "-r", "koi/research")
+    sent = git(remote, "show", ref + "project.md")
+    assert "c-other" not in sent and "Unselected" not in sent
+    assert "Memory check" in sent and changes._cards(sent,"demo")["b/c-memory"]["column"] == "done"
+    assert "local_only" not in json.loads(git(remote, "show", ref + "research.json"))
+
+
+def test_hourly_check_notifies_for_incoming_commits(tree):
+    mount, remote = tree
+    seed_card(mount)
+    peer = remote.parent / "peer"
+    git(remote.parent, "clone", "-b", "koi/research", str(remote), str(peer))
+    git(peer, "config", "user.email", "peer@example.invalid")
+    git(peer, "config", "user.name", "Peer")
+    (peer / "koi-structure/project.md").write_text(card_document("done"))
+    git(peer, "commit", "-am", "finish card")
+    git(peer, "push")
+    now = datetime(2026, 10, 27, 10, 0)
+    items = changes.scan_once(now=now, check_incoming=True)
+    assert len(items) == 1
+    assert conversations.find(items[0]["conversation_id"])["git_panel"]["behind"] == 1
+    changes.process(items[0])
+    assert changes.scan_once(now=now + timedelta(minutes=15), check_incoming=True) == []
+    assert changes.scan_once(now=now + timedelta(hours=1), check_incoming=True) == []

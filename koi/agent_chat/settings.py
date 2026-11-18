@@ -33,8 +33,7 @@ def settings_snapshot() -> dict:
     from koi.adapters.settings_store import load_env_file
     import os
     load_env_file()
-    variant = os.environ.get("KOI_UI_VARIANT", "quick")
-    snapshot["ui_variant"] = variant if variant in ("chats", "quick", "light") else "quick"
+    snapshot["ui_variant"] = "quick"
     for scope in ("main", "card"):
         try:
             width = int(os.environ.get(f"KOI_CHAT_LIST_{scope.upper()}_WIDTH", "200"))

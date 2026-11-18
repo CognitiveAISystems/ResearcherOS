@@ -59,7 +59,7 @@ ResearcherOS связывает дерево исследования, эксп�
 **Альтернатива: установка скриптом.** Клонируйте репозиторий и запустите `installers/Установить ResearcherOS.command` двойным щелчком:
 
 ```bash
-git clone --branch beta https://github.com/CognitiveAISystems/ResearcherOS.git ReseachOS
+git clone --branch main https://github.com/CognitiveAISystems/ResearcherOS.git ReseachOS
 cd ReseachOS
 ```
 
@@ -88,13 +88,6 @@ cd ReseachOS
 Закройте ResearcherOS и установите новую версию из того же канала. На macOS замените приложение в папке «Программы». Для установки скриптом выполните `git pull` и повторно запустите скрипт.
 
 Настройки и исследовательские данные хранятся отдельно от приложения. Перед первым обновлением сохраните копию данных: обновление поверх прежней установки ещё требует ручной проверки.
-
-</details>
-
-<details>
-<summary><strong>Сборки для A/B-тестирования</strong></summary>
-
-На странице Releases выберите выпуск с `beta-test` в названии и отметкой **Pre-release**. Эти сборки из ветки `beta` публикуются отдельно от стабильных. Распределение участников по вариантам эксперимента настраивается отдельно.
 
 </details>
 

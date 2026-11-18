@@ -1,0 +1,19 @@
+.cli-install-dialog {
+  margin: auto;
+  box-sizing: border-box;
+  width: min(26rem, 92vw);
+  padding: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--bg-elevated, Canvas);
+  color: var(--text, CanvasText);
+  text-align: center;
+}
+.cli-install-dialog .btn.btn-primary { display: block; margin: 20px auto 0; }
+.cli-install-dialog::backdrop { background: rgb(0 0 0 / 68%); }
+.cli-install-dialog svg { color: var(--purple); }
+.cli-install-dialog [role="status"]:empty { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .cli-install-dialog.checking svg { animation: cli-scan .55s ease-in-out infinite alternate; }
+  @keyframes cli-scan { to { transform: translateY(-4px) rotate(4deg); } }
+}

@@ -8186,6 +8186,101 @@ async function openChatCard(params) {
   }
 }
 
+let gitSelectionToken;
+const gitSelection = new Set();
+const gitSubmitting = new Map();
+
+function gitPanelHtml(row, hasResult) {
+  const panel = row.git_panel;
+  if (!panel) return `<p class="agent-chat-empty">${escapeHtml(row.git_error || "Проверяем состояние Git…")}</p>`;
+  const selectionKey = JSON.stringify([row.id, row.git_snapshot]);
+  if (gitSelectionToken !== selectionKey) {
+    gitSelection.clear();
+    gitSelectionToken = selectionKey;
+  }
+  const pending = agentChatItems.find(item => item.conversation_id === row.id &&
+    item.status !== "answered" && (Array.isArray(item.git_selection) ||
+      (item.purpose === "git_chat" && ["Объединить изменения", "Проверить изменения"].includes(item.question))));
+  if (gitSubmitting.has(row.id) || pending) {
+    return '<section class="git-request git-sync-progress" role="status"><progress aria-label="Синхронизация с Git"></progress><strong>Идёт синхронизация с Git…</strong></section>';
+  }
+  const busy = gitSubmitting.has(row.id) || row.pending;
+  function entry(item, selectable) {
+    function link(key, title) {
+      if (!key) return escapeHtml(title);
+      const [board, card] = key.split("/");
+      const href = "?" + new URLSearchParams({project: row.project_id, board, card});
+      return `<a class="agent-chat-card-link" data-chat-card-link href="${escapeHtml(href)}">${escapeHtml(title)}</a>`;
+    }
+    const detail = (item.detail || "").trim();
+    const result = detail.match(/^(.{12,95}?[.!?])(?:\s|$)/u)?.[1];
+    const headline = item.questions?.length && item.label !== "Удалён вывод" && result
+      ? result.charAt(0).toLocaleUpperCase("ru") + result.slice(1) : item.title;
+    const body = headline !== item.title ? detail.slice(detail.indexOf(result) + result.length).trim() : detail;
+    const source = headline !== item.title ? link(item.card, item.title) : "";
+
+    return `<li>${selectable ? `<input type="checkbox" data-git-unit="${escapeHtml(item.id)}" aria-label="Отправить: ${escapeHtml(item.title)}" ${gitSelection.has(item.id) ? "checked" : ""} ${busy ? "disabled" : ""}>` : ""}<div><strong>${link(item.card, headline)}</strong><small>${escapeHtml(item.label)}</small>${body && body !== headline ? `<p>${escapeHtml(body)}</p>` : ""}${source}</div></li>`;
+  }
+  const button = (action, label, disabled) => `<button type="button" class="btn btn-primary" data-git-action="${action}" ${disabled ? "disabled" : ""}>${label}</button>`;
+  const blocked = panel.wrong_branch ? "Открыта другая ветка." : panel.merging ? "Завершите слияние перед синхронизацией." : "";
+  const check = `<div class="git-selection-tools"><button type="button" class="btn" data-git-action="review" ${busy ? "disabled" : ""}>Проверить изменения</button></div>`;
+  let html = "";
+  if (panel.outgoing.length || panel.commits.length) {
+    const reason = blocked || (panel.history_blocked ? "Отправка остановлена: удалённая база карточек не подтверждена." : "") || (panel.behind ? "Сначала объедините входящие изменения." : "");
+    html += `<section class="git-request"><h3>↑ Отправить в Git</h3>${panel.outgoing.length ? `<div class="git-selection-tools"><button class="btn" type="button" data-git-select="all" ${busy || gitSelection.size === panel.outgoing.length ? "disabled" : ""}>Выбрать все</button><button class="btn" type="button" data-git-select="none" ${busy || !gitSelection.size ? "disabled" : ""}>Снять выбор</button><small aria-live="polite">Выбрано ${gitSelection.size} из ${panel.outgoing.length}</small></div>` : ""}
+      <ul>${panel.outgoing.map(item => entry(item, true)).join("")}</ul>
+      ${panel.commits.length ? `<p>В отправку входят сохранённые коммиты</p><ul>${panel.commits.map(s => `<li>${escapeHtml(s)}</li>`).join("")}</ul>` : ""}
+      ${reason ? `<p>${reason}</p>` : ""}${button("push", row.git_retry ? "Повторить отправку" : gitSelection.size ? "Отправить выбранное · " + gitSelection.size : panel.commits.length ? "Отправить коммиты" : "Отправить выбранное", busy || reason || !(gitSelection.size || panel.commits.length))}</section>`;
+  }
+  if (panel.behind) {
+    const reason = blocked || (panel.dirty ? "Сначала сохраните локальные правки коммитом." : "");
+    html += `<section class="git-request"><h3>↓ Получить из Git</h3><p>${escapeHtml(panel.authors.join(", "))}</p><ul>${panel.incoming.map(item => entry(item, false)).join("")}</ul>${reason ? `<p role="status">${reason}</p>` : ""}${button("pull", "Получить все · " + (panel.incoming.length || panel.behind), busy || reason)}</section>`;
+  }
+  if (!html && hasResult && !blocked) return check;
+  return check + (html || `<p class="git-panel-note">${blocked || (panel.dirty ? "Нет изменений карточек для отправки." : "Дерево синхронизировано")}</p>`);
+}
+
+function bindGitPanel(log, row) {
+  for (const button of log.querySelectorAll("[data-git-select]")) {
+    button.onclick = () => {
+      const selectAll = button.dataset.gitSelect === "all";
+      gitSelection.clear();
+      if (selectAll) for (const item of row.git_panel.outgoing) gitSelection.add(item.id);
+      renderAgentChatLog();
+      log.querySelector(`[data-git-select="${selectAll ? "none" : "all"}"]`)?.focus({preventScroll: true});
+    };
+  }
+  for (const checkbox of log.querySelectorAll("[data-git-unit]")) {
+    checkbox.onchange = () => {
+      const id = checkbox.dataset.gitUnit;
+      if (checkbox.checked) gitSelection.add(id);
+      else gitSelection.delete(id);
+      renderAgentChatLog();
+      log.querySelector(`[data-git-unit="${CSS.escape(id)}"]`)?.focus({preventScroll: true});
+    };
+  }
+  for (const button of log.querySelectorAll("[data-git-action]")) {
+    button.onclick = async () => {
+      if (gitSubmitting.has(row.id) || row.pending) return;
+      gitSubmitting.set(row.id, button.dataset.gitAction);
+      const push = button.dataset.gitAction === "push";
+      renderAgentChatLog({scrollToBottom: true});
+      try {
+        const res = await KoiApi.sendAgentQuestion({project_id: row.project_id, conversation_id: row.id,
+          question: push ? "Отправить выбранные изменения" : button.dataset.gitAction === "review"
+            ? "Проверить изменения" : "Объединить изменения",
+          git_snapshot: row.git_snapshot, git_selection: push ? [...gitSelection] : undefined});
+        if (mainConversations.row?.id === row.id && res?.item) {
+          agentChatItems = [res.item, ...agentChatItems.filter(i => i.id !== res.item.id)];
+          syncAgentChatPolling();
+        }
+        await refreshAgentChat();
+      } catch (err) { setAgentChatFormStatus(err.message, "error"); }
+      finally { gitSubmitting.delete(row.id); renderAgentChatLog(); }
+    };
+  }
+}
+
 function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const log = document.getElementById("agent-chat-log");
   if (!log) return;
@@ -8195,11 +8290,14 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
   const prevScrollTop = log.scrollTop;
   const gitChat = mainConversations?.row?.kind === "git_sync";
   const items = [...agentChatItems].reverse().filter(item =>
-    !gitChat || item.purpose !== "git_notice" || item.git_notice_version >= 3);
-  if (!items.length) {
+    !gitChat || item.purpose !== "git_notice" || item.git_notice_version >= 5);
+  if (!items.length && !gitChat) {
     log.innerHTML = '<div class="agent-chat-empty"><p>Обсудите проект или дайте агенту задачу.</p></div>';
     return;
   }
+  const previousPending = new Set([...log.querySelectorAll(".is-pending")].map(el => el.dataset.id));
+  let completedId;
+  let hasResult = false;
   log.innerHTML = items
     .map((item) => {
       const status = item.status || "pending";
@@ -8219,6 +8317,17 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       } else {
         const answer = gitChat ? (item.answer || "").replace(/(?:^|\n)Изменённые файлы:[\s\S]*/, "").trim() : item.answer;
         answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(answer || "")}</div>`;
+        const push = Array.isArray(item.git_selection);
+        if (gitChat && item.purpose === "git_chat" && (push || item.question === "Объединить изменения")) {
+          hasResult = true;
+          const success = !isWarning && (push ? answer.startsWith("Отправлено в Git") : answer.startsWith("Изменения объединены."));
+          const heading = success ? (push ? "Изменения отправлены в Git" : "Изменения получены из Git")
+            : (push ? "Отправка не выполнена" : "Получение не выполнено");
+          const count = push && item.git_selection.length ? `<p>Отправлено карточек: ${item.git_selection.length}</p>` : "";
+          const body = success ? count : formatAgentChatReply(answer || "Проверьте состояние Git.");
+          answerHtml = `<div role="status" class="agent-chat-reply git-operation-result${success ? "" : " agent-chat-reply--warning"}"><strong>${heading}</strong>${body}</div>`;
+          if (previousPending.has(item.id)) completedId = item.id;
+        }
       }
       return (
         `<article class="agent-chat-thread${pending ? " is-pending" : ""}${isProcessing ? " is-processing" : ""}" data-id="${escapeHtml(item.id)}">` +
@@ -8235,9 +8344,15 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
       );
     })
     .join("");
+  if (gitChat) {
+    log.insertAdjacentHTML("beforeend", gitPanelHtml(mainConversations.row, hasResult));
+    bindGitPanel(log, mainConversations.row);
+  }
   if (focusedCardLink) log.querySelector(`[data-id="${CSS.escape(focusedCardLink.id)}"] [data-chat-card-link][href="${CSS.escape(focusedCardLink.href)}"]`)?.focus({ preventScroll: true });
   refreshInlineLoaderHints(log);
-  if (stickToBottom) {
+  if (completedId) {
+    log.querySelector(`[data-id="${CSS.escape(completedId)}"] .git-operation-result`)?.scrollIntoView({block: "nearest"});
+  } else if (stickToBottom) {
     log.scrollTop = log.scrollHeight;
   } else {
     log.scrollTop = prevScrollTop;

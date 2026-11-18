@@ -1,5 +1,5 @@
-.desktop-onboarding-pending body > :not(.desktop-onboarding),
-.desktop-onboarding-active body > :not(.desktop-onboarding) {
+.desktop-onboarding-pending body > :not(.desktop-onboarding, .cli-install-dialog),
+.desktop-onboarding-active body > :not(.desktop-onboarding, .cli-install-dialog) {
   visibility: hidden;
 }
 

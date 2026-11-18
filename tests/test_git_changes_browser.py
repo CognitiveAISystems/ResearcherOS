@@ -68,17 +68,62 @@ async def smoke(url, mount, remote):
             await page.wait_for_timeout(300)
             await page.screenshot(path=str(out / f'{theme}.png'))
         report.write_text("# Проверка\n\nРезультат уточнён после предложения.\n")
-        composer = page.locator('#agent-chat-input')
-        await composer.fill('да')
-        await composer.press('Enter')
+        panel = page.locator(".git-request").filter(has_text="Отправить в Git").last
+        push = panel.locator('[data-git-action="push"]')
+        assert await push.is_disabled()
+        assert "Проверить сокращение памяти" in await panel.locator("li strong").first.inner_text()
+        await panel.get_by_role("button", name="Выбрать все").click()
+        assert await panel.locator("input:checked").count() == await panel.locator("input").count()
+        await panel.get_by_role("button", name="Снять выбор").click()
+        assert await panel.locator("input:checked").count() == 0
+        assert await push.is_disabled()
+        await panel.locator('input[type=checkbox]').first.check()
+        await push.click()
         await page.wait_for_function("document.querySelector('#agent-chat-log').textContent.includes('Появились новые правки')")
         assert git(mount.repo_root, 'rev-parse', 'HEAD') == before
-        await composer.fill('сохрани и отправь')
-        await composer.press('Enter')
-        await page.wait_for_function("document.querySelector('#agent-chat-log').textContent.includes('Изменения сохранены и отправлены')")
+        for checkbox in await panel.locator('input[type=checkbox]').all():
+            await checkbox.check()
+        await push.click()
+        await page.get_by_role("status").filter(has_text="Идёт синхронизация с Git").wait_for()
+        await page.get_by_role('status').filter(has_text='Изменения отправлены в Git').wait_for()
+        await page.locator(".git-sync-progress").wait_for(state="detached")
+        assert await page.locator("[data-git-unit]").count() == 0
+        assert await page.locator("#agent-chat-log .agent-chat-empty").count() == 0
+        assert await page.locator(".git-operation-result").last.evaluate("""el => {
+            const r = el.getBoundingClientRect(), log = el.closest('#agent-chat-log').getBoundingClientRect();
+            return r.top >= log.top - 1 && r.bottom <= log.bottom + 1;
+        }""")
         committed = git(mount.repo_root, 'rev-parse', 'HEAD')
         assert committed != before
         assert git(remote, 'rev-parse', 'koi/research') == committed
+        assert "reports/check.md" not in git(remote, "ls-tree", "-r", "koi/research")
+        assert report.exists()
+        # Remove the local fixture before testing a full pull into a clean tree.
+        report.unlink()
+        git(mount.repo_root, "restore", "koi-structure")
+        git(mount.repo_root, "clean", "-fd", "--", "koi-structure")
+        peer = mount.repo_root.parent.parent / "test-data" / "peer"
+        git(mount.repo_root, "clone", "-b", "koi/research", str(remote), str(peer))
+        git(peer, "config", "user.name", "Анна")
+        git(peer, "config", "user.email", "peer@example.invalid")
+        peer_report = peer / "koi-structure/research.json"
+        peer_report.write_text('{"questions":[{"id":"q","card_id":"c-memory","narrative":"Входящий результат"}]}')
+        git(peer, "commit", "-am", "review report")
+        git(peer, "push")
+        git(mount.repo_root, "fetch", "origin")
+        incoming = changes.notify(mount, changes.snapshot(mount))
+        changes.process(incoming)
+        await page.reload(wait_until="networkidle")
+        await page.locator(f'button.conversation-entry[data-conversation="{chat["id"]}"]').click()
+        await page.get_by_role("button", name="Проверить изменения").click()
+        await page.locator("#agent-chat-log").get_by_text("Проверка завершена. Входящих коммитов: 1.").wait_for()
+        pull = page.locator(".git-request").filter(has_text="Получить из Git").last
+        assert await pull.get_by_text("Анна").is_visible()
+        assert await pull.locator("input").count() == 0
+        await pull.get_by_role("button", name="Получить все · 1").click()
+        await page.get_by_role("status").filter(has_text="Идёт синхронизация с Git").wait_for()
+        await page.locator("#agent-chat-log").get_by_text("Изменения получены из Git").wait_for()
+        assert "Входящий результат" in (mount.koi_root / "research.json").read_text()
         assert not errors, errors
         await browser.close()
 
@@ -144,7 +189,7 @@ git_sync_branch: koi/research
         server = DesktopServer()
         try:
             asyncio.run(smoke(server.start(), mount, remote))
-            print('PASS: done trigger, short tree notice, stale approval, text command commit + push, no Git buttons or legacy lists, both themes')
+            print('PASS: done trigger, short tree notice, stale approval, selected push, full pull, no legacy lists, both themes')
         finally:
             server.stop()
 

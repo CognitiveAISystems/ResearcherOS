@@ -36,6 +36,26 @@ def _save(rows):
     os.replace(temp, PATH)
 
 
+def ensure_git_chats(project_ids):
+    title = "GIT синхронизация"
+    with LOCK:
+        rows = _load()
+        known = {r["project_id"]: r for r in rows if r.get("kind") == "git_sync"}
+        changed = False
+        for project_id in project_ids:
+            row = known.get(project_id)
+            if row is None:
+                row = dict(id="chat-" + uuid4().hex, project_id=project_id, board_id=None,
+                           card_id=None, kind="git_sync", read_through="", backend=None,
+                           created_at=datetime.now(timezone.utc).isoformat())
+                rows.append(row)
+            if row.get("title") != title:
+                row["title"] = title
+                changed = True
+        if changed:
+            _save(rows)
+
+
 def list_conversations(project_id=None, board_id=None, card_id=None):
     with LOCK:
         stored = _load()

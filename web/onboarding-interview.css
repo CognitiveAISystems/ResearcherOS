@@ -112,7 +112,10 @@
 .onboarding-interview__brief th,
 .onboarding-interview__brief td { border: 1px solid var(--onboarding-border, #dce3e6); padding: 8px; text-align: left; vertical-align: top; }
 .onboarding-interview__brief-scroll:focus-visible { outline: 2px solid var(--onboarding-purple, #8561d8); outline-offset: -2px; }
-.onboarding-interview__input-wrap .agent-cli-select { grid-column: 1; grid-row: 2; justify-self: start; max-width: 160px; }
+.onboarding-interview__agent-controls { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.onboarding-interview__agent-controls .agent-cli-select { min-width: 0; max-width: 100%; background: var(--onboarding-surface); color: var(--onboarding-text); border-color: var(--onboarding-control); }
+.onboarding-interview__agent-controls .agent-cli-select:hover:not(:disabled) { background: color-mix(in srgb, var(--onboarding-purple) 6%, var(--onboarding-surface)); }
+.onboarding-interview__model { flex: 1 1 140px; }
  .onboarding-interview__actions { top: 100%; left: 0; opacity: 0; pointer-events: none; }
 .onboarding-interview__node:hover .onboarding-interview__actions,
 .onboarding-interview__node:focus-within .onboarding-interview__actions { opacity: 1; pointer-events: auto; }

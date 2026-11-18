@@ -21,6 +21,35 @@ from koi.projects import commands
 from koi.agent_chat import research
 
 
+def _host_probe(run_id, timeout=1.5):
+    """Prove that the recorded host is serving this run without reading its pid."""
+    nonce = uuid4().hex
+    probe_id = 'probe-' + uuid4().hex
+    with research._db() as db:
+        db.execute('INSERT INTO tool_requests VALUES (?,?,?,?,?)',
+                   (probe_id, run_id, json.dumps({'operation': '_heartbeat', 'nonce': nonce}), 'pending', ''))
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            registry_started = time.monotonic()
+            with research._db() as db:
+                row = db.execute('SELECT * FROM tool_requests WHERE id=?', (probe_id,)).fetchone()
+            # Project operations hold this SQLite lock too. Time spent waiting
+            # for it says nothing about whether the host is serving requests.
+            deadline += time.monotonic() - registry_started
+            if row['status'] == 'completed':
+                response = json.loads(row['result'])
+                return bool(isinstance(response, dict) and response.get('nonce') == nonce)
+            if row['status'] == 'failed':
+                return False
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(.05)
+    finally:
+        with research._db() as db:
+            db.execute("UPDATE tool_requests SET status='failed',result='Host probe expired' WHERE id=? AND status='pending'", (probe_id,))
+
+
 def perform(run_id, operation, args):
     if args.get("title") is not None and len(str(args["title"]).split()) > 8:
         raise ValueError("Node and card titles must contain at most eight words")
@@ -263,11 +292,15 @@ def request(run_id, operation, args, *, timeout=60):
     """Let the live host perform validated operations outside the CLI sandbox."""
     with research._db() as db:
         host = db.execute('SELECT * FROM brokers WHERE run_id=?', (run_id,)).fetchone()
-    if host is None or research._process_start(host['pid']) != host['started']:
+    if host is None:
         if os.environ.get('CODEX_SANDBOX'):
             raise RuntimeError('ResearcherOS host is unavailable; restart the research from the app')
         return perform(run_id, operation, args)
     if host['pid'] == os.getpid():
+        return perform(run_id, operation, args)
+    if not _host_probe(run_id):
+        if os.environ.get('CODEX_SANDBOX'):
+            raise RuntimeError('ResearcherOS host is unavailable; restart the research from the app')
         return perform(run_id, operation, args)
     request_id = 'tool-' + uuid4().hex
     with research._db() as db:

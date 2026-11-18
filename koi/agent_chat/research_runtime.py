@@ -188,12 +188,11 @@ def dispatch(run_id, tasks, *, timeout=1800, parent_id=None):
 
 
 def _submit(run_id, tasks, timeout, parent_id, broker_row):
-    if broker_row and research._process_start(broker_row['pid']) != broker_row['started']:
-        raise RuntimeError('ResearcherOS host is unavailable; restart the request from the app')
     if broker_row is None:
-        if os.environ.get('CODEX_SANDBOX'):
-            raise RuntimeError('Start this research from ResearcherOS; a host launcher is required')
         return _dispatch_local(run_id, tasks, timeout=timeout)
+    from koi.agent_chat.research_tools import _host_probe
+    if not _host_probe(run_id):
+        raise RuntimeError('ResearcherOS host is unavailable; restart the request from the app')
     job_id = 'dispatch-' + uuid4().hex
     with research._db() as db:
         db.execute('INSERT INTO dispatches VALUES (?,?,?,?,?)',
@@ -221,6 +220,7 @@ def broker(item_id):
         yield
         return
     with research._db() as db:
+        db.execute('BEGIN IMMEDIATE')
         run = db.execute('SELECT * FROM runs WHERE item_id=? ORDER BY created_at DESC LIMIT 1', (item_id,)).fetchone()
         if run is None:
             yield
@@ -250,6 +250,13 @@ def broker(item_id):
         while not stopping.wait(.1):
             with research._db() as db:
                 db.execute('BEGIN IMMEDIATE')
+                # Answer probes independently of the serial project-operation
+                # worker, which may be busy reading or saving a large report.
+                probes = db.execute("SELECT * FROM tool_requests WHERE run_id=? AND status='pending' AND id LIKE 'probe-%'", (run_id,)).fetchall()
+                for probe in probes:
+                    payload = json.loads(probe['payload'])
+                    result = json.dumps({'nonce': payload['nonce']})
+                    db.execute("UPDATE tool_requests SET status='completed',result=? WHERE id=?", (result, probe['id']))
                 job = db.execute("SELECT * FROM dispatches WHERE run_id=? AND status='pending' ORDER BY rowid LIMIT 1", (run_id,)).fetchone()
                 if job:
                     db.execute("UPDATE dispatches SET status='running' WHERE id=?", (job['id'],))
@@ -266,7 +273,7 @@ def broker(item_id):
         while not stopping.wait(.1):
             with research._db() as db:
                 db.execute('BEGIN IMMEDIATE')
-                job = db.execute("SELECT * FROM tool_requests WHERE run_id=? AND status='pending' ORDER BY rowid LIMIT 1", (run_id,)).fetchone()
+                job = db.execute("SELECT * FROM tool_requests WHERE run_id=? AND status='pending' AND id NOT LIKE 'probe-%' ORDER BY rowid LIMIT 1", (run_id,)).fetchone()
                 if job:
                     db.execute("UPDATE tool_requests SET status='running' WHERE id=?", (job['id'],))
             if job is None:

@@ -17,19 +17,10 @@ is packaged for macOS, Windows, and Linux.
 
 ## Install from a clone
 
-Beta development uses the `beta` branch. Each platform has one application with
-two interface modes: **Чаты** keeps research conversations in the sidebar;
-**Light** preserves the classic frontend from `main` (`e8469ed`), including its
-kanban, report layout, zoom controls and project-agent panel. Use the gear
-button **Настроить интерфейс** to switch. Both modes share onboarding, projects,
-reports and stored conversations. Global Chats conversations remain in Chats;
-Light uses main's project-scoped agent history. The selection persists in runtime settings,
-including across desktop launches. Existing prebuilt installers are snapshots;
-the mode switch is available after rebuilding from these sources.
-
-`web/variants/light/source.json` pins the original frontend files and their
-SHA-256 hashes. Shared files (including onboarding and API transport) fall back
-to `web/`; frontend copies are limited to the files whose behavior differs.
+The `main` branch uses **Quick Navigation** as its only interface. The gear
+button opens settings for managing current and archived trees. Older saved
+interface selections are ignored. The `beta` branch retains experimental
+interface modes.
 
 Double-click `installers/Установить ResearcherOS.command` in Finder.
 The installer downloads checksum-verified uv and Node.js archives, provisions a

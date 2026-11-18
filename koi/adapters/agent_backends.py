@@ -24,7 +24,8 @@
   программа, установленная в системе, как `codex` и `claude`; явный путь —
   `KOI_OPENCODE_BIN`. Модель — `KOI_OPENCODE_MODEL`, доп. флаги —
   `KOI_OPENCODE_ARGS`. Без правок файлов запускается встроенный агент `plan`,
-  с правками — `--auto`. Ответ собирается из частей `text` потока
+  с правками — `--auto`, если установленный CLI поддерживает этот флаг.
+  `--standalone` также передаётся только при наличии в справке CLI. Ответ собирается из частей `text` потока
   JSON-событий (`--format json`), как `--json` у Codex.
 - **Порядок по умолчанию** — `codex,openrouter,claude,cursor,opencode`.
 
@@ -41,9 +42,11 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.error
 import urllib.request
+from functools import lru_cache
 from collections.abc import Callable
 from pathlib import Path
 
@@ -99,8 +102,20 @@ def _openrouter_ready() -> bool:
     return bool(_openrouter_api_key())
 
 
+def _user_cli_bin(name: str, variable: str, *local_dirs: str) -> str | None:
+    configured = os.environ.get(variable, name)
+    found = shutil.which(configured)
+    if found or configured != name:
+        return found
+    for directory in local_dirs:
+        candidate = Path.home() / directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
 def _claude_bin() -> str | None:
-    return shutil.which(os.environ.get("KOI_CLAUDE_BIN", "claude"))
+    return _user_cli_bin("claude", "KOI_CLAUDE_BIN", ".local/bin")
 
 
 def _claude_ready() -> bool:
@@ -123,11 +138,18 @@ def _cursor_available() -> bool:
 
 
 def _opencode_bin() -> str | None:
-    return shutil.which(os.environ.get("KOI_OPENCODE_BIN", "opencode"))
+    return _user_cli_bin("opencode", "KOI_OPENCODE_BIN", ".opencode/bin", ".local/bin")
 
 
 def _opencode_ready() -> bool:
     return _opencode_bin() is not None
+
+
+@lru_cache(maxsize=8)
+def _opencode_run_flags(binary: str) -> frozenset[str]:
+    # CLI generations expose different flags; ask the installed program, not its version.
+    help_text = _list_command([binary, "run", "--help"])
+    return frozenset(flag for flag in ("--standalone", "--auto") if flag in help_text)
 
 
 def _cursor_sdk_ready() -> bool:
@@ -436,42 +458,49 @@ def run_opencode(
     bin_path = _opencode_bin()
     if not bin_path:
         return None
-    cmd = [bin_path, "--standalone", "run"]
+    flags = _opencode_run_flags(bin_path)
+    cmd = [bin_path, *(["--standalone"] if "--standalone" in flags else []), "run"]
     model = model or os.environ.get("KOI_OPENCODE_MODEL", "").strip()
     if model:
         cmd += ["--model", model]
-    cmd += ["--auto"] if allow_edits else ["--agent", DEFAULT_OPENCODE_READONLY_AGENT]
+    if allow_edits:
+        cmd += ["--auto"] if "--auto" in flags else []
+    else:
+        cmd += ["--agent", DEFAULT_OPENCODE_READONLY_AGENT]
     cmd += os.environ.get("KOI_OPENCODE_ARGS", "").split()
     cmd += list(mcp_args)
-    try:
+    cmd += ["--format", "json"]
+    answer = ""
+    error_message = ""
+
+    def receive(event):
+        nonlocal answer, error_message
         if on_event is not None:
-            cmd += ["--format", "json"]
-            answer = ""
-            error_message = ""
+            on_event(event)
+        if event.get("type") == "error" and isinstance(event.get("error"), dict):
+            error = event["error"]
+            data = error.get("data")
+            error_message = str(error.get("message") or (data.get("message") if isinstance(data, dict) else None) or "Ошибка провайдера")
+        part = event.get("part")
+        if event.get("type") == "text" and isinstance(part, dict):
+            answer += str(part.get("text") or "")
 
-            def receive(event):
-                nonlocal answer, error_message
-                on_event(event)
-                if event.get("type") == "error" and isinstance(event.get("error"), dict):
-                    error_message = str(event["error"].get("message") or "Ошибка провайдера")
-                part = event.get("part")
-                if event.get("type") == "text" and isinstance(part, dict):
-                    answer += str(part.get("text") or "")
-
-            code = run_json(cmd + [prompt], "", cwd=cwd, timeout=timeout, on_event=receive,
+    try:
+        with tempfile.TemporaryDirectory(prefix="koi-opencode-") as directory:
+            args = [prompt]
+            # Windows npm shims have an 8191-character command limit, below CreateProcess's limit.
+            if sys.platform == "win32" and len(subprocess.list2cmdline(cmd + args)) > 7000:
+                task = Path(directory) / "task.txt"
+                task.write_text(prompt, encoding="utf-8")
+                args = ["Выполни задание из приложенного файла task.txt. Верни ответ в указанном в нём формате.", "--file", str(task)]
+            code = run_json(cmd + args, "", cwd=cwd, timeout=timeout, on_event=receive,
                             is_cancelled=is_cancelled, on_started=on_started, feed_stdin=False, env=mcp_env)
-            if error_message:
-                raise AgentBackendError("OpenCode: " + error_message)
-            text = answer.strip()
-            return text if code == 0 and text else None
-        proc = subprocess.run(cmd + [prompt], capture_output=True, text=True,
-                              cwd=str(cwd), timeout=timeout, env=mcp_env)
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if proc.returncode != 0:
-        return None
-    text = (proc.stdout or "").strip()
-    return text or None
+    if error_message:
+        raise AgentBackendError("OpenCode: " + error_message)
+    text = answer.strip()
+    return text if code == 0 and text else None
 
 
 # Единственный перечень бэкендов: порядок, подпись, поток событий, запуск, проверка.
@@ -524,7 +553,7 @@ def backend_order() -> list[str]:
 def cli_agents() -> list[dict]:
     """Какие CLI реально есть на этой машине."""
     return [
-        {"id": name, "label": label, "available": _ready(name)}
+        {"id": name, "label": label, "available": _cursor_cli_ready() if name == "cursor" else _ready(name)}
         for name, label in CLI_AGENTS
     ]
 
@@ -536,7 +565,7 @@ _MODEL_CACHE: dict[str, list[dict]] = {}
 
 def _list_command(cmd: list[str]) -> str:
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return proc.stdout if proc.returncode == 0 else ""

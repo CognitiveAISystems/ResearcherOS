@@ -15,6 +15,9 @@ from api.routers import agents
 SCRIPT = r'''
 import json, pathlib, subprocess, sys, time
 backend = pathlib.Path(sys.argv[0]).name
+if backend == "opencode" and "--help" in sys.argv:
+    print("--standalone --auto --agent --model --format")
+    raise SystemExit(0)
 if backend == "codex": assert "--json" in sys.argv
 if backend == "claude": assert "--verbose" in sys.argv and "stream-json" in sys.argv
 prompt = sys.argv[-1] if backend == "opencode" else sys.stdin.read()

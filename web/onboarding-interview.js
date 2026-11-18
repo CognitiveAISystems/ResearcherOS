@@ -1,3 +1,4 @@
+import { KoiApi } from "./api.js";
 import { MindmapCamera } from './lab-canvas.js';
 
 const TYPE_LABELS = {
@@ -257,7 +258,10 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
         <div class="onboarding-interview__composer">
           <div class="onboarding-interview__input-wrap">
             <textarea id="tree-interview-answer" class="onboarding-interview__input" rows="1" placeholder="Ваш ответ…" aria-label="Ваш ответ"></textarea>
-            <select class="agent-cli-select" aria-label="Выбрать агента"><option value="cursor">Cursor</option><option value="codex">Codex</option><option value="claude">Claude</option></select>
+            <div class="onboarding-interview__agent-controls">
+              <select class="agent-cli-select" aria-label="Выбрать агента"></select>
+              <select class="agent-cli-select onboarding-interview__model" aria-label="Выбрать модель"><option value="">По умолчанию CLI</option></select>
+            </div>
             <button class="btn btn-primary agent-chat-send onboarding-interview__send" type="button" aria-label="Отправить сообщение" title="Отправить сообщение"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></button>
           </div>
           <button class="desktop-onboarding__button desktop-onboarding__button--primary onboarding-interview__finish" type="button" hidden>Создать проект с этим деревом</button>
@@ -281,9 +285,50 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
   const textarea = shell.querySelector('textarea');
   const send = shell.querySelector('.onboarding-interview__send');
   const agentSelect = shell.querySelector('.agent-cli-select');
-  try { const saved = localStorage.getItem('koi-chat-cli-agent'); agentSelect.value = ['codex', 'claude'].includes(saved) ? saved : 'cursor'; } catch { /* private mode */ }
+  const modelSelect = shell.querySelector('.onboarding-interview__model');
+  let modelsLoading = false;
+  let modelRequest = 0;
+  async function loadModels() {
+    const request = ++modelRequest;
+    const agent = agentSelect.value;
+    modelsLoading = true;
+    modelSelect.disabled = true;
+    modelSelect.replaceChildren(new Option('По умолчанию CLI', ''));
+    try {
+      const saved = localStorage.getItem(`koi-chat-cli-model:${agent}`);
+      if (saved) modelSelect.add(new Option(saved, saved));
+      modelSelect.value = saved || '';
+    } catch { /* private mode */ }
+    try {
+      const { models = [] } = await KoiApi.getAgentModels(agent);
+      if (request !== modelRequest) return;
+      for (const model of models) {
+        if (![...modelSelect.options].some(option => option.value === model.id)) modelSelect.add(new Option(model.label || model.id, model.id));
+      }
+    } catch { /* CLI defaults and the saved model remain usable. */ }
+    finally {
+      if (request === modelRequest) {
+        modelsLoading = false;
+        modelSelect.disabled = busy || !agentSelect.value;
+      }
+    }
+  }
+  agentSelect.disabled = true;
+  try {
+    const agents = (await KoiApi.getAgentBackends()).cli.filter(agent => agent.available);
+    for (const agent of agents) agentSelect.add(new Option(agent.label, agent.id));
+    try {
+      const saved = localStorage.getItem('koi-chat-cli-agent');
+      if (agents.some(agent => agent.id === saved)) agentSelect.value = saved;
+    } catch { /* private mode */ }
+    agentSelect.disabled = !agents.length;
+  } catch { agentSelect.disabled = true; }
   agentSelect.addEventListener('change', () => {
     try { localStorage.setItem('koi-chat-cli-agent', agentSelect.value); } catch { /* private mode */ }
+    void loadModels();
+  });
+  modelSelect.addEventListener('change', () => {
+    try { localStorage.setItem(`koi-chat-cli-model:${agentSelect.value}`, modelSelect.value); } catch { /* private mode */ }
   });
   const finish = shell.querySelector('.onboarding-interview__finish');
   const error = shell.querySelector('.onboarding-interview__error');
@@ -294,6 +339,7 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
   const progress = shell.querySelector('.onboarding-interview__step-hint');
   let state = null;
   let busy = false;
+  if (agentSelect.value) void loadModels();
   let programStep = false;
   let activityTimer = null;
   const localSessionKey = localProject ? `researchos-tree-interview:${localProject.tag}` : null;
@@ -433,7 +479,8 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
     shell.setAttribute('aria-busy', String(value));
     textarea.disabled = value;
     send.disabled = value;
-    agentSelect.disabled = value;
+    agentSelect.disabled = value || !agentSelect.options.length;
+    modelSelect.disabled = value || modelsLoading || !agentSelect.value;
     finish.disabled = value || !state?.program_confirmed || Boolean(state?.tutorial_required && !state?.tutorial_seen);
     back.disabled = value;
     inspect.disabled = !state?.nodes.length || !state?.messages.some(entry => entry.brief);
@@ -481,6 +528,7 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
     textarea.placeholder = programStep ? (state.program_confirmation_pending ? 'Да, нет или правка' : 'Что думаешь о названии?') : state.phase === 'description' ? 'Хочу исследовать…' : state.complete ? 'ОК, дерево согласовано — или что поправить' : 'Ответ одним предложением…';
     textarea.maxLength = 12000;
     agentSelect.hidden = programStep;
+    modelSelect.hidden = programStep;
     if (programStep) progress.textContent = 'Дерево согласовано · Направление исследований';
     const last = messages.lastElementChild;
     if (last) messages.scrollTop = Math.max(0, last.offsetTop - messages.offsetTop);
@@ -493,7 +541,7 @@ export async function runOnboardingInterview({ overlay, repoPath = null, workspa
     pending.dataset.pending = 'true'; messages.append(pending);
     textarea.value = ''; sizeInput(); setBusy(true);
     try {
-      state = await post('/api/desktop/onboarding/interview/reply', { ...address(), answer, cli_agent: agentSelect.value });
+      state = await post('/api/desktop/onboarding/interview/reply', { ...address(), answer, cli_agent: agentSelect.value, cli_model: modelSelect.value || undefined });
       render();
     } catch (problem) {
       pending.remove(); textarea.value = answer; sizeInput(); error.textContent = problem.message;

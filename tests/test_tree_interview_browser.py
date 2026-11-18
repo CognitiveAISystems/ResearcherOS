@@ -73,6 +73,13 @@ def test_description_tree_brief_and_method_question(theme, source, failure, monk
             page = browser.new_page(viewport={'width': 1440, 'height': 1000})
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
+            page.route('**/agent/backends', lambda route: route.fulfill(json={'cli': [
+                {'id': 'codex', 'label': 'Codex', 'available': True},
+                {'id': 'cursor', 'label': 'Cursor', 'available': True},
+            ]}))
+            page.route('**/agent/backends/*/models', lambda route: route.fulfill(json={'models': [
+                {'id': 'test-model', 'label': 'Тестовая модель'},
+            ]}))
             page.route('**/api/desktop/onboarding/interview/**', route_api)
             page.route(f'http://127.0.0.1:{server.server_port}/', lambda route: route.fulfill(content_type='text/html', body='<html><head><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/desktop-onboarding.css"><link rel="stylesheet" href="/onboarding-interview.css"></head><body></body></html>'))
             page.goto(f'http://127.0.0.1:{server.server_port}/')
@@ -89,12 +96,19 @@ def test_description_tree_brief_and_method_question(theme, source, failure, monk
             agent_select = page.get_by_role('combobox', name='Выбрать агента')
             expect(agent_select).to_be_visible()
             agent_select.select_option('codex')
+            model_select = page.get_by_role('combobox', name='Выбрать модель')
+            expect(model_select).to_be_enabled()
+            model_select.select_option('test-model')
+            shots = ROOT / '.run/ui-screenshots'
+            shots.mkdir(exist_ok=True, parents=True)
+            page.screenshot(path=str(shots / f'onboarding-model-{source}-{theme}.png'))
             textarea.fill('Хочу изучить адаптивное мышление агента.')
             page.get_by_role('button', name='Отправить сообщение').click()
             expect(page.get_by_text('Хочу изучить адаптивное мышление агента.', exact=True)).to_be_visible()
             expect(textarea).to_have_value('')
             expect(textarea).to_be_disabled()
             expect(agent_select).to_be_disabled()
+            expect(model_select).to_be_disabled()
             expect(page.get_by_text('Агент погружается в ваше исследование', exact=True)).to_be_visible()
             if theme == 'light' and source == 'repository' and not failure:
                 shots = ROOT / '.run/ui-screenshots'
@@ -152,6 +166,7 @@ def test_description_tree_brief_and_method_question(theme, source, failure, monk
             assert page.locator('.onboarding-interview__chat').bounding_box()['x'] < tree.bounding_box()['x']
             assert len(requests) == (4 if failure else 3)
             selected = [payload['cli_agent'] for url, payload in requests if url.endswith('/reply')]
+            assert next(payload for url, payload in requests if url.endswith('/reply') and payload.get('answer'))['cli_model'] == 'test-model'
             assert selected == (['codex', 'cursor', 'cursor'] if failure else ['codex', 'codex'])
             assert requests[0][1]['repo_path'] == ('/tmp/example' if source == 'repository' else None)
             assert not errors

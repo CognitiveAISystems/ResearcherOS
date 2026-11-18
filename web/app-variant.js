@@ -12,14 +12,6 @@ function mountVariantSettings() {
         <h2 id="app-variant-title">Настройки</h2>
         <button type="button" class="modal-close" data-cancel aria-label="Закрыть настройки">×</button>
         <div class="settings-content">
-        <fieldset>
-          <legend>Интерфейс</legend>
-          <div class="view-control settings-interface-control"><div class="view-control__segmented settings-interface-options">
-          <label class="view-control__seg"><input type="radio" name="ui_variant" value="chats" /> <span><strong>Чаты</strong></span></label>
-          <label class="view-control__seg"><input type="radio" name="ui_variant" value="quick" checked /> <span><strong>Quick navigation</strong></span></label>
-          <label class="view-control__seg"><input type="radio" name="ui_variant" value="light" /> <span><strong>Light</strong></span></label>
-          </div></div>
-        </fieldset>
         <section class="settings-trees" aria-labelledby="settings-trees-title">
           <h3 id="settings-trees-title">Управление деревьями</h3>
           <div class="view-control view-control__segmented settings-archive-switch" aria-label="Показать деревья">
@@ -31,7 +23,7 @@ function mountVariantSettings() {
         </div>
         <p role="status" aria-live="polite"></p>
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Применить режим</button>
+          <button type="submit" class="btn btn-primary">Готово</button>
         </div>
       </form>
     </dialog>`;
@@ -72,24 +64,16 @@ export async function initAppVariant(api, prepareSwitch, trees) {
   stylesheet.rel = "stylesheet";
   stylesheet.href = new URL("./app-variant.css", import.meta.url).href;
   document.head.append(stylesheet);
-  let variant = "quick";
-  try {
-    const saved = (await api.getSettings()).ui_variant;
-    if (["chats", "quick", "light"].includes(saved)) variant = saved;
-  }
-  catch { /* Keep the existing interface available when settings are offline. */ }
-  document.documentElement.dataset.appVariant = variant;
+  document.documentElement.dataset.appVariant = "quick";
   const trigger = document.getElementById("btn-app-variant");
   const dialog = document.getElementById("app-variant-dialog");
   const form = dialog.querySelector("form");
   const status = dialog.querySelector('[role="status"]');
   const apply = form.querySelector('[type="submit"]');
   const cancel = dialog.querySelector('[data-cancel]');
-  let saving = false;
   trigger.hidden = false;
-  trigger.title = `Режим интерфейса: ${{light: "Light", quick: "Quick navigation", chats: "Чаты"}[variant]}`;
+  trigger.title = "Настройки";
   trigger.onclick = async () => {
-    form.elements.ui_variant.value = variant;
     status.textContent = "";
     columns.replaceChildren();
     dialog.showModal();
@@ -147,7 +131,7 @@ export async function initAppVariant(api, prepareSwitch, trees) {
           action.setAttribute('aria-label', `${action.title}: ${tree.title}`);
           action.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${archived ? 'm14 6-6 6 6 6' : 'm10 6 6 6-6 6'}"/></svg>`;
           action.onclick = async () => {
-            if (moving || saving) return;
+            if (moving) return;
             moving = true;
             for (const button of columns.querySelectorAll('button')) button.disabled = true;
             apply.disabled = true;
@@ -187,25 +171,9 @@ export async function initAppVariant(api, prepareSwitch, trees) {
     }
   }
   cancel.onclick = () => dialog.close();
-  dialog.addEventListener("cancel", event => { if (saving) event.preventDefault(); });
   dialog.addEventListener("close", () => trigger.focus());
-  form.onsubmit = async event => {
+  form.onsubmit = event => {
     event.preventDefault();
-    if (moving || saving) return;
-    const next = form.elements.ui_variant.value;
-    if (next === variant) { dialog.close(); return; }
-    saving = true;
-    apply.disabled = cancel.disabled = form.querySelector("fieldset").disabled = true;
-    status.textContent = "Сохраняем выбор…";
-    try {
-      await prepareSwitch();
-      await api.saveAgentChatSettings({ ui_variant: next });
-      location.reload();
-    } catch (error) {
-      try { sessionStorage.removeItem(DRAFTS_KEY); } catch { /* Storage unavailable. */ }
-      status.textContent = `Не удалось переключить режим. ${error.message}`;
-      saving = false;
-      apply.disabled = cancel.disabled = form.querySelector("fieldset").disabled = false;
-    }
+    if (!moving) dialog.close();
   };
 }

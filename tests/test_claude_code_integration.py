@@ -45,10 +45,11 @@ def test_claude_dir_is_local_only():
     assert re.search(r'^\.claude/\s*$', (ROOT / '.gitignore').read_text(encoding='utf-8'), re.M)
 
 
-def test_onboarding_window_offers_claude():
-    source = (ROOT / 'web' / 'onboarding-interview.js').read_text(encoding='utf-8')
-    assert '<option value="claude">Claude</option>' in source
-    assert "['codex', 'claude'].includes(saved)" in source
+def test_claude_menu_availability_tracks_installation(monkeypatch):
+    for installed in (False, True):
+        monkeypatch.setattr(agent_backends, '_claude_ready', lambda: installed)
+        agents = {row['id']: row['available'] for row in agent_backends.cli_agents()}
+        assert agents['claude'] is installed
 
 
 def test_claude_is_a_streaming_editable_cli_backend():

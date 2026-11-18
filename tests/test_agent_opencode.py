@@ -15,6 +15,9 @@ from koi.agent_chat import runner
 FAKE = r'''
 import json, pathlib, sys
 argv = sys.argv[1:]
+if "--help" in argv:
+    print("--standalone --auto --agent --model --format")
+    raise SystemExit(0)
 pathlib.Path("argv.json").write_text(json.dumps(argv))
 assert argv[:2] == ["--standalone", "run"], argv
 assert "--dir" not in argv, "OpenCode 2.2 does not support --dir; use subprocess cwd"
@@ -24,6 +27,9 @@ if prompt == "boom":
     raise SystemExit(1)
 if prompt == "limit":
     print(json.dumps({"type": "error", "error": {"message": "Free usage limit reached"}}), flush=True)
+    raise SystemExit(1)
+if prompt == "nested-limit":
+    print(json.dumps({"type": "error", "error": {"name": "APIError", "data": {"message": "Model unavailable"}}}), flush=True)
     raise SystemExit(1)
 if prompt == "slow":
     import time; time.sleep(20)
@@ -145,6 +151,52 @@ def test_nonzero_exit_yields_no_answer(binary, tmp_path):
 def test_provider_error_is_not_reported_as_missing_auth(binary, tmp_path):
     with pytest.raises(backends.AgentBackendError, match="OpenCode: Free usage limit reached"):
         backends.run_opencode("limit", cwd=tmp_path, timeout=10, on_event=lambda event: None)
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("prompt, message", [("limit", "Free usage limit reached"), ("nested-limit", "Model unavailable")])
+def test_provider_errors_survive_nonstreaming_and_streaming_calls(binary, tmp_path, stream, prompt, message):
+    with pytest.raises(backends.AgentBackendError, match=message):
+        backends.run_opencode(prompt, cwd=tmp_path, timeout=10, on_event=(lambda event: None) if stream else None)
+
+
+def test_legacy_cli_does_not_receive_new_flags(tmp_path, monkeypatch):
+    script = tmp_path / "opencode"
+    script.write_text(f"#!{sys.executable}\n" + r'''
+import json, sys
+if "--help" in sys.argv:
+    print("--agent --model --format")
+    raise SystemExit(0)
+assert sys.argv[1] == "run"
+assert "--standalone" not in sys.argv and "--auto" not in sys.argv
+assert "--format" in sys.argv
+print(json.dumps({"type": "text", "part": {"text": "Legacy answer"}}))
+''')
+    script.chmod(0o755)
+    monkeypatch.setenv("KOI_OPENCODE_BIN", str(script))
+    for edits in (False, True):
+        assert backends.run_opencode("hi", cwd=tmp_path, timeout=10, allow_edits=edits) == "Legacy answer"
+
+
+def test_windows_long_prompt_uses_attachment_and_cleans_it_up(binary, tmp_path, monkeypatch):
+    from pathlib import Path
+    prompt = 'Большая инструкция с кавычками " и переносами\n' * 1000
+    seen = []
+    # Probe help before simulating Windows; the process fixture itself runs on the host OS.
+    backends._opencode_run_flags(str(binary))
+    monkeypatch.setattr(backends, '_opencode_bin', lambda: str(binary))
+    monkeypatch.setattr(backends.sys, 'platform', 'win32')
+    def run(command, stdin, **kwargs):
+        assert len(backends.subprocess.list2cmdline(command)) < 7000
+        task = Path(command[command.index('--file') + 1])
+        assert task.read_text(encoding='utf-8') == prompt
+        assert str(task.parent) != str(tmp_path)
+        seen.append(task)
+        kwargs['on_event']({'type': 'text', 'part': {'text': 'Ответ'}})
+        return 0
+    monkeypatch.setattr(backends, 'run_json', run)
+    assert backends.run_opencode(prompt, cwd=tmp_path) == 'Ответ'
+    assert not seen[0].exists()
 
 
 def test_timeout_yields_no_answer(binary, tmp_path):
