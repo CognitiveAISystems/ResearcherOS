@@ -86,6 +86,25 @@ function startServer() {
   });
 }
 
+function finishSmokeTest(code) {
+  if (quitting) return;
+  quitting = true;
+  if (!server?.pid || server.exitCode !== null || server.signalCode !== null) {
+    app.exit(code);
+    return;
+  }
+  // Wait for the bundled server to release the isolated smoke-test directory.
+  const timeout = setTimeout(() => {
+    server.kill('SIGKILL');
+    app.exit(1);
+  }, 8000);
+  server.once('exit', () => {
+    clearTimeout(timeout);
+    app.exit(code);
+  });
+  server.kill('SIGTERM');
+}
+
 function createWindow(url) {
   serverUrl = url.replace(/\/$/, '');
   mainWindow = new BrowserWindow({
@@ -119,13 +138,13 @@ function createWindow(url) {
     : `${serverUrl}/?desktop=1`;
   mainWindow.loadURL(initialUrl);
   if (process.env.RESEARCHOS_SMOKE_TEST === '1') {
-    const smokeTimeout = setTimeout(() => app.exit(1), 60000);
+    const smokeTimeout = setTimeout(() => finishSmokeTest(1), 60000);
     mainWindow.webContents.once('did-finish-load', async () => {
       clearTimeout(smokeTimeout);
       const title = await mainWindow.webContents.getTitle();
-      app.exit(title && /Research(?:er)?OS/i.test(title) ? 0 : 1);
+      finishSmokeTest(title && /Research(?:er)?OS/i.test(title) ? 0 : 1);
     });
-    mainWindow.webContents.once('did-fail-load', () => { clearTimeout(smokeTimeout); app.exit(1); });
+    mainWindow.webContents.once('did-fail-load', () => { clearTimeout(smokeTimeout); finishSmokeTest(1); });
   }
 }
 
@@ -162,7 +181,7 @@ app.whenReady().then(async () => {
   } catch (error) {
     if (process.env.RESEARCHOS_SMOKE_TEST === '1') {
       console.error(error);
-      app.exit(1);
+      finishSmokeTest(1);
       return;
     }
     dialog.showErrorBox('Не удалось запустить ResearcherOS', String(error.message || error));
