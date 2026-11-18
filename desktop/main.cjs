@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, shell, session, systemPreferences } = require('electron');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -42,6 +42,22 @@ function guiPath() {
     for (const line of text.split('\n')) {
       const dirPath = line.trim();
       if (dirPath && !dirPath.startsWith('#') && !parts.includes(dirPath)) parts.push(dirPath);
+    }
+  }
+  // Finder may put an older Apple Git first and omit Homebrew entirely.
+  const candidates = new Set([...parts, '/opt/homebrew/bin', '/usr/local/bin']);
+  for (const dir of candidates) {
+    if (!path.isAbsolute(dir)) continue;
+    const git = path.join(dir, 'git');
+    if (!fs.existsSync(git)) continue;
+    // Unlike "worktree add -h", this help command runs outside a repository.
+    const help = spawnSync(git, ['worktree', '-h'], {
+      encoding: 'utf8',
+      env: { ...process.env, LC_ALL: 'C' },
+      timeout: 3000,
+    });
+    if (`${help.stdout}\n${help.stderr}`.includes('[--orphan]')) {
+      return [dir, ...parts.filter((part) => part !== dir)].join(path.delimiter);
     }
   }
   return parts.join(path.delimiter);
