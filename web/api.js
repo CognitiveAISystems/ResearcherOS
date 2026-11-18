@@ -89,6 +89,12 @@ async function api(path, options = {}) {
 }
 
 export const KoiApi = {
+  getCanvas: (projectId) => api(`/projects/${encodeURIComponent(projectId)}/canvas`),
+  saveCanvas: (projectId, revision, scene) =>
+    api(`/projects/${encodeURIComponent(projectId)}/canvas`, {
+      method: "PUT",
+      body: JSON.stringify({ revision, scene }),
+    }),
   getGlossary: projectId => api(`/glossary${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
   saveGlossary: (projectId, text, revision) => api(`/glossary${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`, { method: "PUT", body: JSON.stringify({ text, revision }) }),
   health: () => api("/health"),

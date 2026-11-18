@@ -7479,6 +7479,8 @@ async function loadProjectList(activeId) {
 }
 
 function setActiveProjectInList(id) {
+  const canvasButton = document.getElementById("btn-project-canvas");
+  if (canvasButton) canvasButton.disabled = !id;
   document.querySelectorAll(".lab-project-frame, .lab-tree-edges, .lab-project-nodes").forEach((el) => {
     const active = el.dataset.projectId === id;
     el.classList.toggle("is-active", active);
@@ -9676,6 +9678,30 @@ function initUnifiedNavigation() {
   manage.setAttribute("aria-pressed", "false");
   manage.onclick = () => document.getElementById("btn-app-variant").click();
   layout.querySelector(".conversation-rail").insertBefore(manage, themeToggle);
+  const canvasButton = document.createElement("button");
+  canvasButton.type = "button";
+  canvasButton.id = "btn-project-canvas";
+  canvasButton.disabled = !state.project?.id;
+  canvasButton.className = "conversation-icon-button";
+  canvasButton.title = "Холст дерева";
+  canvasButton.setAttribute("aria-label", "Холст дерева");
+  canvasButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 15 4-5 3 3 3-4"/></svg>';
+  canvasButton.addEventListener("click", async () => {
+    const projectId = isCompositeView() ? primaryMemberProjectId() : state.project?.id;
+    if (!projectId) {
+      setStatus("Выберите дерево, чтобы открыть холст");
+      return;
+    }
+    const title = state.lab?.projectsById?.[projectId]?.title || state.project.title;
+    try {
+      const { openProjectCanvas } = await import("./project-canvas.js");
+      openProjectCanvas(projectId, title);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+  layout.querySelector(".conversation-rail").insertBefore(canvasButton, themeToggle);
+
   if (researchChatNavigation.quick) document.getElementById('btn-app-variant').replaceChildren(manage.firstElementChild.cloneNode(true));
   const chatHeader = panel.querySelector(".agent-chat-header");
   const back = document.getElementById("btn-chat-collapse"); back.setAttribute("aria-label", "Вернуться к чатам"); back.title = "Вернуться к чатам";

@@ -18804,4 +18804,42 @@ button.kb-doc {
 .git-sync-progress { display: grid; gap: 10px; }
 .git-sync-progress progress { width: 100%; height: 6px; accent-color: var(--purple); }
 
+.project-canvas {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.project-canvas[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.project-canvas__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-topbar);
+}
+
+.project-canvas__toolbar h2 {
+  margin: 0 auto 0 0;
+  font-size: 1rem;
+}
+
+.project-canvas iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 .git-request button:disabled { opacity: .5; cursor: not-allowed; }

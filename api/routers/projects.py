@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+from threading import Lock
+
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from api.deps import get_project as require_project
 from api.schemas import (
@@ -13,6 +19,8 @@ from api.schemas import (
     UpdateTagBody,
     UpdateNodeBody,
 )
+from koi.adapters.paths import koi_root
+from koi.paper.collaboration.materializer import atomic_write_text
 from koi.laboratory.programs import list_project_summaries
 from koi.projects import commands as project_commands
 from koi.projects import live as live_queries
@@ -48,6 +56,67 @@ def post_project(body: CreateProjectBody) -> dict:
 @router.get("/projects/{project_id}")
 def read_project(project_id: str) -> dict:
     return project_to_client(require_project(project_id, sync_reports=False))
+
+
+_canvas_write_lock = Lock()
+
+
+class CanvasBody(BaseModel):
+    revision: str = Field(max_length=64)
+    scene: str = Field(max_length=24_000_000)
+
+
+def _canvas_path(project_id: str) -> Path:
+    require_project(project_id)
+    path = koi_root(project_id) / "sketch.excalidraw"
+    if path.is_symlink():
+        raise HTTPException(409, "Холст должен быть обычным файлом")
+    return path
+
+
+def _canvas_revision(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _read_canvas(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return b""
+
+
+@router.get("/projects/{project_id}/canvas")
+def read_canvas(project_id: str) -> dict:
+    raw = _read_canvas(_canvas_path(project_id))
+    return {
+        "scene": raw.decode("utf-8") if raw else None,
+        "revision": _canvas_revision(raw),
+    }
+
+
+@router.put("/projects/{project_id}/canvas")
+def save_canvas(project_id: str, body: CanvasBody) -> dict:
+    path = _canvas_path(project_id)
+    try:
+        scene = json.loads(body.scene)
+    except (ValueError, RecursionError) as exc:
+        raise HTTPException(422, "Некорректный формат холста") from exc
+    if (
+        not isinstance(scene, dict)
+        or scene.get("type") != "excalidraw"
+        or not isinstance(scene.get("elements"), list)
+        or not isinstance(scene.get("appState"), dict)
+        or not isinstance(scene.get("files"), dict)
+    ):
+        raise HTTPException(422, "Некорректный формат холста")
+    raw = body.scene.encode("utf-8")
+    with _canvas_write_lock:
+        current = _read_canvas(path)
+        if current != raw:
+            if _canvas_revision(current) != body.revision:
+                raise HTTPException(409, "Холст изменился на диске. Скачайте свою версию перед повторным открытием.")
+            atomic_write_text(path, body.scene)
+    return {"revision": _canvas_revision(raw)}
 
 
 @router.get("/projects/{project_id}/kanban/running-activity")
