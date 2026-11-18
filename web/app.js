@@ -8225,6 +8225,9 @@ function gitPanelHtml(row, hasResult) {
   }
   const button = (action, label, disabled) => `<button type="button" class="btn btn-primary" data-git-action="${action}" ${disabled ? "disabled" : ""}>${label}</button>`;
   const blocked = panel.wrong_branch ? "Открыта другая ветка." : panel.merging ? "Завершите слияние перед синхронизацией." : "";
+  if (row.git_conflicts && row.git_conflicts === row.git_snapshot) {
+    return `<section class="git-request"><h3>Какие версии сохранить для конфликтующих файлов?</h3>${button("merge-local", "Локальные версии", busy)} ${button("merge-remote", "Входящие версии", busy)}</section>`;
+  }
   const check = `<div class="git-selection-tools"><button type="button" class="btn" data-git-action="review" ${busy ? "disabled" : ""}>Проверить изменения</button></div>`;
   let html = "";
   if (panel.outgoing.length || panel.commits.length) {
@@ -8235,7 +8238,7 @@ function gitPanelHtml(row, hasResult) {
       ${reason ? `<p>${reason}</p>` : ""}${button("push", row.git_retry ? "Повторить отправку" : gitSelection.size ? "Отправить выбранное · " + gitSelection.size : panel.commits.length ? "Отправить коммиты" : "Отправить выбранное", busy || reason || !(gitSelection.size || panel.commits.length))}</section>`;
   }
   if (panel.behind) {
-    const reason = blocked || (panel.dirty ? "Сначала сохраните локальные правки коммитом." : "");
+    const reason = blocked;
     html += `<section class="git-request"><h3>↓ Получить из Git</h3><p>${escapeHtml(panel.authors.join(", "))}</p><ul>${panel.incoming.map(item => entry(item, false)).join("")}</ul>${reason ? `<p role="status">${reason}</p>` : ""}${button("pull", "Получить все · " + (panel.incoming.length || panel.behind), busy || reason)}</section>`;
   }
   if (!html && hasResult && !blocked) return check;
@@ -8270,7 +8273,9 @@ function bindGitPanel(log, row) {
       try {
         const res = await KoiApi.sendAgentQuestion({project_id: row.project_id, conversation_id: row.id,
           question: push ? "Отправить выбранные изменения" : button.dataset.gitAction === "review"
-            ? "Проверить изменения" : "Объединить изменения",
+            ? "Проверить изменения" : button.dataset.gitAction === "merge-local"
+              ? "Объединить с локальными вариантами" : button.dataset.gitAction === "merge-remote"
+                ? "Объединить с входящими вариантами" : "Объединить изменения",
           git_snapshot: row.git_snapshot, git_selection: push ? [...gitSelection] : undefined});
         if (mainConversations.row?.id === row.id && res?.item) {
           agentChatItems = [res.item, ...agentChatItems.filter(i => i.id !== res.item.id)];
@@ -8320,7 +8325,7 @@ function renderAgentChatLog({ scrollToBottom = false } = {}) {
         const answer = gitChat ? (item.answer || "").replace(/(?:^|\n)Изменённые файлы:[\s\S]*/, "").trim() : item.answer;
         answerHtml = `<div class="agent-chat-reply${isWarning ? " agent-chat-reply--warning" : ""}">${formatAgentChatReply(answer || "")}</div>`;
         const push = Array.isArray(item.git_selection);
-        if (gitChat && item.purpose === "git_chat" && (push || item.question === "Объединить изменения")) {
+        if (gitChat && item.purpose === "git_chat" && (push || item.question.startsWith("Объединить "))) {
           hasResult = true;
           const success = !isWarning && (push ? answer.startsWith("Отправлено в Git") : answer.startsWith("Изменения объединены."));
           const heading = success ? (push ? "Изменения отправлены в Git" : "Изменения получены из Git")
