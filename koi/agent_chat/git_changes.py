@@ -150,9 +150,10 @@ def snapshot(mount):
     state = {"token": digest.hexdigest(), "files": files, "head": head,
             "remote": remote, "ahead": ahead, "behind": behind,
             "branch": branch, "merging": merging, "dirty": bool(status.stdout)}
-    state["facts"] = _facts(mount, state)
+    unresolved = any(entry[:2] in {"DD", "AU", "UD", "UA", "DU", "AA", "UU"} for entry in safe_status)
+    state["facts"] = _facts(mount, state, working=not unresolved)
     from .git_selection import units
-    local = units(mount, files, head, None, state["facts"]["outgoing"]["cards"])
+    local = [] if unresolved else units(mount, files, head, None, state["facts"]["outgoing"]["cards"])
     common = state["facts"]["base"]
     incoming = units(mount, _names_between(cwd, common, remote, root), common, remote,
                      state["facts"]["incoming"].get("cards", {})) if behind else []
@@ -235,7 +236,7 @@ def _section_facts(mount, cwd, base, names, *, target=None):
             "tree": any(p.endswith("/project.md") for p in names)}
 
 
-def _facts(mount, state):
+def _facts(mount, state, *, working=True):
     cwd, root = sync._koi_git_cwd(mount), sync._koi_rel(mount)
     base = state["head"]
     if state["remote"]:
@@ -243,7 +244,7 @@ def _facts(mount, state):
         if common.returncode == 0:
             base = common.stdout.strip()
     outgoing_names = set(state["files"]) | set(_names_between(cwd, base, state["head"], root))
-    outgoing = _section_facts(mount, cwd, base, outgoing_names)
+    outgoing = _section_facts(mount, cwd, base, outgoing_names, target=None if working else state["head"])
     incoming_names = _names_between(cwd, base, state["remote"], root) if state["remote"] else []
     incoming = _section_facts(mount, cwd, base, incoming_names, target=state["remote"]) if state["behind"] else {}
     authors = []
@@ -356,17 +357,33 @@ def _execute(mount, state, action):
         from .git_selection import send
         selected = [r["id"] for r in state["panel"]["outgoing"]] if action != "push" else []
         return send(mount, state, selected, commit_only=action == "commit")
-    if state["dirty"]:
-        return ("Сначала сохраните изменения коммитом. Слияние не выполнялось." if state["files"] else
-                "Есть локальные изменения, не показанные в сводке. Проверьте их перед слиянием или отправкой.")
+    unresolved = _git(cwd, "ls-files", "-u", "-z")
+    if unresolved:
+        if action not in CONFLICT_ACTIONS.values():
+            return "В Git уже есть незавершённый конфликт. Завершите его перед новым получением изменений."
+        stage = "3" if action == "merge_ours" else "2"
+        entries = {}
+        for line in unresolved.split("\0"):
+            if line:
+                meta, path = line.split("\t", 1)
+                entries.setdefault(path, set()).add(meta.split()[-1])
+        if not all(_safe(path) for path in entries):
+            raise RuntimeError("В конфликте есть защищённые файлы. Git сохранил обе версии.")
+        for path, stages in entries.items():
+            if stage in stages:
+                _git(cwd, "checkout", "--theirs" if stage == "3" else "--ours", "--", path)
+                _git(cwd, "add", "--", path)
+                _git(cwd, "reset", "-q", "HEAD", "--", path)
+            else:
+                _git(cwd, "rm", "-f", "--", path)
+                _git(cwd, "reset", "-q", "HEAD", "--", path)
+        return "Изменения объединены. Конфликтующие файлы обработаны по вашему выбору."
     if not state["remote"]:
         return "Удалённая исследовательская ветка ещё не найдена. Проверьте подключение к Git."
     if not state["behind"]:
         return "Входящих изменений нет."
-    if sync._run_git(cwd, "diff", "--quiet").returncode or sync._run_git(cwd, "diff", "--cached", "--quiet").returncode:
-        return "В репозитории есть другие незакоммиченные правки. Сохраните их перед слиянием."
     options = ["-X", "ours" if action == "merge_ours" else "theirs"] if action in CONFLICT_ACTIONS.values() else []
-    result = sync._run_git(cwd, "merge", "--no-edit", *options, state["remote"])
+    result = sync._run_git(cwd, "merge", "--no-edit", "--autostash", *options, state["remote"])
     if result.returncode:
         conflicts = sync._run_git(cwd, "diff", "--name-only", "--diff-filter=U").stdout.strip()
         if sync._run_git(cwd, "rev-parse", "--verify", "MERGE_HEAD").returncode == 0:
@@ -374,6 +391,10 @@ def _execute(mount, state, action):
         if conflicts:
             raise MergeConflict("Слияние отменено: есть спорные фрагменты. Откройте различия или выберите для всех них локальный либо входящий вариант.")
         return "Git не смог объединить изменения. Проверьте доступ к репозиторию и журнал работы."
+    conflicts = _git(cwd, "diff", "--name-only", "--diff-filter=U")
+    if conflicts:
+        paths = ", ".join(path for path in conflicts.splitlines() if _safe(path))
+        raise MergeConflict(f"Входящие коммиты получены. Не удалось совместить локальные правки в файлах: {paths}. Какие версии сохранить для этих файлов: локальные или входящие? Git сохранил резервную копию локальных правок.")
     return "Изменения объединены. Отправка в Git не выполнялась."
 
 
@@ -453,7 +474,7 @@ def process(item):
                         else:
                             answer = _execute(mount, state, action)
                     except MergeConflict as exc:
-                        conflict_token = state["token"]
+                        conflict_token = snapshot(mount)["token"]
                         answer = str(exc)
                 state = snapshot(mount)
                 if not state["files"] and not state["ahead"]:

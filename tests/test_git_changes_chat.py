@@ -619,3 +619,19 @@ def test_hourly_check_notifies_for_incoming_commits(tree):
     changes.process(items[0])
     assert changes.scan_once(now=now + timedelta(minutes=15), check_incoming=True) == []
     assert changes.scan_once(now=now + timedelta(hours=1), check_incoming=True) == []
+
+
+def test_pull_with_local_edits_keeps_backup_and_asks_about_conflict(tree):
+    mount, remote = tree
+    colleague_commit(mount, remote, "Remote choice\n")
+    (mount.koi_root / "project.md").write_text("Local choice\n")
+    (mount.koi_root / "untracked.txt").write_text("Keep this\n")
+    chat = notice(mount)
+    assert "Какие версии сохранить" in command(chat, "Объединить изменения")["answer"]
+    chat = conversations.find(chat["id"])
+    assert chat["git_conflicts"] == chat["git_snapshot"]
+    assert "объединены" in command(chat, "Объединить с локальными вариантами")["answer"]
+    assert (mount.koi_root / "project.md").read_text() == "Local choice\n"
+    assert (mount.koi_root / "untracked.txt").read_text() == "Keep this\n"
+    assert git(mount.repo_root, "rev-parse", "HEAD") == git(remote, "rev-parse", "koi/research")
+    assert git(mount.repo_root, "ls-files", "-u") == ""
