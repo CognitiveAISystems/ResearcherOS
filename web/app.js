@@ -8199,9 +8199,10 @@ function gitPanelHtml(row, hasResult) {
     gitSelectionToken = selectionKey;
   }
   const pending = agentChatItems.find(item => item.conversation_id === row.id &&
-    item.status !== "answered" && Array.isArray(item.git_selection));
-  if (gitSubmitting.get(row.id) === "push" || pending) {
-    return '<section class="git-request git-sync-progress" role="status"><progress aria-label="Отправка в Git"></progress><strong>Идёт синхронизация с Git…</strong></section>';
+    item.status !== "answered" && (Array.isArray(item.git_selection) ||
+      (item.purpose === "git_chat" && ["Объединить изменения", "Проверить изменения"].includes(item.question))));
+  if (gitSubmitting.has(row.id) || pending) {
+    return '<section class="git-request git-sync-progress" role="status"><progress aria-label="Синхронизация с Git"></progress><strong>Идёт синхронизация с Git…</strong></section>';
   }
   const busy = gitSubmitting.has(row.id) || row.pending;
   function entry(item, selectable) {
@@ -8222,6 +8223,7 @@ function gitPanelHtml(row, hasResult) {
   }
   const button = (action, label, disabled) => `<button type="button" class="btn btn-primary" data-git-action="${action}" ${disabled ? "disabled" : ""}>${label}</button>`;
   const blocked = panel.wrong_branch ? "Открыта другая ветка." : panel.merging ? "Завершите слияние перед синхронизацией." : "";
+  const check = `<div class="git-selection-tools"><button type="button" class="btn" data-git-action="review" ${busy ? "disabled" : ""}>Проверить изменения</button></div>`;
   let html = "";
   if (panel.outgoing.length || panel.commits.length) {
     const reason = blocked || (panel.history_blocked ? "Отправка остановлена: удалённая база карточек не подтверждена." : "") || (panel.behind ? "Сначала объедините входящие изменения." : "");
@@ -8232,10 +8234,10 @@ function gitPanelHtml(row, hasResult) {
   }
   if (panel.behind) {
     const reason = blocked || (panel.dirty ? "Сначала сохраните локальные правки коммитом." : "");
-    html += `<section class="git-request"><h3>↓ Получить из Git</h3><p>${escapeHtml(panel.authors.join(", "))}</p><ul>${panel.incoming.map(item => entry(item, false)).join("")}</ul>${reason ? `<p>${reason}</p>` : ""}${button("pull", "Получить все · " + (panel.incoming.length || panel.behind), busy || reason)}</section>`;
+    html += `<section class="git-request"><h3>↓ Получить из Git</h3><p>${escapeHtml(panel.authors.join(", "))}</p><ul>${panel.incoming.map(item => entry(item, false)).join("")}</ul>${reason ? `<p role="status">${reason}</p>` : ""}${button("pull", "Получить все · " + (panel.incoming.length || panel.behind), busy || reason)}</section>`;
   }
-  if (!html && hasResult && !blocked) return "";
-  return html || `<p class="git-panel-note">${blocked || (panel.dirty ? "Нет изменений карточек для отправки." : "Дерево синхронизировано")}</p>`;
+  if (!html && hasResult && !blocked) return check;
+  return check + (html || `<p class="git-panel-note">${blocked || (panel.dirty ? "Нет изменений карточек для отправки." : "Дерево синхронизировано")}</p>`);
 }
 
 function bindGitPanel(log, row) {
@@ -8265,7 +8267,8 @@ function bindGitPanel(log, row) {
       renderAgentChatLog({scrollToBottom: true});
       try {
         const res = await KoiApi.sendAgentQuestion({project_id: row.project_id, conversation_id: row.id,
-          question: push ? "Отправить выбранные изменения" : "Объединить изменения",
+          question: push ? "Отправить выбранные изменения" : button.dataset.gitAction === "review"
+            ? "Проверить изменения" : "Объединить изменения",
           git_snapshot: row.git_snapshot, git_selection: push ? [...gitSelection] : undefined});
         if (mainConversations.row?.id === row.id && res?.item) {
           agentChatItems = [res.item, ...agentChatItems.filter(i => i.id !== res.item.id)];

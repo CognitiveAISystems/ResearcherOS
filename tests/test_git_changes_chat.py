@@ -114,7 +114,7 @@ def test_no_automatic_git_scan_for_ordinary_edits_before_local_18(tree, monkeypa
 
 def test_local_18_check_catches_up_after_closed_app_and_runs_once(tree, monkeypatch):
     mount, _ = tree
-    (mount.koi_root / "project.md").write_text("Edited setup\n")
+    (mount.koi_root / "project.md").write_text(card_document("running"))
     calls = []
     monkeypatch.setattr(changes.sync, "_fetch_branch", lambda *_a: calls.append(True))
     local = timezone(timedelta(hours=9))
@@ -131,7 +131,7 @@ def test_local_18_check_catches_up_after_closed_app_and_runs_once(tree, monkeypa
 def test_missed_evening_check_catches_up_on_next_morning_launch(tree, monkeypatch):
     mount, _ = tree
     changes._save_schedule({"last_daily": "2026-10-25"})
-    (mount.koi_root / "project.md").write_text("Edited while app was closed\n")
+    (mount.koi_root / "project.md").write_text(card_document("running"))
     calls = []
     monkeypatch.setattr(changes.sync, "_fetch_branch", lambda *_a: calls.append(True))
     items = changes.scan_once(now=datetime(2026, 10, 27, 9))
@@ -600,3 +600,22 @@ def test_chat_sends_only_selected_card_content(tree):
     assert "c-other" not in sent and "Unselected" not in sent
     assert "Memory check" in sent and changes._cards(sent,"demo")["b/c-memory"]["column"] == "done"
     assert "local_only" not in json.loads(git(remote, "show", ref + "research.json"))
+
+
+def test_hourly_check_notifies_for_incoming_commits(tree):
+    mount, remote = tree
+    seed_card(mount)
+    peer = remote.parent / "peer"
+    git(remote.parent, "clone", "-b", "koi/research", str(remote), str(peer))
+    git(peer, "config", "user.email", "peer@example.invalid")
+    git(peer, "config", "user.name", "Peer")
+    (peer / "koi-structure/project.md").write_text(card_document("done"))
+    git(peer, "commit", "-am", "finish card")
+    git(peer, "push")
+    now = datetime(2026, 10, 27, 10, 0)
+    items = changes.scan_once(now=now, check_incoming=True)
+    assert len(items) == 1
+    assert conversations.find(items[0]["conversation_id"])["git_panel"]["behind"] == 1
+    changes.process(items[0])
+    assert changes.scan_once(now=now + timedelta(minutes=15), check_incoming=True) == []
+    assert changes.scan_once(now=now + timedelta(hours=1), check_incoming=True) == []

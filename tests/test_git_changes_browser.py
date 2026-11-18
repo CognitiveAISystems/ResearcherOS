@@ -115,10 +115,13 @@ async def smoke(url, mount, remote):
         changes.process(incoming)
         await page.reload(wait_until="networkidle")
         await page.locator(f'button.conversation-entry[data-conversation="{chat["id"]}"]').click()
+        await page.get_by_role("button", name="Проверить изменения").click()
+        await page.locator("#agent-chat-log").get_by_text("Проверка завершена. Входящих коммитов: 1.").wait_for()
         pull = page.locator(".git-request").filter(has_text="Получить из Git").last
         assert await pull.get_by_text("Анна").is_visible()
         assert await pull.locator("input").count() == 0
         await pull.get_by_role("button", name="Получить все · 1").click()
+        await page.get_by_role("status").filter(has_text="Идёт синхронизация с Git").wait_for()
         await page.locator("#agent-chat-log").get_by_text("Изменения получены из Git").wait_for()
         assert "Входящий результат" in (mount.koi_root / "research.json").read_text()
         assert not errors, errors

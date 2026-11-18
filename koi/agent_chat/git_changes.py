@@ -86,7 +86,7 @@ def action_for(text):
                     "отправь": "push", "запушь": "push", "объедини": "merge", "сделай мерж": "merge",
                     "локальный": "merge_ours", "входящий": "merge_theirs",
                     "оставь локальный вариант": "merge_ours", "оставь входящий вариант": "merge_theirs",
-                    "проверь изменения": "review"})
+                    "проверь изменения": "review", "проверить изменения": "review"})
     return aliases.get(text)
 
 
@@ -479,7 +479,10 @@ def process(item):
                 proposal = "merge"
             elif can_offer and not state["behind"] and len(state["panel"]["outgoing"]) <= 1:
                 proposal = "commit_push" if state["files"] else "push"
-        if item["purpose"] == "git_notice" or action == "review":
+        if action == "review" and item["question"] == "Проверить изменения":
+            answer = (f"Проверка завершена. Входящих коммитов: {state['behind']}."
+                      if state["behind"] else "Проверка завершена. Входящих изменений нет.")
+        elif item["purpose"] == "git_notice" or action == "review":
             prompt = POLICY + "\n" + NOTICE_POLICY + "\n\n" + json.dumps({
                 "draft": summary, "can_offer_save": can_offer, "diff": details}, ensure_ascii=False)
             answer = _suggest(prompt, item.get("cli_agent"), item["id"])
@@ -571,8 +574,8 @@ def _observe_done(mounts):
             log.warning("Cannot observe card transitions for %s", mount.project_id)
 
 
-def scan_once(*, now=None, fetch=True):
-    """Full Git checks only at 18:00 laptop time and after done transitions."""
+def scan_once(*, now=None, fetch=True, check_incoming=False):
+    """Check incoming changes hourly and run full checks on scheduled triggers."""
     local_now = now if now is not None else datetime.now().astimezone()
     mounts = sync.sync_mounts()
     _observe_done(mounts)
@@ -583,11 +586,18 @@ def scan_once(*, now=None, fetch=True):
         daily = (local_now.hour >= 18 and last_daily != due_day or
                  bool(last_daily and last_daily < due_day))
         pending = dict(schedule.get("pending", {}))
-        if daily:
+        hour = int(local_now.timestamp()) // 3600
+        hourly = check_incoming and schedule.get("last_incoming_hour") != hour
+        if daily or hourly:
             for mount in mounts:
-                pending.setdefault(mount.project_id, {"revision": uuid4().hex, "done": {}})
+                request = pending.setdefault(mount.project_id, {"revision": uuid4().hex, "done": {}, "incoming_only": not daily})
+                if daily:
+                    request["incoming_only"] = False
             schedule["pending"] = pending
-            schedule["last_daily"] = due_day
+            if daily:
+                schedule["last_daily"] = due_day
+            if hourly:
+                schedule["last_incoming_hour"] = hour
             _save_schedule(schedule)
     items = []
     for mount in mounts:
@@ -599,13 +609,16 @@ def scan_once(*, now=None, fetch=True):
                 chat = _chat(mount)
                 if chat and chat.get("pending"):
                     continue
-                if fetch:
-                    sync._fetch_branch(mount.repo_root, mount.git_sync_branch)
-                state = snapshot(mount)
-                events = request["done"]
-                item = notify(mount, state, force=bool(events), done_events=events)
-                if item:
-                    items.append(item)
+                fetched = sync._fetch_branch(mount.repo_root, mount.git_sync_branch) if fetch else None
+                if not getattr(fetched, "returncode", 0):
+                    state = snapshot(mount)
+                    events = request["done"]
+                    if not request.get("incoming_only") or state["behind"] or (chat or {}).get("git_panel", {}).get("behind"):
+                        item = notify(mount, state, force=bool(events), done_events=events)
+                        if item:
+                            items.append(item)
+                else:
+                    log.warning("Cannot fetch research Git for %s", mount.project_id)
             with SCHEDULE_LOCK:
                 current = _load_schedule()
                 if current.get("pending", {}).get(mount.project_id, {}).get("revision") == request["revision"]:
@@ -621,7 +634,7 @@ def _watch():
         while not STOP.is_set():
             WAKE.clear()
             try:
-                for item in scan_once():
+                for item in scan_once(check_incoming=True):
                     pool.submit(process, item)
             except Exception:
                 log.exception("Research Git monitor failed")
