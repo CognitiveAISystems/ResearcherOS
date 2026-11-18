@@ -53,8 +53,11 @@ jobs:
           elif [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta-test\.([1-9][0-9]*)$ ]]; then
             branch=beta
             prerelease=true
+          elif [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-excalidraw\.([1-9][0-9]*)$ ]]; then
+            branch=feature/excalidraw
+            prerelease=true
           else
-            echo 'Expected vX.Y.Z or vX.Y.Z-beta-test.N' >&2
+            echo 'Expected vX.Y.Z, vX.Y.Z-beta-test.N or vX.Y.Z-excalidraw.N' >&2
             exit 1
           fi
           git merge-base --is-ancestor HEAD "origin/$branch"
@@ -208,7 +211,10 @@ jobs:
           done
           (cd built-installers && sha256sum -- *.exe *.AppImage *.dmg > SHA256SUMS.txt)
           {
-            if [[ "$PRERELEASE" == true ]]; then
+            if [[ "$RELEASE_TAG" == *-excalidraw.* ]]; then
+              echo 'Отдельная сборка из ветки feature/excalidraw. Кнопка «Холст» находится справа от «Виджетов» на главном экране. Рисунок сохраняется в файле sketch.excalidraw внутри дерева и загружается при повторном открытии.'
+              echo 'Для загрузки редактора нужен интернет.'
+            elif [[ "$PRERELEASE" == true ]]; then
               echo 'Канал beta-test: сборка для A/B-тестирования из ветки beta.'
             else
               echo 'Стабильный выпуск из ветки main.'

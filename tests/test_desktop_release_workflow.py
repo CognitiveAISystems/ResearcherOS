@@ -58,6 +58,20 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'output').read_text(), 'version=0.2.0\nprerelease=false\n')
 
+    def test_excalidraw_channel_requires_feature_branch(self):
+        self.init_branches()
+        name = 'Validate release tag and source branch'
+        tag = 'v0.3.831-excalidraw.1'
+        self.git('checkout', '-b', 'feature/excalidraw', 'main')
+        self.git('commit', '--allow-empty', '-m', 'Excalidraw')
+        self.assertNotEqual(self.run_script(name, RELEASE_TAG=tag).returncode, 0)
+        self.git('update-ref', 'refs/remotes/origin/feature/excalidraw', 'HEAD')
+        result = self.run_script(name, RELEASE_TAG=tag)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'output').read_text(), 'version=0.3.831-excalidraw.1\nprerelease=true\n')
+        self.assertNotEqual(self.run_script(name, RELEASE_TAG='v0.3.831').returncode, 0)
+        self.assertNotEqual(self.run_script(name, RELEASE_TAG='v0.3.831-beta-test.1').returncode, 0)
+
     def test_reject_malformed_tags(self):
         name = 'Validate release tag and source branch'
         for tag in ['v0.3.0-beta.1', 'v01.2.3', 'v1.2.3-beta-test.0', 'v1.2', 'v1.2.3; echo injected']:
@@ -83,7 +97,7 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
 
     def test_publish_flags_checksums_and_provenance(self):
         self.prepare_publish()
-        for prerelease, tag in [('true', 'v0.3.0-beta-test.1'), ('false', 'v0.3.0')]:
+        for prerelease, tag in [('true', 'v0.3.0-beta-test.1'), ('true', 'v0.3.831-excalidraw.1'), ('false', 'v0.3.0')]:
             with self.subTest(prerelease=prerelease):
                 result = self.run_script('Publish verified installers to GitHub Releases',
                                          PRERELEASE=prerelease, RELEASE_TAG=tag)
@@ -97,6 +111,9 @@ class DesktopReleaseWorkflowTest(unittest.TestCase):
                 self.assertIn('built-installers/ResearcherOS-0.3.0-arm64.dmg', args)
                 self.assertIn('built-installers/ResearcherOS-0.3.0-x64.dmg', args)
                 notes = (self.root / 'release-notes.md').read_text()
+                if '-excalidraw.' in tag:
+                    self.assertIn('«Холст»', notes)
+                    self.assertNotIn('Канал beta-test', notes)
                 self.assertIn('abc123', notes)
                 self.assertIn('https://example.org/build/1', notes)
                 self.assertIn('Claude Code доступен в чате и в окне «Новое дерево»', notes)
