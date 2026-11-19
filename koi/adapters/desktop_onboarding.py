@@ -98,7 +98,7 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         stdin=subprocess.DEVNULL,
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         timeout=15,
