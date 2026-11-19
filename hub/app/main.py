@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -77,6 +78,8 @@ class LinkSubscribeBody(BaseModel):
 
 class UpdateProjectBody(BaseModel):
     enabled: Optional[bool] = None
+    branch: Optional[str] = None
+    visibility: Optional[str] = None
 
 
 async def _sync_project(project: HubProject, access_token: str) -> dict[str, Any]:
@@ -595,23 +598,71 @@ def delete_project(request: Request, slug: str) -> dict[str, bool]:
 
 
 @app.patch("/api/projects/{slug}")
-def update_project(request: Request, slug: str, body: UpdateProjectBody) -> dict[str, Any]:
+async def update_project(
+    request: Request, slug: str, body: UpdateProjectBody
+) -> dict[str, Any]:
     session = require_session(request, config, store)
     project = store.get_project(slug)
     if project is None:
         raise HTTPException(404, "Project not found")
     if project.owner_github_id != session.github_id:
         raise HTTPException(403, "Only the owner can update this project")
-    if body.enabled is None:
+    if body.enabled is None and body.branch is None and body.visibility is None:
         raise HTTPException(400, "Nothing to update")
-    project.enabled = bool(body.enabled)
-    store.save_project(project)
-    if not project.enabled or project.visibility != "public":
-        store.clear_project_skills(project.slug)
+
+    candidate = replace(project)
+    if body.enabled is not None:
+        candidate.enabled = bool(body.enabled)
+    if body.branch is not None:
+        branch = body.branch.strip()
+        if not branch:
+            raise HTTPException(400, "branch must not be empty")
+        collision = find_project_by_source(
+            store, project.owner_github_id, project.repo_full_name, branch
+        )
+        if collision is not None and collision.slug != project.slug:
+            raise HTTPException(409, "This repository branch is already registered")
+        candidate.branch = branch
+    if body.visibility is not None:
+        visibility = body.visibility.strip().lower()
+        if visibility not in {"public", "network", "unlisted"}:
+            raise HTTPException(
+                400, "visibility must be public, network, or unlisted"
+            )
+        if visibility == "unlisted" and project.visibility != "unlisted":
+            candidate.secret_token = HubStore.new_secret()
+        elif visibility != "unlisted":
+            candidate.secret_token = ""
+        candidate.visibility = visibility
+
+    branch_changed = candidate.branch != project.branch
+    visibility_changed = candidate.visibility != project.visibility
+    needs_public_sync = (
+        visibility_changed and candidate.visibility == "public" and candidate.enabled
+    )
+    if branch_changed or needs_public_sync:
+        await _sync_project(candidate, session.access_token)
+    else:
+        store.save_project(candidate)
+        if visibility_changed:
+            snapshot = store.get_snapshot(candidate.slug)
+            if snapshot is not None:
+                meta = snapshot.get("meta")
+                if isinstance(meta, dict):
+                    meta["visibility"] = candidate.visibility
+                    store.save_snapshot(candidate.slug, snapshot)
+        if not candidate.enabled or candidate.visibility != "public":
+            store.clear_project_skills(candidate.slug)
+
+    project = candidate
     return {
         "ok": True,
         "slug": project.slug,
         "enabled": project.enabled,
+        "branch": project.branch,
+        "visibility": project.visibility,
+        "secret_token": project.secret_token if project.visibility == "unlisted" else None,
+        "share_url": project_share_url(config, project),
     }
 
 
