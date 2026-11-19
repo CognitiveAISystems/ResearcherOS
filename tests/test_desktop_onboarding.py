@@ -50,6 +50,18 @@ def code_repo(tmp_path: Path) -> Path:
     return repo
 
 
+def test_git_project_accepts_cyrillic_path_under_windows_encoding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = code_repo(tmp_path / "ИИ в научных исследованиях")
+    monkeypatch.setattr(subprocess, "_text_encoding", lambda: "cp1251")
+
+    response = TestClient(app).post("/desktop/onboarding/git-project", json={"path": str(repo)})
+
+    assert response.status_code == 200, response.text
+    assert Path(response.json()["repo_path"]) == repo.resolve()
+
+
 def test_existing_project_folder_resolves_to_workspace(tmp_path: Path) -> None:
     root = tmp_path / "research"
     koi = root / "tree" / "example" / "koi-structure"
