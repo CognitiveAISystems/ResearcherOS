@@ -222,7 +222,7 @@ def run_codex_exec(
             stdout = ""
         else:
             proc = subprocess.run(cmd, input=prompt, capture_output=True,
-                                  text=True, cwd=str(cwd), timeout=timeout, env=mcp_env)
+                                  text=True, encoding="utf-8", cwd=str(cwd), timeout=timeout, env=mcp_env)
             stdout, returncode = proc.stdout, proc.returncode
         if output_path.exists():
             text = output_path.read_text(encoding="utf-8").strip()
