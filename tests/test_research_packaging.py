@@ -40,3 +40,24 @@ def test_desktop_codex_registry_is_writable_only_for_editing_agents(monkeypatch,
         assert command[command.index('--add-dir') + 1] == str(registry.resolve())
         assert registry.is_dir()
         assert command[command.index('-s') + 1] == 'workspace-write'
+
+
+
+def test_codex_exec_round_trips_unicode_prompt(monkeypatch, tmp_path):
+    import subprocess
+
+    from koi.adapters import agent_backends
+
+    monkeypatch.setattr(agent_backends, '_codex_bin', lambda: sys.executable)
+    monkeypatch.setattr(subprocess, '_text_encoding', lambda: 'cp1251')
+    run = subprocess.run
+
+    def echo_prompt(command, **kwargs):
+        return run(
+            [command[0], '-c', 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())'],
+            **kwargs,
+        )
+
+    monkeypatch.setattr(subprocess, 'run', echo_prompt)
+    prompt = 'Compare method A → method B.'
+    assert agent_backends.run_codex_exec(prompt, cwd=tmp_path) == prompt
