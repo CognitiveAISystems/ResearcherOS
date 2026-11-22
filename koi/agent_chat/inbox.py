@@ -10,6 +10,7 @@ import sys
 import time
 from pathlib import Path
 
+from koi.adapters.agent_process import pid_alive
 from koi.adapters.agent_chat_queue import QUEUE_PATH, list_pending
 from koi.adapters.workspace import get_workspace
 
@@ -279,9 +280,7 @@ def watcher_running() -> bool:
     except (OSError, ValueError):
         WATCH_PID.unlink(missing_ok=True)
         return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
+    if not pid_alive(pid):
         WATCH_PID.unlink(missing_ok=True)
         return False
     return True

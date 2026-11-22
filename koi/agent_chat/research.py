@@ -226,6 +226,10 @@ def finish_coordinator(item_id, status, message):
 def _process_start(pid):
     import subprocess
     import sys
+    if sys.platform == 'win32':
+        from koi.adapters.agent_process import windows_process_start
+
+        return windows_process_start(pid)
     if sys.platform.startswith('linux'):
         # A sandboxed agent can read procfs even when executing ps is denied.
         # Boot id plus the kernel start tick distinguishes a live process from
