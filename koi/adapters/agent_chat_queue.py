@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Literal, Optional, TypedDict
 from uuid import uuid4
 
+from koi.adapters.agent_process import pid_alive
 from koi.adapters.workspace import get_workspace
 
 _ws = get_workspace()
@@ -246,11 +247,7 @@ def agent_active(item: AgentChatItem) -> bool:
     pid = item.get("processing_pid")
     if item["status"] != "processing" or not isinstance(pid, int) or pid <= 0:
         return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
+    return pid_alive(pid)
 
 
 @_locked

@@ -1,8 +1,11 @@
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from koi.agent_chat import research
+from koi.adapters.agent_process import pid_alive
 from koi.adapters import agent_chat_activity
 
 
@@ -113,3 +116,18 @@ def test_budget_reply_resumes_run_with_host_launcher(tmp_path, monkeypatch):
     assert research.continuation_run({**reply,'question':'Какой статус?'}) is None
     research.prepare_delegation({**reply, 'id': 'aq-status', 'question': 'Какой статус?'}, allow_edits=False)
     assert research.continuation_run({**reply,'question':'Продолжи исследование'}) == run
+
+
+def test_process_check_preserves_live_child_and_detects_exit():
+    with subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"]) as child:
+        try:
+            assert pid_alive(child.pid)
+            started = research._process_start(child.pid)
+            assert started
+            assert research._process_start(child.pid) == started
+            assert child.poll() is None
+        finally:
+            child.terminate()
+            child.wait(timeout=5)
+        assert not pid_alive(child.pid)
+        assert not research._process_start(child.pid)

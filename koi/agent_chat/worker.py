@@ -10,6 +10,7 @@ import sys
 import time
 from pathlib import Path
 
+from koi.adapters.agent_process import pid_alive
 from koi.adapters.settings_store import has_cursor_api_key, is_api_agent_mode, load_env_file
 from koi.adapters.workspace import get_workspace
 from koi.agent_chat.runner import process_all_pending, process_item
@@ -29,11 +30,7 @@ def worker_running() -> bool:
         pid = int(WORKER_PID.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+    return pid_alive(pid)
 
 
 def cursor_sdk_available() -> bool:
