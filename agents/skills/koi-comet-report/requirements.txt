@@ -1,0 +1,2 @@
+comet_ml>=3.49
+matplotlib>=3.8
