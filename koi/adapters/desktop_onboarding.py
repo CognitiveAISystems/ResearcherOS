@@ -47,6 +47,16 @@ def _directory(raw: str) -> Path:
     return path
 
 
+def _workspace_directory(raw: str) -> Path:
+    workspace = Path(raw).expanduser()
+    if workspace == Path.home() / "Documents":
+        workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        return _directory(str(workspace))
+    except ValueError as exc:
+        raise ValueError(f"Папка для исследований не найдена: {workspace}") from exc
+
+
 def _projects_in(root: Path) -> list[str]:
     names: set[str] = set()
     for tree_name in ("tree", ".tree"):
@@ -203,7 +213,7 @@ def inspect_git_project(raw: str, *, fetch_remote: bool = True, workspace_raw: s
             "Проверьте репозиторий или выберите другой."
         )
 
-    workspace = _directory(workspace_raw) if workspace_raw else None
+    workspace = _workspace_directory(workspace_raw) if workspace_raw else None
     target = workspace / "tree" / repo.name if workspace else None
     occupied = target is not None and (target.is_symlink() or (target.exists() and (not target.is_dir() or any(target.iterdir()))))
     local_tree = None
@@ -275,10 +285,7 @@ def connect_git_project(
         working = Path(existing["worktree_path"])
         workspace_raw = str(working.parent.parent)
         tree_name = working.name if working.name != repo.name else None
-    requested_workspace = Path(workspace_raw).expanduser()
-    if requested_workspace == Path.home() / "Documents":
-        requested_workspace.mkdir(parents=True, exist_ok=True)
-    workspace = _directory(str(requested_workspace))
+    workspace = _workspace_directory(workspace_raw)
     if workspace == repo or repo in workspace.parents:
         raise ValueError("Выберите папку для исследований вне Git-репозитория с кодом.")
     unfinished_koi = repo / "koi-structure"
@@ -301,7 +308,13 @@ def connect_git_project(
             raise ValueError(f"В выбранной папке уже есть другой проект с именем {repo.name}.")
     elif repo.parent != workspace:
         try:
-            code_link.symlink_to(repo, target_is_directory=True)
+            if os.name == "nt":
+                # Local directory junctions work without symlink privileges.
+                import _winapi
+
+                _winapi.CreateJunction(str(repo), str(code_link))
+            else:
+                code_link.symlink_to(repo, target_is_directory=True)
         except OSError as exc:
             raise ValueError("Не удалось создать ссылку на репозиторий в выбранной папке.") from exc
 
