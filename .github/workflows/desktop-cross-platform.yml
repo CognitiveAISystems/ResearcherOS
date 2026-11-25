@@ -94,6 +94,44 @@ jobs:
         run: |
           python -m pip install pytest
           python -m pytest -q tests/test_research_participants.py::test_process_check_preserves_live_child_and_detects_exit
+      - name: Reproduce v0.3.835 folder error on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          git fetch --depth=1 origin tag v0.3.835
+          python - <<'PYTHON'
+          import subprocess
+          import tempfile
+          from pathlib import Path
+          from unittest.mock import patch
+          from fastapi.testclient import TestClient
+          from api.main import app
+
+          release = {}
+          exec(subprocess.check_output(["git", "show", "v0.3.835:koi/adapters/desktop_onboarding.py"]), release)
+          with tempfile.TemporaryDirectory() as folder:
+              home = Path(folder)
+              repo = home / "Repos" / "Map"
+              repo.mkdir(parents=True)
+              subprocess.run(["git", "init", "-q", str(repo)], check=True)
+              subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c", "user.email=test@example.org",
+                              "commit", "-qm", "init", "--allow-empty"], check=True)
+              docs = home / "Documents"
+              payload = {"path": str(repo), "workspace_root": str(docs)}
+              with patch("api.routers.desktop.inspect_git_project", release["inspect_git_project"]):
+                  client = TestClient(app)
+                  response = client.post("/desktop/onboarding/git-project", json=payload)
+                  assert response.status_code == 400 and response.json()["detail"] == "Папка не найдена.", response.text
+                  docs.mkdir()
+                  response = client.post("/desktop/onboarding/git-project", json=payload)
+                  assert response.status_code == 200, response.text
+          PYTHON
+      - name: Check external repository onboarding on Windows
+        if: runner.os == 'Windows'
+        run: >-
+          python -m pytest -q
+          tests/test_desktop_onboarding.py::test_inspect_external_repo_with_missing_default_documents
+          tests/test_desktop_onboarding.py::test_new_branch_is_local_and_keeps_code_branch
       - name: Build bundled server
         run: python desktop/build_server.py
       - name: Install Electron dependencies
