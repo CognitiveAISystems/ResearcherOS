@@ -130,6 +130,7 @@ jobs:
         if: runner.os == 'Windows'
         run: >-
           python -m pytest -q
+          tests/test_desktop_onboarding.py::test_inspect_names_inaccessible_directory
           tests/test_desktop_onboarding.py::test_inspect_external_repo_with_missing_default_documents
           tests/test_desktop_onboarding.py::test_new_branch_is_local_and_keeps_code_branch
       - name: Build bundled server

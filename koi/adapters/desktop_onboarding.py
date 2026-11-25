@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 
@@ -37,24 +38,25 @@ def find_existing_trees() -> list[dict]:
     return list(found.values())
 
 
-def _directory(raw: str) -> Path:
+def _directory(raw: str, label: str = "Выбранная папка") -> Path:
     try:
         path = Path(raw).expanduser().resolve(strict=True)
+        mode = path.stat().st_mode
     except (OSError, RuntimeError) as exc:
-        raise ValueError("Папка не найдена.") from exc
-    if not path.is_dir():
-        raise ValueError("Выберите папку.")
+        raise ValueError(f"{label} «{raw}»: {exc}") from exc
+    if not stat.S_ISDIR(mode):
+        raise ValueError(f"{label} «{raw}»: выбранный путь ведёт к файлу.")
     return path
 
 
 def _workspace_directory(raw: str) -> Path:
     workspace = Path(raw).expanduser()
     if workspace == Path.home() / "Documents":
-        workspace.mkdir(parents=True, exist_ok=True)
-    try:
-        return _directory(str(workspace))
-    except ValueError as exc:
-        raise ValueError(f"Папка для исследований не найдена: {workspace}") from exc
+        try:
+            workspace.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ValueError(f"Папка для исследований «{workspace}»: {exc}") from exc
+    return _directory(str(workspace), "Папка для исследований")
 
 
 def _projects_in(root: Path) -> list[str]:
@@ -148,7 +150,7 @@ def _fetch_research_branch_if_needed(repo: Path) -> None:
 
 
 def inspect_git_project(raw: str, *, fetch_remote: bool = True, workspace_raw: str | None = None) -> dict:
-    repo = _directory(raw)
+    repo = _directory(raw, "Папка репозитория")
     try:
         top = _git(repo, "rev-parse", "--show-toplevel")
     except (OSError, subprocess.TimeoutExpired) as exc:
