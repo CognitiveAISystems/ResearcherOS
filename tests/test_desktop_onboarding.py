@@ -50,6 +50,19 @@ def code_repo(tmp_path: Path) -> Path:
     return repo
 
 
+def test_inspect_external_repo_with_missing_default_documents(tmp_path, monkeypatch):
+    repo = code_repo(tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    documents = tmp_path / "Documents"
+    response = TestClient(app).post(
+        "/desktop/onboarding/git-project",
+        json={"path": str(repo), "workspace_root": str(documents)},
+    )
+    assert response.status_code == 200, response.text
+    assert Path(response.json()["repo_path"]) == repo
+    assert documents.is_dir()
+
+
 def test_git_project_accepts_cyrillic_path_under_windows_encoding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
