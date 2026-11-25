@@ -50,6 +50,20 @@ def code_repo(tmp_path: Path) -> Path:
     return repo
 
 
+@pytest.mark.parametrize("missing_repo", [True, False])
+def test_inspect_names_inaccessible_directory(tmp_path, missing_repo):
+    repo = tmp_path / "missing-repo" if missing_repo else code_repo(tmp_path)
+    workspace = tmp_path / "missing-workspace"
+    response = TestClient(app).post(
+        "/desktop/onboarding/git-project", json={"path": str(repo), "workspace_root": str(workspace)}
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert ("Папка репозитория" if missing_repo else "Папка для исследований") in detail
+    assert str(repo if missing_repo else workspace) in detail
+    assert "Errno" in detail or "WinError" in detail
+
+
 def test_inspect_external_repo_with_missing_default_documents(tmp_path, monkeypatch):
     repo = code_repo(tmp_path)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
