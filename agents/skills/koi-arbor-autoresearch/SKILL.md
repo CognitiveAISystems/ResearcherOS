@@ -11,6 +11,10 @@ description: >-
 Read the project's AGENTS.md, project.md, research.json and relevant reports.
 Keep the main node unchanged. Use at most eight words in node and card titles.
 Infer known facts from files before asking.
+On Windows, read project files explicitly as UTF-8. For Python shell helpers
+that print tree text, use UTF-8 mode and UTF-8 standard streams. Send JSON
+requests with non-ASCII characters escaped (Python's default json.dumps)
+so Windows pipe encodings preserve scientific symbols and Cyrillic.
 Establish goal, budget, evaluation protocol, protected paths, permitted compute
 and stopping criteria before experiments. Record unresolved assumptions.
 

@@ -327,9 +327,9 @@ def main():
     try:
         result = request(payload["run_id"], payload["operation"], payload.get("args", {}))
     except (ValueError, KeyError, TypeError, RuntimeError, OSError) as exc:
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"error": str(exc)}))
         raise SystemExit(1) from exc
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":
