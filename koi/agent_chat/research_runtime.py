@@ -313,7 +313,7 @@ def broker(item_id):
 def main():
     request = json.load(sys.stdin)
     result = dispatch(request['run_id'], request['tasks'], timeout=request.get('timeout', 1800), parent_id=request.get('parent_id'))
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(result))
 
 
 if __name__ == '__main__':

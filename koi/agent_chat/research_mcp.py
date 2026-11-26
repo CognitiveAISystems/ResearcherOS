@@ -121,7 +121,7 @@ def main(argv=None):
         except (ValueError, KeyError, TypeError) as exc:
             response = {'jsonrpc': '2.0', 'id': request.get('id') if isinstance(request, dict) else None,
                         'error': {'code': -32600, 'message': str(exc)}}
-        print(json.dumps(response, ensure_ascii=False), flush=True)
+        print(json.dumps(response), flush=True)
 
 
 if __name__ == '__main__':
